@@ -1,0 +1,19 @@
+//===-- CDBytecodeEmitter.h - CD bytecode emitter --------------*- C++ -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLVM_LIB_TARGET_CD_CDBYTECODEEMITTER_H
+#define LLVM_LIB_TARGET_CD_CDBYTECODEEMITTER_H
+
+namespace llvm {
+class ModulePass;
+class raw_ostream;
+
+ModulePass *createCDBytecodeEmitterPass(raw_ostream &OS);
+} // namespace llvm
+
+#endif // LLVM_LIB_TARGET_CD_CDBYTECODEEMITTER_H
