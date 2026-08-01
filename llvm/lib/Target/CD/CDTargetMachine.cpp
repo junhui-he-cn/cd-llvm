@@ -8,15 +8,31 @@
 
 #include "CDTargetMachine.h"
 #include "CDBytecodeEmitter.h"
+#include "CDMachineBytecodeEmitter.h"
 #include "CDSubtarget.h"
 #include "TargetInfo/CDTargetInfo.h"
+#include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 
 using namespace llvm;
+
+namespace {
+enum class CDBackend { Direct, Machine };
+
+static cl::opt<CDBackend> CDBackendOption(
+    "cd-backend", cl::Hidden,
+    cl::desc("Select the CD bytecode lowering backend"),
+    cl::init(CDBackend::Direct),
+    cl::values(clEnumValN(CDBackend::Direct, "direct",
+                          "Use the direct LLVM IR emitter"),
+               clEnumValN(CDBackend::Machine, "machine",
+                          "Use the TableGen-backed machine emitter")));
+} // namespace
 
 namespace {
 class CDTargetObjectFile final : public TargetLoweringObjectFile {
@@ -51,9 +67,18 @@ CDTargetMachine::CDTargetMachine(
 
 bool CDTargetMachine::addPassesToEmitFile(
     PassManagerBase &PM, raw_pwrite_stream &Out, raw_pwrite_stream *,
-    CodeGenFileType FileType, bool, MachineModuleInfoWrapperPass *) {
+    CodeGenFileType FileType, bool,
+    MachineModuleInfoWrapperPass *MMIWP) {
   if (FileType != CodeGenFileType::AssemblyFile)
     return true;
+
+  if (CDBackendOption == CDBackend::Machine) {
+    if (!MMIWP)
+      MMIWP = new MachineModuleInfoWrapperPass(this);
+    PM.add(MMIWP);
+    PM.add(createCDMachineBytecodeEmitterPass(Out));
+    return false;
+  }
 
   PM.add(createCDBytecodeEmitterPass(Out));
   return false;
