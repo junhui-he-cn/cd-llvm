@@ -37,13 +37,23 @@ remains intentionally incomplete.
 
 ## Current implementation boundary
 
-`llc -mtriple=cd-unknown-unknown -cd-backend=machine` currently constructs a
-single `MachineFunction` for a no-argument, single-basic-block `@main` and
-bridges it to the typed artifact model.  The supported values and operations
-are scalar constants, arithmetic, comparisons, scalar casts as `move`, `fneg`,
-boolean inversion as `not`, `nil`/`ret void` returns, defined-function calls,
-scalar function parameters, and single-slot scalar storage through `load_var`
-and `store_var`.  Branches, PHI nodes, and aggregate values remain pending.
+`llc -mtriple=cd-unknown-unknown -cd-backend=machine` constructs a
+`MachineFunction` for the no-argument `@main` entry and every defined helper,
+then bridges those bodies to the typed artifact model.  The supported values
+and operations are scalar constants, arithmetic, comparisons, scalar casts as
+`move`, `fneg`, boolean inversion as `not`, `nil`/`ret void` returns,
+`cd_print`/`print`, defined-function calls, scalar function parameters,
+single-slot scalar storage through `load_var` and `store_var`, conditional and
+unconditional branches, and scalar PHI values.  Conditional PHI edges use
+synthetic machine edge blocks so each predecessor edge stores the correct
+incoming value before jumping to the successor; symbolic machine block
+targets are patched to artifact instruction offsets before validation.
+
+Constants and function values are materialized at each use site.  This keeps
+their VM registers defined on every control-flow path instead of allowing a
+register definition in one edge block to leak into an unrelated edge.
+Aggregate values, direct/machine parity, and optimized select lowering remain
+pending.
 
 ## TableGen pseudo-instruction mapping
 
@@ -94,7 +104,7 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The next M3 implementation slice may create `MachineFunction` objects and
-lower the existing scalar/control-flow subset to these pseudo-operations, but
-it must retain the direct path and compare both paths through the typed
-artifact model.
+The next M3 implementation slice should compare direct and machine artifacts
+through Rust `dump`/`run`, then add any scalar operation (such as `select`)
+only when its direct-path lowering and machine artifact bridge have matching
+tests.  It must retain the direct path and keep the machine path opt-in.

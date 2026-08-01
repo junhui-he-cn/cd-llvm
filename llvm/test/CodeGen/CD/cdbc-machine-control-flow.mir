@@ -1,0 +1,36 @@
+# RUN: llc -mtriple=cd-unknown-unknown -run-pass=none %s -o - | FileCheck %s
+
+--- |
+  define i32 @main() {
+  entry:
+    ret i32 0
+  }
+
+name:            main
+tracksRegLiveness: true
+registers:
+  - { id: 0, class: cdvalue }
+  - { id: 1, class: cdvalue }
+  - { id: 2, class: cdvalue }
+body: |
+  bb.0:
+    %0 = CD_CONSTANT 0
+    %1 = CD_CONSTANT 1
+    %2 = CD_EQUAL %0, %1
+    CD_JUMP_IF_FALSE %2, %bb.2
+    CD_JUMP %bb.1
+
+  bb.1:
+    CD_RETURN %0
+
+  bb.2:
+    CD_RETURN %1
+
+# CHECK: %{{[0-9]+}}:cdvalue = CD_CONSTANT 0
+# CHECK: %{{[0-9]+}}:cdvalue = CD_EQUAL %{{[0-9]+}}, %{{[0-9]+}}
+# CHECK: CD_JUMP_IF_FALSE %{{[0-9]+}}, %bb.2
+# CHECK: CD_JUMP %bb.1
+# CHECK: bb.1:
+# CHECK: CD_RETURN %{{[0-9]+}}
+# CHECK: bb.2:
+# CHECK: CD_RETURN %{{[0-9]+}}

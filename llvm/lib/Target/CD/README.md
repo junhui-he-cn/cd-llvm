@@ -23,7 +23,8 @@ unconditional branches, PHI edge stores, returns, and declarations named
 inversion: an `i1` value XORed with the literal `true` (in either operand order)
 lowers to `not`; other XOR operations remain unsupported.  Unsupported LLVM
 instructions fail with a CD-target diagnostic rather than producing an invalid
-artifact.
+artifact. A `ptr null` return is accepted as the CD `nil` value; non-nil pointer
+returns remain unsupported.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
@@ -31,6 +32,15 @@ targets, instruction shapes, function parameter records, and finite constants;
 the canonical serializer is the only component that spells the `cdbc 0.1`
 wire format. This boundary is also the input contract for the later TableGen-
 backed machine path.
+
+The opt-in TableGen-backed path is selected with `-cd-backend=machine`. It
+lowers the same scalar subset into CD virtual-value `MachineInstr`
+pseudo-operations, including branches and PHI edge stores, and then reuses
+`CDBytecodeFormat` for artifact validation and serialization. A conditional
+edge gets a synthetic machine block when it needs PHI stores, and machine
+block operands are patched to final bytecode instruction offsets. The direct
+emitter remains the default compatibility path until direct/machine Rust VM
+parity is gated.
 
 Integer constants are accepted only when their signed value is exactly
 representable as an IEEE-754 double; otherwise the target reports a diagnostic

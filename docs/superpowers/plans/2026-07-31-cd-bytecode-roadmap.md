@@ -202,22 +202,24 @@ The direct `ModulePass` path remains the default compatibility path. The new mac
 - [x] Record the CD virtual-value register, module-table ownership, call/branch, and artifact-bridge decisions before creating generated instruction files.
 - [x] Add `CDCommonTableGen` and generated `CDGenInstrInfo.inc`, `CDGenRegisterInfo.inc`, and `CDGenSubtargetInfo.inc` dependencies in CMake.
 - [x] Define only the machine operations that have a stable `cdbc 0.1` mapping; do not use TableGen to hide unsupported arrays, maps, globals, or native calls.
-- [ ] Lower the existing scalar/control-flow subset to `MachineInstr` and serialize it through the typed artifact model from M1.
-- [ ] Add MIR tests for virtual-value registers, calls, branches, PHI lowering, function boundaries, and constant/name table ownership.
+- [x] Lower the existing scalar/control-flow subset to `MachineInstr` and serialize it through the typed artifact model from M1.
+- [x] Add MIR tests for virtual-value registers, calls, branches, PHI lowering, function boundaries, and constant/name table ownership.
 - [ ] Produce direct and machine-path artifacts from the same LLVM IR, normalize only permitted table/index differences, and require identical VM behavior.
-- [ ] Keep `-filetype=obj` rejected and keep the machine path text-only until an object format is deliberately designed.
+- [x] Keep `-filetype=obj` rejected and keep the machine path text-only until an object format is deliberately designed.
 
-Current M3 progress (2026-08-01): the opt-in machine path now bridges the
-no-argument, single-basic-block `@main` body and defined helper
-`MachineFunction` bodies through the typed artifact model.  It covers scalar
-constants, arithmetic,
-comparisons, scalar casts, `fneg`, boolean inversion, and `nil`/`ret void`
-returns with TableGen-defined pseudo-instructions and focused FileCheck
-coverage.  It now also emits defined-function boundaries, `make_function`,
-`call`, parameter metadata, and `load_var` for scalar function parameters.
-Single-slot scalar `alloca` storage now lowers through `load_var` and
-`store_var`.  Control flow, PHI lowering, and direct/machine VM parity remain
-pending.
+Current M3 progress (2026-08-01): the opt-in machine path bridges the
+no-argument `@main` body and defined helper `MachineFunction` bodies through
+the typed artifact model.  It covers scalar constants, arithmetic,
+comparisons, scalar casts, `fneg`, boolean inversion, `nil`/`ret void`,
+`cd_print`/`print`, defined-function calls, scalar parameters, and single-slot
+scalar storage.  Conditional and unconditional branches now lower to
+TableGen-defined jump pseudo-instructions; PHI incoming values are stored on
+unconditional edges or synthetic conditional edge blocks, and symbolic machine
+block targets are patched to artifact instruction offsets.  The new
+`cdbc-machine-control-flow.ll` fixture covers loop PHIs, multiple predecessors,
+critical edges, repeated constants across edges, and Rust VM output; the MIR
+fixture covers virtual-value registers and branch operands.  Direct/machine
+VM parity remains the final M3 gate.
 
 **Exit criteria:** LLVM TableGen generates usable CD instruction/register/subtarget descriptions; `llc` can select the machine path explicitly; MIR and FileCheck tests pass; Rust `dump` accepts the result; and direct and machine paths agree on `cdbc 0.1` execution for the supported subset.
 
@@ -319,9 +321,11 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. M0 fresh build and VM validation.
-2. M1 typed artifact model and serializer tests, preserving current output.
-3. M2 scalar semantic policy and `-O2` regression coverage.
+1. Finish M3 direct/machine artifact and Rust VM parity checks.
+2. Add machine lowering for scalar `select` or another already-defined direct
+   scalar operation, with a focused red-green test and parity evidence.
+3. Re-run the M3 gates before considering the machine backend ready for the
+   next ABI design stage.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 

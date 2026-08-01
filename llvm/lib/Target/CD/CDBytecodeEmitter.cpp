@@ -115,7 +115,6 @@ class CDFunctionEmitter {
   DenseMap<const AllocaInst *, unsigned> AllocaNames;
   DenseMap<const PHINode *, unsigned> PhiNames;
   DenseMap<const BasicBlock *, unsigned> BlockOffsets;
-  DenseMap<const Constant *, unsigned> ConstantRegisters;
   std::vector<BranchPatch> BranchPatches;
   std::vector<CDInstruction> Instructions;
   std::vector<std::string> ParameterNames;
@@ -340,13 +339,16 @@ class CDFunctionEmitter {
   }
 
   void emitPhiStores(const BasicBlock &Predecessor,
-                     const BasicBlock &Successor) {
+                     const BasicBlock &Successor, unsigned IncomingOccurrence) {
     for (const PHINode &Phi : Successor.phis()) {
       int IncomingIndex = -1;
+      unsigned Occurrence = 0;
       for (unsigned Index = 0; Index < Phi.getNumIncomingValues(); ++Index) {
         if (Phi.getIncomingBlock(Index) == &Predecessor) {
-          IncomingIndex = static_cast<int>(Index);
-          break;
+          if (Occurrence++ == IncomingOccurrence) {
+            IncomingIndex = static_cast<int>(Index);
+            break;
+          }
         }
       }
       if (IncomingIndex < 0)
@@ -420,8 +422,15 @@ void CDFunctionEmitter::validateFunctionTypes() {
     if (!isScalarType(Argument.getType()))
       unsupportedOperation("non-scalar function parameters");
 
-  if (!F.getReturnType()->isVoidTy() && !isScalarType(F.getReturnType()))
-    unsupportedOperation("non-scalar function return values");
+  if (!F.getReturnType()->isVoidTy() && !isScalarType(F.getReturnType())) {
+    if (!F.getReturnType()->isPointerTy())
+      unsupportedOperation("non-scalar function return values");
+    for (const BasicBlock &BB : F) {
+      const auto *Return = dyn_cast<ReturnInst>(BB.getTerminator());
+      if (!Return || !isa<ConstantPointerNull>(Return->getReturnValue()))
+        unsupportedOperation("non-nil pointer function return values");
+    }
+  }
 }
 
 void CDFunctionEmitter::allocateValuesAndStorage() {
@@ -478,10 +487,6 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
 }
 
 unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
-  auto It = ConstantRegisters.find(C);
-  if (It != ConstantRegisters.end())
-    return It->second;
-
   CDConstant::Kind Kind;
   std::string Text;
   if (const auto *CI = dyn_cast<ConstantInt>(C)) {
@@ -513,7 +518,6 @@ unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
 
   const unsigned ConstantIndex = Module.addConstant(Kind, Text);
   const unsigned Register = allocateRegister();
-  ConstantRegisters[C] = Register;
   appendInstruction(CDInstruction::constant(Register, ConstantIndex));
   return Register;
 }
@@ -669,14 +673,14 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
     return;
   }
 
-  if (const auto *Branch = dyn_cast<BranchInst>(&Terminator)) {
-    if (Branch->isUnconditional()) {
-      const BasicBlock *Successor = Branch->getSuccessor(0);
-      emitPhiStores(BB, *Successor);
-      appendJump(Successor);
-      return;
-    }
+  if (const auto *Branch = dyn_cast<UncondBrInst>(&Terminator)) {
+    const BasicBlock *Successor = Branch->getSuccessor(0);
+    emitPhiStores(BB, *Successor, 0);
+    appendJump(Successor);
+    return;
+  }
 
+  if (const auto *Branch = dyn_cast<CondBrInst>(&Terminator)) {
     const unsigned Condition = valueRegister(Branch->getCondition());
     const BasicBlock *TrueSuccessor = Branch->getSuccessor(0);
     const BasicBlock *FalseSuccessor = Branch->getSuccessor(1);
@@ -684,12 +688,13 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
     appendInstruction(
         CDInstruction::jumpIfFalse(Condition, cd::InvalidIndex));
 
-    emitPhiStores(BB, *TrueSuccessor);
+    emitPhiStores(BB, *TrueSuccessor, 0);
     appendJump(TrueSuccessor);
 
     const unsigned FalseEdge = Instructions.size();
     Instructions[ConditionalLine].target = FalseEdge;
-    emitPhiStores(BB, *FalseSuccessor);
+    const unsigned FalseOccurrence = TrueSuccessor == FalseSuccessor ? 1 : 0;
+    emitPhiStores(BB, *FalseSuccessor, FalseOccurrence);
     appendJump(FalseSuccessor);
     return;
   }

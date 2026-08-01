@@ -60,13 +60,14 @@ class CDMachineModuleEmitter {
   StringMap<unsigned> ConstantIndexes;
   StringMap<unsigned> NameIndexes;
   DenseMap<const Function *, unsigned> FunctionIndexes;
-  DenseMap<const Constant *, Register> ConstantRegisters;
-  DenseMap<const Function *, Register> FunctionRegisters;
   DenseMap<const Value *, Register> ValueRegisters;
   DenseMap<const AllocaInst *, unsigned> AllocaNames;
+  DenseMap<const PHINode *, unsigned> PhiNames;
+  DenseMap<const BasicBlock *, MachineBasicBlock *> MachineBlocks;
   std::vector<std::string> ParameterNames;
   std::set<std::string> UsedStorageNames;
   unsigned AllocaSerial = 0;
+  unsigned ValueSerial = 0;
 
   unsigned addName(StringRef Name) {
     auto It = NameIndexes.find(Name);
@@ -120,23 +121,25 @@ class CDMachineModuleEmitter {
   }
 
   Register createValueRegister(MachineRegisterInfo &MRI, const Value *Value) {
+    auto It = ValueRegisters.find(Value);
+    if (It != ValueRegisters.end())
+      return It->second;
     Register Result = MRI.createVirtualRegister(&CD::CDValueRegClass);
     ValueRegisters[Value] = Result;
     return Result;
+  }
+
+  Register createTemporaryRegister(MachineRegisterInfo &MRI) {
+    return MRI.createVirtualRegister(&CD::CDValueRegClass);
   }
 
   Register materializeConstant(const Constant *ConstantValue,
                                MachineRegisterInfo &MRI,
                                MachineBasicBlock &MBB,
                                const TargetInstrInfo &TII) {
-    auto It = ConstantRegisters.find(ConstantValue);
-    if (It != ConstantRegisters.end())
-      return It->second;
-
-    Register Result = createValueRegister(MRI, ConstantValue);
+    Register Result = createTemporaryRegister(MRI);
     BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
         .addImm(addConstant(*ConstantValue));
-    ConstantRegisters[ConstantValue] = Result;
     return Result;
   }
 
@@ -151,18 +154,13 @@ class CDMachineModuleEmitter {
                                MachineRegisterInfo &MRI,
                                MachineBasicBlock &MBB,
                                const TargetInstrInfo &TII) {
-    auto It = FunctionRegisters.find(FunctionValue);
-    if (It != FunctionRegisters.end())
-      return It->second;
-
     auto FunctionIndex = FunctionIndexes.find(FunctionValue);
     if (FunctionIndex == FunctionIndexes.end())
       unsupported("a call to an undefined, declared, or @main function");
 
-    Register Result = createValueRegister(MRI, FunctionValue);
+    Register Result = createTemporaryRegister(MRI);
     BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAKE_FUNCTION), Result)
         .addImm(FunctionIndex->second);
-    FunctionRegisters[FunctionValue] = Result;
     return Result;
   }
 
@@ -184,16 +182,40 @@ class CDMachineModuleEmitter {
     for (BasicBlock &BB : F)
       for (Instruction &Instruction : BB) {
         const auto *Alloca = dyn_cast<AllocaInst>(&Instruction);
-        if (!Alloca)
+        if (Alloca) {
+          const auto *ArraySize =
+              dyn_cast<ConstantInt>(Alloca->getArraySize());
+          if (!ArraySize || !ArraySize->isOne() ||
+              !isScalarType(Alloca->getAllocatedType()))
+            unsupported("an unsupported alloca shape");
+          const std::string Name = uniqueStorageName(
+              Alloca->hasName() ? Alloca->getName() : StringRef());
+          AllocaNames[Alloca] = addName(Name);
           continue;
+        }
 
-        const auto *ArraySize = dyn_cast<ConstantInt>(Alloca->getArraySize());
-        if (!ArraySize || !ArraySize->isOne() ||
-            !isScalarType(Alloca->getAllocatedType()))
-          unsupported("an unsupported alloca shape");
-        const std::string Name = uniqueStorageName(
-            Alloca->hasName() ? Alloca->getName() : StringRef());
-        AllocaNames[Alloca] = addName(Name);
+        const auto *Phi = dyn_cast<PHINode>(&Instruction);
+        if (!Phi)
+          continue;
+        if (!isScalarType(Phi->getType()))
+          unsupported("a non-scalar PHI node");
+        const std::string Base = Phi->hasName()
+                                     ? Phi->getName().str()
+                                     : "value" + std::to_string(ValueSerial++);
+        const std::string Name = uniqueStorageName(Base);
+        PhiNames[Phi] = addName(Name);
+      }
+  }
+
+  void preallocateValueRegisters(Function &F, MachineRegisterInfo &MRI) {
+    for (BasicBlock &BB : F)
+      for (Instruction &Instruction : BB) {
+        if (isa<DbgInfoIntrinsic>(&Instruction) ||
+            isa<AllocaInst>(&Instruction) || Instruction.getType()->isVoidTy())
+          continue;
+        if (!isScalarType(Instruction.getType()))
+          unsupported("a non-scalar instruction result");
+        createValueRegister(MRI, &Instruction);
       }
   }
 
@@ -283,6 +305,17 @@ class CDMachineModuleEmitter {
   void lowerCall(const CallInst &Call, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     Function *Callee = Call.getCalledFunction();
+    if (Callee && Callee->isDeclaration() &&
+        (Callee->getName() == "cd_print" || Callee->getName() == "print") &&
+        Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
+      if (!isSupportedValue(Call.getArgOperand(0)))
+        unsupported("a non-scalar print argument");
+      Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_PRINT))
+          .addReg(Value);
+      return;
+    }
+
     if (!Callee || Callee->isDeclaration() || Callee->isIntrinsic() ||
         FunctionIndexes.find(Callee) == FunctionIndexes.end())
       unsupported("a call to an undefined, declared, intrinsic, or @main function");
@@ -338,6 +371,88 @@ class CDMachineModuleEmitter {
     BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STORE_VAR))
         .addImm(allocaName(Store.getPointerOperand()))
         .addReg(Source);
+  }
+
+  MachineBasicBlock *machineBlock(const BasicBlock *Block) const {
+    auto It = MachineBlocks.find(Block);
+    if (It == MachineBlocks.end())
+      unsupported("a branch to an unknown basic block");
+    return It->second;
+  }
+
+  void lowerPhiStores(const BasicBlock &Predecessor,
+                      const BasicBlock &Successor, unsigned IncomingOccurrence,
+                      MachineRegisterInfo &MRI, MachineBasicBlock &MBB,
+                      const TargetInstrInfo &TII) {
+    for (const PHINode &Phi : Successor.phis()) {
+      int IncomingIndex = -1;
+      unsigned Occurrence = 0;
+      for (unsigned Index = 0; Index < Phi.getNumIncomingValues(); ++Index) {
+        if (Phi.getIncomingBlock(Index) == &Predecessor) {
+          if (Occurrence++ == IncomingOccurrence) {
+            IncomingIndex = static_cast<int>(Index);
+            break;
+          }
+        }
+      }
+      if (IncomingIndex < 0)
+        unsupported("a PHI node without an incoming value for a branch edge");
+
+      Register Source = valueRegister(
+          Phi.getIncomingValue(static_cast<unsigned>(IncomingIndex)), MRI, MBB,
+          TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STORE_VAR))
+          .addImm(PhiNames.lookup(&Phi))
+          .addReg(Source);
+    }
+  }
+
+  void lowerUnconditionalBranch(const UncondBrInst &Branch,
+                                const BasicBlock &Predecessor,
+                                MachineRegisterInfo &MRI,
+                                MachineBasicBlock &MBB,
+                                const TargetInstrInfo &TII) {
+    const BasicBlock *Successor = Branch.getSuccessor(0);
+    lowerPhiStores(Predecessor, *Successor, 0, MRI, MBB, TII);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP))
+        .addMBB(machineBlock(Successor));
+  }
+
+  MachineBasicBlock *createConditionalEdge(
+      MachineFunction &MF, const BasicBlock &Predecessor,
+      const BasicBlock &Successor, unsigned IncomingOccurrence,
+      MachineRegisterInfo &MRI, const TargetInstrInfo &TII) {
+    MachineBasicBlock *Edge = MF.CreateMachineBasicBlock();
+    MF.insert(MF.end(), Edge);
+    lowerPhiStores(Predecessor, Successor, IncomingOccurrence, MRI, *Edge, TII);
+    BuildMI(*Edge, Edge->end(), DebugLoc(), TII.get(CD::CD_JUMP))
+        .addMBB(machineBlock(&Successor));
+    return Edge;
+  }
+
+  void lowerConditionalBranch(const CondBrInst &Branch,
+                              const BasicBlock &Predecessor,
+                              MachineFunction &MF, MachineRegisterInfo &MRI,
+                              MachineBasicBlock &MBB,
+                              const TargetInstrInfo &TII) {
+    const BasicBlock *TrueSuccessor = Branch.getSuccessor(0);
+    const BasicBlock *FalseSuccessor = Branch.getSuccessor(1);
+    const unsigned FalseOccurrence = TrueSuccessor == FalseSuccessor ? 1 : 0;
+    MachineBasicBlock *TrueEdge = machineBlock(TrueSuccessor);
+    if (!TrueSuccessor->phis().empty())
+      TrueEdge = createConditionalEdge(MF, Predecessor, *TrueSuccessor, 0, MRI,
+                                       TII);
+    MachineBasicBlock *FalseEdge = machineBlock(FalseSuccessor);
+    if (!FalseSuccessor->phis().empty())
+      FalseEdge = createConditionalEdge(MF, Predecessor, *FalseSuccessor,
+                                        FalseOccurrence, MRI, TII);
+    Register Condition =
+        valueRegister(Branch.getCondition(), MRI, MBB, TII);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP_IF_FALSE))
+        .addReg(Condition)
+        .addMBB(FalseEdge);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP))
+        .addMBB(TrueEdge);
   }
 
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
@@ -421,12 +536,13 @@ class CDMachineModuleEmitter {
 
   CDBody lowerFunction(Function &F, bool IsMain) {
     ValueRegisters.clear();
-    ConstantRegisters.clear();
-    FunctionRegisters.clear();
     AllocaNames.clear();
+    PhiNames.clear();
+    MachineBlocks.clear();
     ParameterNames.clear();
     UsedStorageNames.clear();
     AllocaSerial = 0;
+    ValueSerial = 0;
 
     if (IsMain && F.getName() != "main")
       unsupported("a non-main function as the entry body");
@@ -434,15 +550,19 @@ class CDMachineModuleEmitter {
       unsupported("a declared function body");
     if (IsMain && F.arg_size() != 0)
       unsupported("@main parameters in the first machine slice");
-    if (F.size() != 1)
-      unsupported("multiple basic blocks in the first machine slice");
+    if (F.empty())
+      unsupported("a function without basic blocks");
 
     MachineFunction &MF = MMI.getOrCreateMachineFunction(F);
     if (MF.size() != 0)
       unsupported("pre-existing machine basic blocks");
 
-    MachineBasicBlock *MBB = MF.CreateMachineBasicBlock(&F.getEntryBlock());
-    MF.insert(MF.end(), MBB);
+    for (BasicBlock &BB : F) {
+      MachineBasicBlock *MBB = MF.CreateMachineBasicBlock(&BB);
+      MF.insert(MF.end(), MBB);
+      MachineBlocks[&BB] = MBB;
+    }
+    MachineBasicBlock *EntryMBB = MachineBlocks.lookup(&F.getEntryBlock());
     MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
@@ -464,75 +584,103 @@ class CDMachineModuleEmitter {
 
       ParameterNames.push_back(Name);
       Register Result = createValueRegister(MRI, &Argument);
-      BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR), Result)
+      BuildMI(*EntryMBB, EntryMBB->end(), DebugLoc(),
+              TII.get(CD::CD_LOAD_VAR), Result)
           .addImm(addName(Name));
     }
 
     prepareStorage(F);
+    preallocateValueRegisters(F, MRI);
 
-    for (const Instruction &Instruction : F.getEntryBlock()) {
-      if (isa<DbgInfoIntrinsic>(&Instruction))
-        continue;
+    for (BasicBlock &BB : F) {
+      MachineBasicBlock *MBB = MachineBlocks.lookup(&BB);
+      for (const PHINode &Phi : BB.phis())
+        BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR),
+                createValueRegister(MRI, &Phi))
+            .addImm(PhiNames.lookup(&Phi));
 
-      if (isa<AllocaInst>(&Instruction))
-        continue;
+      for (const Instruction &Instruction : BB) {
+        if (isa<DbgInfoIntrinsic>(&Instruction) ||
+            isa<PHINode>(&Instruction))
+          continue;
 
-      if (const auto *Load = dyn_cast<LoadInst>(&Instruction)) {
-        lowerLoad(*Load, MRI, *MBB, TII);
-        continue;
+        if (isa<AllocaInst>(&Instruction))
+          continue;
+
+        if (const auto *Load = dyn_cast<LoadInst>(&Instruction)) {
+          lowerLoad(*Load, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Store = dyn_cast<StoreInst>(&Instruction)) {
+          lowerStore(*Store, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
+          const Value *ReturnValue = Return->getReturnValue();
+          if (ReturnValue && !isSupportedValue(ReturnValue))
+            unsupported("a non-scalar function return");
+          Register Result = ReturnValue
+                                ? valueRegister(ReturnValue, MRI, *MBB, TII)
+                                : materializeNil(MRI, *MBB, TII);
+          BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
+              .addReg(Result);
+          continue;
+        }
+
+        if (const auto *Branch = dyn_cast<CondBrInst>(&Instruction)) {
+          lowerConditionalBranch(*Branch, BB, MF, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Branch = dyn_cast<UncondBrInst>(&Instruction)) {
+          lowerUnconditionalBranch(*Branch, BB, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Binary = dyn_cast<BinaryOperator>(&Instruction)) {
+          if (Binary->getOpcode() == Instruction::Xor)
+            lowerNot(*Binary, MRI, *MBB, TII);
+          else
+            lowerBinary(*Binary, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Compare = dyn_cast<CmpInst>(&Instruction)) {
+          lowerCompare(*Compare, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Cast = dyn_cast<CastInst>(&Instruction)) {
+          lowerCast(*Cast, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (const auto *Call = dyn_cast<CallInst>(&Instruction)) {
+          lowerCall(*Call, MRI, *MBB, TII);
+          continue;
+        }
+
+        if (Instruction.getOpcode() == Instruction::FNeg) {
+          lowerFNeg(Instruction, MRI, *MBB, TII);
+          continue;
+        }
+
+        unsupported(Instruction.getOpcodeName());
       }
-
-      if (const auto *Store = dyn_cast<StoreInst>(&Instruction)) {
-        lowerStore(*Store, MRI, *MBB, TII);
-        continue;
-      }
-
-      if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
-        const Value *ReturnValue = Return->getReturnValue();
-        if (ReturnValue && !isSupportedValue(ReturnValue))
-          unsupported("a non-scalar function return");
-        Register Result = ReturnValue
-                              ? valueRegister(ReturnValue, MRI, *MBB, TII)
-                              : materializeNil(MRI, *MBB, TII);
-        BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
-            .addReg(Result);
-        continue;
-      }
-
-      if (const auto *Binary = dyn_cast<BinaryOperator>(&Instruction)) {
-        if (Binary->getOpcode() == Instruction::Xor)
-          lowerNot(*Binary, MRI, *MBB, TII);
-        else
-          lowerBinary(*Binary, MRI, *MBB, TII);
-        continue;
-      }
-
-      if (const auto *Compare = dyn_cast<CmpInst>(&Instruction)) {
-        lowerCompare(*Compare, MRI, *MBB, TII);
-        continue;
-      }
-
-      if (const auto *Cast = dyn_cast<CastInst>(&Instruction)) {
-        lowerCast(*Cast, MRI, *MBB, TII);
-        continue;
-      }
-
-      if (const auto *Call = dyn_cast<CallInst>(&Instruction)) {
-        lowerCall(*Call, MRI, *MBB, TII);
-        continue;
-      }
-
-      if (Instruction.getOpcode() == Instruction::FNeg) {
-        lowerFNeg(Instruction, MRI, *MBB, TII);
-        continue;
-      }
-
-      unsupported(Instruction.getOpcodeName());
     }
 
     CDBody Body;
     DenseMap<unsigned, unsigned> Registers;
+    DenseMap<const MachineBasicBlock *, unsigned> BlockOffsets;
+    struct BranchPatch {
+      size_t Instruction;
+      const MachineBasicBlock *Target;
+    };
+    std::vector<BranchPatch> BranchPatches;
     for (const MachineBasicBlock &Block : MF) {
+      BlockOffsets[&Block] = Body.instructions.size();
       for (const MachineInstr &MI : Block) {
         if (MI.isDebugInstr())
           continue;
@@ -656,6 +804,31 @@ class CDMachineModuleEmitter {
               std::move(Arguments)));
           break;
         }
+        case CD::CD_PRINT:
+          if (MI.getNumOperands() != 1 || !MI.getOperand(0).isReg())
+            unsupported("an invalid CD_PRINT machine instruction");
+          Body.instructions.push_back(CDInstruction::print(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body)));
+          break;
+        case CD::CD_JUMP: {
+          if (MI.getNumOperands() != 1 || !MI.getOperand(0).isMBB())
+            unsupported("an invalid CD_JUMP machine instruction");
+          const size_t Instruction = Body.instructions.size();
+          Body.instructions.push_back(CDInstruction::jump(cd::InvalidIndex));
+          BranchPatches.push_back({Instruction, MI.getOperand(0).getMBB()});
+          break;
+        }
+        case CD::CD_JUMP_IF_FALSE: {
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isMBB())
+            unsupported("an invalid CD_JUMP_IF_FALSE machine instruction");
+          const size_t Instruction = Body.instructions.size();
+          Body.instructions.push_back(CDInstruction::jumpIfFalse(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              cd::InvalidIndex));
+          BranchPatches.push_back({Instruction, MI.getOperand(1).getMBB()});
+          break;
+        }
         case CD::CD_RETURN:
           if (MI.getNumOperands() != 1 || !MI.getOperand(0).isReg())
             unsupported("an invalid CD_RETURN machine instruction");
@@ -666,6 +839,12 @@ class CDMachineModuleEmitter {
           unsupported("an unimplemented machine opcode in the artifact bridge");
         }
       }
+    }
+    for (const BranchPatch &Patch : BranchPatches) {
+      auto It = BlockOffsets.find(Patch.Target);
+      if (It == BlockOffsets.end())
+        unsupported("a branch target outside the machine function");
+      Body.instructions[Patch.Instruction].target = It->second;
     }
     Body.parameterNames = ParameterNames;
     return Body;
