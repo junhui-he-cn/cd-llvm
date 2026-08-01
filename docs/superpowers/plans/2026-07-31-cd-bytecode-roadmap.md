@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array-constructor, and array-access slices implemented |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array-constructor, array-access, and array-mutation slices implemented |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -303,10 +303,119 @@ coverage in `cdbc-array-access.ll` exercises scalar and nested indexing,
 length, assertion, direct/machine FileCheck, and the parity manifest; malformed
 ordinary-pointer and intrinsic-signature cases are in
 `cdbc-array-access-errors.ll`.  The nil assertion fixture preserves the Rust VM
-runtime error (`for-in expects array, range, or map`) on both paths.  Array
-mutation, maps, and dynamic-value function boundaries remain deferred.
+runtime error (`for-in expects array, range, or map`) on both paths.  Maps and
+dynamic-value function boundaries remain deferred.
+
+The array-mutation slice now implements the overloaded
+`llvm.cd.assign.index` intrinsic. Pointer and scalar value overloads lower to
+the existing `assign_index` operation through both direct and machine paths;
+ordinary pointers and aggregate substitutes remain rejected. Positive
+dynamic-pointer and scalar fixtures, malformed capability/signature fixtures,
+and an out-of-bounds runtime fixture are covered. The parity harness has an
+explicit `runtime-error` mode that validates both VM diagnostics, and the
+assignment fixtures participate in direct/machine behavior parity. The nested
+Rust VM checkout is unchanged because its existing parser, verifier, and
+runtime already implement `assign_index`.
 
 **Exit criteria:** Every newly emitted opcode is documented, parsed, verified, and executed by the Rust VM; collection mutation and failure behavior are covered; ordinary LLVM aggregates remain rejected unless they use the defined CD ABI.
+
+### Narrow M4 slice: `llvm.cd.assign.index` (2026-08-01)
+
+**Goal:** Lower only the overloaded array/map assignment intrinsic to the
+existing `cdbc 0.1` `assign_index` operation in the direct and opt-in machine
+paths, while preserving the explicit CD-value ABI and Rust VM contract.
+
+**Files:**
+
+- Modify: `llvm/include/llvm/IR/IntrinsicsCD.td`.
+- Modify: `llvm/lib/Target/CD/CDValueABI.{h,cpp}`.
+- Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}`.
+- Modify: `llvm/lib/Target/CD/CDBytecodeEmitter.cpp`.
+- Modify: `llvm/lib/Target/CD/CDInstrInfo.td`.
+- Modify: `llvm/lib/Target/CD/CDMachineBytecodeEmitter.cpp`.
+- Modify: `llvm/utils/cd_bytecode_parity.py` and
+  `llvm/utils/cd_bytecode_parity_test.py`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-array-assign.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Create: `llvm/test/CodeGen/CD/cdbc-array-assign-scalar.ll`,
+  `llvm/test/CodeGen/CD/cdbc-array-assign-errors.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-array-assign-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll` only if needed to
+  make its VM error expectation explicit in the parity manifest.
+- Modify: `docs/cd-bytecode-llvm-abi.md`,
+  `docs/cd-bytecode-machine-backend.md`, and `llvm/lib/Target/CD/README.md`.
+
+The intrinsic declaration is:
+
+```tablegen
+def int_cd_assign_index : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_double_ty, LLVMMatchType<0>]>;
+```
+
+The textual IR tests use the base intrinsic spelling accepted by LLVM's
+intrinsic parser. LLVM APIs may materialize a type suffix for an overloaded
+declaration; that suffix still identifies the same intrinsic ID. The two
+positive modules remain separate so that each textual declaration has one
+unambiguous overload.
+
+The lowering validator must enforce all of these conditions before constructing
+`CDInstruction::assignIndex`: exactly three arguments; an explicit CD token or
+address-space-zero null collection; a `double` index; a scalar, address-space-
+zero null, or explicit CD-token value; and a scalar result with exactly the
+value type or an address-space-zero pointer result for a dynamic value.  An
+ordinary pointer, aggregate, vector, foreign-address-space null, mismatched
+result, or malformed signature remains a target diagnostic.  An assignment
+result is a CD token only for the pointer overload, so it participates in the
+existing local CD-value propagation rules without widening ordinary pointer
+support.
+
+The typed artifact shape is:
+
+```text
+rD = assign_index rCollection, rIndex, rValue
+```
+
+`CDOpcode::AssignIndex`, its factory, validator, serializer, `CD_ASSIGN_INDEX`
+pseudo, direct lowering, machine lowering, and machine artifact bridge must all
+use that exact three-operand/result shape.  The nested `cd-compiler/` checkout
+is read-only for this slice because its parser, verifier, and runtime already
+implement the opcode.
+
+The parity manifest gains this narrow syntax in addition to `artifact` and
+`behavior`:
+
+```text
+runtime-error <input.ll> "<expected-error-substring>"
+```
+
+For a runtime-error entry, the harness emits direct and machine artifacts,
+requires both VM `dump` commands to succeed, requires both VM `run` commands
+to fail, and compares the exact diagnostic after checking the expected
+substring.  Add the existing `cdbc-array-access-runtime.ll` with
+`for-in expects array, range, or map`, and add the new assignment bounds
+fixture with `array index out of range`.  This keeps LLVM lit tests isolated
+from the sibling checkout while making VM runtime parity an explicit opt-in
+integration gate.
+
+- [x] Record the red baseline by running `build-cd/bin/llc -mtriple=cd-unknown-unknown llvm/test/CodeGen/CD/cdbc-array-assign.ll`; the current unsupported declaration is treated as an ordinary call and fails with `CD target does not support LLVM instruction: call` (exit 134).
+- [x] Add the overloaded intrinsic and verify its generated enum/name and
+  pointer/scalar textual spellings with LLVM IR parsing before changing the
+  target emitters.
+- [x] Add the direct and machine typed `assign_index` shape, shared ABI
+  validation, CD-value propagation, and both lowering paths.
+- [x] Add dynamic-pointer, scalar, malformed-signature/capability, and runtime
+  bounds fixtures; add positive assignment to the parity manifest.
+- [x] Extend and unit-test the parity harness's explicit `runtime-error` mode,
+  including the existing array-access runtime fixture.
+- [x] Run focused lit, Rust VM `dump`/`run`, direct/machine artifact and
+  runtime parity, and `git diff --check` gates without modifying the nested
+  checkout.
+
+**Remaining boundaries after this slice:** map assignment is accepted only as
+far as an explicit CD dynamic token can reach the intrinsic; ordinary pointers,
+aggregates, records, native calls, function/parameter/PHI/select propagation,
+and implicit mutation through LLVM stores remain rejected.  No new Rust opcode,
+artifact version, object output, or default machine backend is introduced.
 
 ## 9. M5 — Add source-backed debug metadata
 
@@ -375,12 +484,14 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Record the array-mutation ABI gate for `llvm.cd.assign_index`: collection,
-   index, value capabilities, aliasing, result identity, and failure behavior.
-2. Keep ordinary LLVM aggregates and pointers rejected; do not infer mutation
-   from `alloca`, globals, stores, or aggregate instructions.
-3. Implement only `assign_index` after positive, malformed, Rust `dump`/`run`,
-   runtime-error, and direct/machine parity tests agree with the VM contract.
+1. Record the map-constructor ABI gate: key/value capability, insertion order,
+   aliasing, resource-budget behavior, and the name-table contract.
+2. Keep ordinary LLVM aggregates and pointers rejected; do not infer map
+   construction or mutation from `alloca`, globals, stores, or aggregate
+   instructions.
+3. Implement only the explicit map constructor after positive, malformed, Rust
+   `dump`/`run`, runtime-error, and direct/machine parity tests agree with the
+   VM contract.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 

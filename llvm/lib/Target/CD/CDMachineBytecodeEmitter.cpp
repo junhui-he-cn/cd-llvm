@@ -369,6 +369,23 @@ class CDMachineModuleEmitter {
       return;
     }
 
+    if (Callee && cd::isAssignIndexIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssignIndexCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Collection =
+          valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      Register Index = valueRegister(Call.getArgOperand(1), MRI, MBB, TII);
+      Register Value = valueRegister(Call.getArgOperand(2), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSIGN_INDEX), Result)
+          .addReg(Collection)
+          .addReg(Index)
+          .addReg(Value);
+      return;
+    }
+
     if (Callee && cd::isLenIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateLenCall(Call, Error))
@@ -836,6 +853,17 @@ class CDMachineModuleEmitter {
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
               artifactRegister(MI.getOperand(2).getReg(), Registers, Body)));
+          break;
+        case CD::CD_ASSIGN_INDEX:
+          if (MI.getNumOperands() != 4 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg() ||
+              !MI.getOperand(3).isReg())
+            unsupported("an invalid CD_ASSIGN_INDEX machine instruction");
+          Body.instructions.push_back(CDInstruction::assignIndex(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(2).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(3).getReg(), Registers, Body)));
           break;
         case CD::CD_LEN:
         case CD::CD_ASSERT_ARRAY:

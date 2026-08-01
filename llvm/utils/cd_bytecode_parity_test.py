@@ -74,7 +74,7 @@ main registers=3:
 # mode and input path
 artifact llvm/test/CodeGen/CD/cdbc-machine.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll
-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "Runtime error: for-in expects array, range, or map"
+runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"
 """
 
         self.assertEqual(
@@ -83,9 +83,9 @@ error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "Runtime error: for-in e
                 ("artifact", "llvm/test/CodeGen/CD/cdbc-machine.ll"),
                 ("behavior", "llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll"),
                 (
-                    "error",
+                    "runtime-error",
                     "llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll",
-                    "Runtime error: for-in expects array, range, or map",
+                    "for-in expects array, range, or map",
                 ),
             ],
         )

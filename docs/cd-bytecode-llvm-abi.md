@@ -1,7 +1,7 @@
 # LLVM CD value ABI
 
-Status: M4 string-constant, array-constructor, and array-access slices
-implemented, 2026-08-01.
+Status: M4 string-constant, array-constructor, array-access, and
+array-mutation slices implemented, 2026-08-01.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -266,8 +266,50 @@ runtime type/bounds failures remain VM errors and are never lowered to `nil`.
 The first LLVM access slice permits these results only as local dynamic values:
 they may be printed, used as array-constructor elements, or fed to another
 explicit access/assertion intrinsic. Ordinary pointer operations, external
-calls, function parameters/returns, PHI/select propagation, and mutation via
-`assign_index` remain outside this slice.
+calls, function parameters/returns, and PHI/select propagation remain outside
+this slice. Mutation is enabled only through the separate explicit
+`llvm.cd.assign.index` intrinsic below.
+
+### Array mutation
+
+The mutation operation is the intrinsic ID `llvm.cd.assign.index`. Its
+value/result type is overloaded so that the VM's returned assigned value keeps
+the LLVM scalar or CD-token type:
+
+```tablegen
+def int_cd_assign_index : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_double_ty, LLVMMatchType<0>]>;
+```
+
+The first operand is a CD dynamic-value collection token (or the CD nil token),
+the second is a `double` index, and the third is exactly one supported element
+capability: an integer or floating scalar, `ptr null`, or a value produced by
+an explicit `llvm.cd.*` dynamic-value intrinsic. The result has the same LLVM
+type as the assigned value. LLVM's overloaded intrinsic spelling may carry a
+type suffix; that spelling identifies the same intrinsic ID and is not a
+second ABI operation.
+
+The operation emits:
+
+```text
+rD = assign_index rCollection, rIndex, rValue
+```
+
+It mutates the existing array or map handle in place and returns the assigned
+value, matching the Rust VM. Nested CD handles retain aliasing: replacing a
+slot changes the collection, while the assigned nested handle remains shared
+according to the VM value contract. Array indexes must be finite,
+non-negative, integer-valued numbers and in range. Map keys must satisfy the
+VM's existing key capability rules; a new key consumes the VM element budget.
+Range assignment and unsupported collection/value kinds remain runtime errors.
+The LLVM target does not pre-evaluate these checks or convert failures to
+`nil`.
+
+The mutation result is local in this slice. It may be printed, used as an
+array-constructor element, or passed to another explicit access/assertion
+intrinsic. It may not cross ordinary function parameters/returns, PHI/select,
+alloca, pointer operations, or external calls. Ordinary LLVM stores and
+aggregate operations never imply `assign_index`.
 
 ## Verification contract
 
@@ -294,6 +336,13 @@ pointer substitutes in both backends, emit the existing `index`, `len`, and
 behavior parity. The positive path must cover a scalar array element, a nested
 array handle, length observation, and assertion; a separate runtime check must
 preserve the VM's bounds/type errors.
+
+The array-mutation group is complete only when the overloaded
+`llvm.cd.assign.index` intrinsic preserves scalar and CD-token result types,
+rejects ordinary pointer/value substitutes, emits `assign_index` through both
+backends, and passes Rust `dump`/`run`, mutation behavior parity, and explicit
+runtime bounds-error parity. The Rust VM's existing in-place aliasing and
+failure behavior remains authoritative.
 
 The sibling `cd-compiler` checkout already defines `string` constants in the
 `cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the

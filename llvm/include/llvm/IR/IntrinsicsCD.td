@@ -21,6 +21,9 @@ def int_cd_array : DefaultAttrsIntrinsic<
 def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
                                          [llvm_ptr_ty, llvm_double_ty]>;
 
+def int_cd_assign_index : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_double_ty, LLVMMatchType<0>]>;
+
 def int_cd_len : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty]>;
 
 def int_cd_assert_array : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty]>;

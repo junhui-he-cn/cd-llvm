@@ -13,7 +13,10 @@ artifact llvm/test/CodeGen/CD/cdbc-machine-void-return.ll
 artifact llvm/test/CodeGen/CD/cdbc-string.ll
 artifact llvm/test/CodeGen/CD/cdbc-array.ll
 artifact llvm/test/CodeGen/CD/cdbc-array-access.ll
-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "Runtime error: for-in expects array, range, or map"
+behavior llvm/test/CodeGen/CD/cdbc-array-assign.ll
+behavior llvm/test/CodeGen/CD/cdbc-array-assign-scalar.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"
+runtime-error llvm/test/CodeGen/CD/cdbc-array-assign-runtime.ll "array index out of range"
 behavior llvm/test/CodeGen/CD/cdbc-machine-arithmetic.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-compare.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll

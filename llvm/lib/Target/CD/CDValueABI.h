@@ -26,6 +26,8 @@ bool isArrayIntrinsic(const CallBase &Call);
 
 bool isIndexIntrinsic(const CallBase &Call);
 
+bool isAssignIndexIntrinsic(const CallBase &Call);
+
 bool isLenIntrinsic(const CallBase &Call);
 
 bool isAssertArrayIntrinsic(const CallBase &Call);
@@ -41,6 +43,8 @@ bool isArrayElement(const Value &Value);
 bool validateArrayCall(const CallBase &Call, std::string &Error);
 
 bool validateIndexCall(const CallBase &Call, std::string &Error);
+
+bool validateAssignIndexCall(const CallBase &Call, std::string &Error);
 
 bool validateLenCall(const CallBase &Call, std::string &Error);
 

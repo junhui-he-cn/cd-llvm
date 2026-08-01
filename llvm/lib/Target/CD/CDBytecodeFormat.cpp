@@ -204,6 +204,15 @@ static bool validateInstruction(const CDInstruction &Instruction,
         !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
       return false;
     return true;
+  case CDOpcode::AssignIndex:
+    if (!validateUnusedFields(Instruction, false, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 3, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
   case CDOpcode::Len:
   case CDOpcode::AssertArray:
   case CDOpcode::Move:
@@ -377,6 +386,10 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     OS << "index ";
     writeOperands(OS, Instruction.operands);
     break;
+  case CDOpcode::AssignIndex:
+    OS << "assign_index ";
+    writeOperands(OS, Instruction.operands);
+    break;
   case CDOpcode::Len:
     OS << "len " << registerName(Instruction.operands[0]);
     break;
@@ -488,6 +501,16 @@ CDInstruction CDInstruction::index(unsigned Destination, unsigned Collection,
   return Instruction;
 }
 
+CDInstruction CDInstruction::assignIndex(unsigned Destination,
+                                         unsigned Collection, unsigned Index,
+                                         unsigned Value) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::AssignIndex;
+  Instruction.result = Destination;
+  Instruction.operands = {Collection, Index, Value};
+  return Instruction;
+}
+
 CDInstruction CDInstruction::len(unsigned Destination, unsigned Value) {
   return unary(CDOpcode::Len, Destination, Value);
 }
@@ -583,6 +606,8 @@ const char *opcodeName(CDOpcode Opcode) {
     return "array";
   case CDOpcode::Index:
     return "index";
+  case CDOpcode::AssignIndex:
+    return "assign_index";
   case CDOpcode::Len:
     return "len";
   case CDOpcode::AssertArray:

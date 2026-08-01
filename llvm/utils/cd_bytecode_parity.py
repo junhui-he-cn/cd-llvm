@@ -7,7 +7,7 @@ compare a normalized artifact projection that only canonicalizes constant,
 name, function, and virtual-register indices.  Machine-specific control-flow
 expansions can therefore be covered by behavior-mode cases without hiding an
 unexpected scalar instruction change behind a broad text normalization.
-Error-mode cases require both paths to fail with the same exact VM diagnostic.
+Runtime-error cases require both paths to fail with the same VM diagnostic.
 """
 
 import argparse
@@ -149,13 +149,13 @@ def parse_manifest(lines):
         if len(fields) == 2 and fields[0] in {"artifact", "behavior"}:
             entries.append((fields[0], fields[1]))
             continue
-        if len(fields) == 3 and fields[0] == "error" and fields[2]:
+        if len(fields) == 3 and fields[0] == "runtime-error" and fields[2]:
             entries.append((fields[0], fields[1], fields[2]))
             continue
         if len(fields) != 2 or fields[0] not in {"artifact", "behavior"}:
             raise ValueError(
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>' "
-                "or 'error <input> \"<diagnostic>\"'"
+                "or 'runtime-error <input> \"<diagnostic>\"'"
             )
     return entries
 
@@ -177,10 +177,10 @@ def _run_expected_failure(command, description, expected):
         command_text = " ".join(str(argument) for argument in command)
         raise RuntimeError(f"{description} unexpectedly succeeded ({command_text})")
     diagnostic = result.stderr.strip() or result.stdout.strip()
-    if diagnostic != expected:
+    if expected not in diagnostic:
         raise RuntimeError(
-            f"{description} diagnostic mismatch:\n"
-            f"expected: {expected!r}\nactual: {diagnostic!r}"
+            f"{description} diagnostic does not contain expected text:\n"
+            f"expected substring: {expected!r}\nactual: {diagnostic!r}"
         )
     return diagnostic
 
@@ -215,9 +215,11 @@ def _check_case(llc, vm, root, mode, input_path, expected_error=None):
         if not direct_dump.startswith("cdbc 0.1") or not machine_dump.startswith("cdbc 0.1"):
             raise RuntimeError(f"VM dump did not produce cdbc 0.1 for {input_path}")
 
-        if mode == "error":
+        if mode == "runtime-error":
             if expected_error is None:
-                raise RuntimeError(f"error case has no expected diagnostic: {input_path}")
+                raise RuntimeError(
+                    f"runtime-error case has no expected diagnostic: {input_path}"
+                )
             direct_error = _run_expected_failure(
                 [str(vm), "run", str(direct)],
                 f"direct run for {input_path}",

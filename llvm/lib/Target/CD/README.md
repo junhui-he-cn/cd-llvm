@@ -80,7 +80,16 @@ array elements can share one ABI; `len` returns a CD number as `double`.
 `assert.array` preserves the VM's runtime type/conversion behavior. The direct
 and machine paths share validation, artifact serialization, and Rust VM output
 parity. These results remain local and cannot yet cross ordinary function,
-pointer, PHI/select, or mutation boundaries.
+pointer, or PHI/select boundaries.
+
+`llvm.cd.assign.index` is the explicit array/map mutation boundary. Its
+collection and index must be a CD dynamic-value token and `double`; its value
+and result use the same scalar-or-CD-token overload capability. It lowers to
+the existing `assign_index` instruction, mutates the VM handle in place, and
+returns the assigned value. Ordinary pointers, aggregates, and LLVM stores do
+not imply mutation, and the result remains local in this slice. Direct and
+machine lowering share the validator and the Rust VM runtime-error/parity
+gate.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.

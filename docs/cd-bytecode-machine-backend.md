@@ -1,8 +1,8 @@
 # CD bytecode machine-backend design gate
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
-array-constructor, and array-access slices share the machine artifact bridge,
-2026-08-01.
+array-constructor, array-access, and array-mutation slices share the machine
+artifact bridge, 2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -69,6 +69,13 @@ validating that every opaque pointer operand came from an explicit CD
 intrinsic. Scalar index constants are materialized before `CD_INDEX`, so the
 machine path preserves the direct path's definition-before-use ordering.
 
+The array-mutation slice adds `CD_ASSIGN_INDEX`. Its collection, index, and
+assigned-value operands remain CD virtual values; the direct and machine
+lowerers share the overloaded intrinsic validator, and the bridge emits the
+existing `assign_index` operation. Scalar and pointer overloads both return
+the assigned value's register type. No ordinary pointer or LLVM store is
+treated as a mutation operation.
+
 ## Direct/machine parity gate
 
 Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
@@ -86,7 +93,9 @@ Every entry must produce two artifacts from the same LLVM IR, pass Rust
 compare the generated text after canonicalizing only constant, name, function,
 and virtual-register indices.  `behavior` entries cover machine-specific
 control-flow/select expansion and require the same dump/run behavior without
-discarding those instruction-shape differences.
+discarding those instruction-shape differences. `runtime-error` entries
+require both artifacts to pass `dump`, both `run` commands to fail, and both
+diagnostics to contain the declared expected substring and match each other.
 
 ## TableGen pseudo-instruction mapping
 
@@ -100,6 +109,7 @@ the only scalar/control-flow operations that currently have stable
 | `CD_MAKE_FUNCTION` | `MakeFunction` | destination value, module function index |
 | `CD_ARRAY` | `Array` | destination value, variadic element values |
 | `CD_INDEX` | `Index` | destination value, collection value, index value |
+| `CD_ASSIGN_INDEX` | `AssignIndex` | destination value, collection value, index value, assigned value |
 | `CD_LEN` | `Len` | destination value, collection value |
 | `CD_ASSERT_ARRAY` | `AssertArray` | destination value, value |
 | `CD_MOVE` | `Move` | destination value, source value |
@@ -141,6 +151,7 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The next stage is the M4 array-mutation ABI. It must retain the direct path,
-keep the machine path opt-in, and define `assign_index` before any map,
-aggregate, or ordinary-pointer lowering is added.
+The current M4 array-mutation slice retains the direct path, keeps the machine
+path opt-in, and defines `assign_index` before any map, aggregate, or
+ordinary-pointer lowering. The next collection work must define map
+construction and its capability matrix separately.

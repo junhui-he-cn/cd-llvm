@@ -38,6 +38,12 @@ bool isIndexIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_index;
 }
 
+bool isAssignIndexIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_assign_index;
+}
+
 bool isLenIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
@@ -56,7 +62,10 @@ bool isCDValue(const Value &Value) {
 
   const auto *Call = dyn_cast<CallBase>(&Value);
   return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
-                  isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call));
+                  isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
+                  (isAssignIndexIntrinsic(*Call) &&
+                   Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0));
 }
 
 bool isArrayElement(const Value &Value) {
@@ -138,6 +147,44 @@ bool validateIndexCall(const CallBase &Call, std::string &Error) {
     return false;
   if (!Call.getArgOperand(1)->getType()->isDoubleTy()) {
     Error = "llvm.cd.index requires a double index";
+    return false;
+  }
+  return true;
+}
+
+bool validateAssignIndexCall(const CallBase &Call, std::string &Error) {
+  if (!isAssignIndexIntrinsic(Call)) {
+    Error = "not an llvm.cd.assign.index call";
+    return false;
+  }
+
+  if (Call.arg_size() != 3) {
+    Error = "llvm.cd.assign.index requires a collection, index, and "
+            "value operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.assign.index", "collection",
+                              Error))
+    return false;
+  if (!Call.getArgOperand(1)->getType()->isDoubleTy()) {
+    Error = "llvm.cd.assign.index requires a double index";
+    return false;
+  }
+
+  const Value *Assigned = Call.getArgOperand(2);
+  if (!isArrayElement(*Assigned)) {
+    Error = "llvm.cd.assign.index requires a scalar, nil, or CD "
+            "dynamic-value assigned value";
+    return false;
+  }
+  if (Call.getType() != Assigned->getType()) {
+    Error = "llvm.cd.assign.index result type must match the assigned value type";
+    return false;
+  }
+  if (!Call.getType()->isIntegerTy() && !Call.getType()->isFloatingPointTy() &&
+      !isCDValue(Call)) {
+    Error = "llvm.cd.assign.index requires a scalar or address-space-zero "
+            "CD value result";
     return false;
   }
   return true;

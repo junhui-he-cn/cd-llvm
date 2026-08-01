@@ -335,6 +335,17 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isAssignIndexIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssignIndexCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::assignIndex(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          valueRegister(Call.getArgOperand(1)),
+          valueRegister(Call.getArgOperand(2))));
+      return;
+    }
+
     if (cd::isLenIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateLenCall(Call, Error))

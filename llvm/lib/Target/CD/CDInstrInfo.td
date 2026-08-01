@@ -33,6 +33,11 @@ def CD_ARRAY : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 def CD_INDEX : CDPseudo<(outs CDValue:$dst),
                         (ins CDValue:$collection, CDValue:$index)>;
 
+// CD_ASSIGN_INDEX -> CDOpcode::AssignIndex.
+def CD_ASSIGN_INDEX : CDPseudo<(outs CDValue:$dst),
+                               (ins CDValue:$collection, CDValue:$index,
+                                     CDValue:$value)>;
+
 // CD_LEN -> CDOpcode::Len.
 def CD_LEN : CDPseudo<(outs CDValue:$dst), (ins CDValue:$value)>;
 
