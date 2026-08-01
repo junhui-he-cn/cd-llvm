@@ -17,11 +17,13 @@ The initial lowering supports scalar integer and floating-point constants,
 arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca`
 storage with `load`/`store`, direct calls to defined functions, conditional and
 unconditional branches, PHI edge stores, returns, and declarations named
-`cd_print` or `print` with one argument.  `fneg` lowers to `negate`.  The only
-supported `xor` form is boolean inversion: an `i1` value XORed with the literal
-`true` (in either operand order) lowers to `not`; other XOR operations remain
-unsupported.  Unsupported LLVM instructions fail with a CD-target diagnostic
-rather than producing an invalid artifact.
+`cd_print` or `print` with one argument.  `fneg` lowers to `negate`.  A scalar
+`select` lowers to a small conditional control-flow sequence using
+`jump_if_false`, `move`, and `jump`.  The only supported `xor` form is boolean
+inversion: an `i1` value XORed with the literal `true` (in either operand order)
+lowers to `not`; other XOR operations remain unsupported.  Unsupported LLVM
+instructions fail with a CD-target diagnostic rather than producing an invalid
+artifact.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
@@ -39,6 +41,12 @@ The target does not reinterpret unsigned integer division or unsigned ordering
 predicates as floating-point `number` operations: `udiv` and unsigned `icmp`
 ordering predicates are rejected. Integer equality and inequality remain
 supported because they do not select a signed or unsigned ordering.
+
+`cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
+also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
+The optimized artifact exercises alloca promotion, constant folding, dead-code
+elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
+must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
 output.  `-filetype=obj` is rejected.  Arrays, maps, structs, variants,

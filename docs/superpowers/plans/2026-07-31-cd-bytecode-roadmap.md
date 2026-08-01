@@ -155,9 +155,10 @@ Freeze the scalar policy before adding opcodes:
 
 - [x] Add the first unary operations with direct `cdbc 0.1` equivalents: `fneg` to `negate`, and `xor i1 <value>, true` (in either operand order) to `not`; reject other XOR shapes.
 - [x] Add loop, multiple-predecessor PHI, critical-edge, and recursive-call fixtures.
-- [ ] Run the same fixtures with `-O0` and `-O2`; verify that mem2reg, constant folding, dead-code elimination, and block reordering do not change observable CD behavior.
+- [x] Lower scalar `select` to conditional bytecode control flow so normal LLVM optimization can form selects without changing the CD value model.
+- [x] Run direct `llc` emission at `-O0` and `-O2`, then run an explicit LLVM `default<O2>` middle-end pipeline; verify that mem2reg, constant folding, dead-code elimination, and CFG reshaping do not change observable CD behavior.
 - [x] Add FileCheck failure fixtures for unsigned division and unsigned integer ordering, whose LLVM semantics cannot be represented by the current CD number policy.
-- [ ] Run positive artifacts through Rust `dump` and `run`, comparing output with a hand-written expected result.
+- [x] Run positive artifacts through Rust `dump` and `run`, comparing output with a hand-written expected result.
 
 Current M2 progress (2026-08-01): `cdbc-fneg.ll` covers `fneg` to `negate`,
 `cdbc-not.ll` covers the restricted boolean inversion form, and
@@ -165,8 +166,11 @@ Current M2 progress (2026-08-01): `cdbc-fneg.ll` covers `fneg` to `negate`,
 edge, and recursive calls.  The unary and control-flow artifacts are accepted
 by Rust `dump`; their `-O0`/`-O2` Rust `run` outputs match (`-2.5`, `true`, and
 `10`, `1`, `2`, `120` respectively).  The broader optimization and unsupported
-semantic-boundary fixtures now reject `udiv` and unsigned ordering predicates;
-the broader optimization fixture remains open.
+semantic-boundary fixtures now reject `udiv` and unsigned ordering predicates.
+`cdbc-optimization.ll` covers alloca promotion, constant folding, dead-code
+elimination, scalar-select lowering, and direct `llc -O0`/`-O2` emission plus
+an explicit `default<O2>` pipeline; both optimized and unoptimized artifacts
+are accepted by Rust `dump` and produce `42` and `7`.
 
 **Exit criteria:** The documented scalar subset passes at `-O0` and `-O2`, loop/PHI/call behavior is covered, and every unsupported semantic boundary has a stable diagnostic test.
 

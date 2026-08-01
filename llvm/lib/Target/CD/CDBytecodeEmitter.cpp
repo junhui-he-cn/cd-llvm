@@ -234,6 +234,33 @@ class CDFunctionEmitter {
         CDOpcode::Not, resultRegister(I), valueRegister(Input)));
   }
 
+  void emitSelect(const Instruction &I) {
+    const auto *Select = cast<SelectInst>(&I);
+    if (!Select->getCondition()->getType()->isIntegerTy(1) ||
+        !isScalarType(Select->getType()) ||
+        !isSupportedOperand(Select->getTrueValue()) ||
+        !isSupportedOperand(Select->getFalseValue()))
+      unsupportedInstruction(I);
+
+    const unsigned Condition = valueRegister(Select->getCondition());
+    const unsigned Destination = resultRegister(I);
+    const size_t ConditionalLine = Instructions.size();
+    appendInstruction(
+        CDInstruction::jumpIfFalse(Condition, cd::InvalidIndex));
+    appendInstruction(CDInstruction::move(
+        Destination, valueRegister(Select->getTrueValue())));
+
+    const size_t JoinJumpLine = Instructions.size();
+    appendInstruction(CDInstruction::jump(cd::InvalidIndex));
+
+    const unsigned FalseOffset = Instructions.size();
+    Instructions[ConditionalLine].target = FalseOffset;
+    appendInstruction(CDInstruction::move(
+        Destination, valueRegister(Select->getFalseValue())));
+
+    Instructions[JoinJumpLine].target = Instructions.size();
+  }
+
   unsigned allocaName(const Value *Pointer) const {
     const auto *AI = dyn_cast<AllocaInst>(Pointer);
     if (!AI)
@@ -535,6 +562,9 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
     return;
   case Instruction::Xor:
     emitNot(I);
+    return;
+  case Instruction::Select:
+    emitSelect(I);
     return;
   case Instruction::SDiv:
   case Instruction::FDiv:

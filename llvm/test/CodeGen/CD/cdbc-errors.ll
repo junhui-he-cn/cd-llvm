@@ -2,8 +2,15 @@
 
 define i32 @main() {
 entry:
-  %value = select i1 true, i32 1, i32 0
-  ret i32 %value
+  switch i32 0, label %default [
+    i32 1, label %one
+  ]
+
+one:
+  ret i32 1
+
+default:
+  ret i32 0
 }
 
-; CHECK: CD target does not support LLVM instruction: select
+; CHECK: CD target does not support LLVM instruction: switch
