@@ -211,12 +211,12 @@ Expected: `9/9` CD unit tests and `12/12` CD lit tests pass; the lit run is
 single-process because the repository's lit timing file must not be written by
 concurrent runners.
 
-- [ ] **Step 2: Inspect the staged scope.**
+- [x] **Step 2: Inspect the staged scope.**
 
 Stage only the design document, five TableGen files, the two CD build/MC files,
 and the roadmap. Do not stage the nested `cd-compiler/` checkout.
 
-- [ ] **Step 3: Commit the foundation.**
+- [x] **Step 3: Commit the foundation.**
 
 ```bash
 git add docs/cd-bytecode-machine-backend.md \
