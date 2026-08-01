@@ -11,6 +11,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Format.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cmath>
@@ -316,6 +317,11 @@ static bool validateConstants(const CDArtifact &Artifact, std::string &Error) {
                              " is not a finite number");
       break;
     }
+    case CDConstant::String:
+      if (!json::isUTF8(Constant.text))
+        return fail(Error, Twine("constant c") + Twine(Index) +
+                             " is not valid UTF-8");
+      break;
     default:
       return fail(Error, Twine("constant c") + Twine(Index) +
                            " has an unknown kind");
@@ -408,6 +414,10 @@ CDConstant CDConstant::number(double Value) {
 
 CDConstant CDConstant::boolean(bool Value) {
   return {CDConstant::Bool, Value ? "true" : "false"};
+}
+
+CDConstant CDConstant::string(StringRef Value) {
+  return {CDConstant::String, Value.str()};
 }
 
 CDInstruction CDInstruction::constant(unsigned Destination, unsigned Constant) {
@@ -601,6 +611,10 @@ void serializeArtifact(const CDArtifact &Artifact, raw_ostream &OS) {
     }
     case CDConstant::Bool:
       OS << "bool " << Artifact.constants[Index].text;
+      break;
+    case CDConstant::String:
+      OS << "string ";
+      writeQuoted(OS, Artifact.constants[Index].text);
       break;
     }
     OS << '\n';

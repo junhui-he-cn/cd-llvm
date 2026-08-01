@@ -12,6 +12,7 @@ add_llvm_target(CDCodeGen
   CDBytecodeFormat.cpp
   CDBytecodeEmitter.cpp
   CDMachineBytecodeEmitter.cpp
+  CDValueABI.cpp
   CDInstrInfo.cpp
   CDRegisterInfo.cpp
   CDISelLowering.cpp

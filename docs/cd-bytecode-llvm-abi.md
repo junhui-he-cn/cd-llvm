@@ -1,6 +1,6 @@
 # LLVM CD value ABI
 
-Status: M4 design gate for the first string-constant slice, 2026-08-01.
+Status: M4 string-constant slice implemented, 2026-08-01.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -64,10 +64,12 @@ operation and remains an ordinary unsupported declaration.
 
 ### Accepted source shape
 
-The operand of `llvm.cd.string` must be a direct pointer to a private,
-constant, address-space-zero `GlobalVariable` with a `ConstantDataArray` of
-8-bit elements.  The array must end in exactly one zero byte.  The emitted CD
-string is every byte before that terminator.
+The operand of `llvm.cd.string` must be a direct pointer to a private-linkage,
+constant, address-space-zero `GlobalVariable` with an array of 8-bit
+elements.  The array must end in exactly one zero byte.  LLVM canonicalizes a
+one-byte all-zero initializer to `zeroinitializer`; that representation is
+accepted for the empty string.  The emitted CD string is every byte before
+that terminator.
 
 For example:
 
@@ -115,19 +117,16 @@ validation and `run` output.  No new wire opcode is introduced for this group.
 
 ### Allowed consumers in the first slice
 
-The resulting CD string token may be:
+The resulting CD string token may currently be:
 
 - passed to `cd_print` or `print` when the declaration has one `ptr` argument
   and returns `void`;
-- returned from a function whose return type is the same CD `ptr` token, when
-  the function body and call are handled by the explicit CD path;
-- passed through a `select` only after both arms are CD string tokens.
 
 Ordinary scalar operations, pointer comparisons, loads/stores, ordinary calls,
 and native calls do not accept this token in the first slice.  Function
-parameters carrying CD strings are deferred until the function-value ABI is
-specified; the first implementation may restrict string tokens to local
-materialization and print/return fixtures.
+returns, PHI/select propagation, and parameters carrying CD strings are
+deferred until the function-value ABI is specified; the implementation
+restricts string tokens to local materialization and printing.
 
 ## Future ABI groups
 

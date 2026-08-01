@@ -262,6 +262,17 @@ Implement in this order:
 - [ ] Update the C++ and Rust artifact validators before enabling execution.
 - [ ] Run `llc -> dump -> run` for each group and compare with equivalent `.cd` programs emitted by the existing C++ compiler where the language feature has an equivalent.
 
+Current M4 progress (2026-08-01): the first string group is implemented. The
+`llvm.cd.string` intrinsic accepts private-linkage immutable byte globals,
+including LLVM's canonical one-byte zero initializer for the empty string; it
+validates the terminator, embedded-zero, and UTF-8 rules and lowers the payload
+through the existing `constant` instruction. Direct and TableGen machine paths
+share the helper and artifact model. Positive ASCII, UTF-8, escaping,
+deduplication, and empty-string coverage, plus direct/machine malformed-input
+parity, are present. String tokens are intentionally limited to local
+materialization and `print` in this slice; function returns, PHI/`select`
+propagation, and parameters remain a later ABI sub-slice.
+
 **Exit criteria:** Every newly emitted opcode is documented, parsed, verified, and executed by the Rust VM; collection mutation and failure behavior are covered; ordinary LLVM aggregates remain rejected unless they use the defined CD ABI.
 
 ## 9. M5 — Add source-backed debug metadata
@@ -331,12 +342,14 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Implement the documented `llvm.cd.string` intrinsic and its malformed-input
-   tests.
-2. Run direct/machine `dump`/`run` parity for ASCII, UTF-8, escaping,
-   deduplication, and empty-string fixtures.
-3. Keep both direct and machine paths behind the explicit ABI and parity gates;
-   do not begin collection lowering until its ownership contract is recorded.
+1. Record the collection ABI gate: constructor operand capabilities,
+   ownership/aliasing, mutation failure behavior, and the `cdbc 0.1` array/map
+   operation bridge.
+2. Keep ordinary LLVM aggregates and pointers rejected while the collection
+   gate is being reviewed; do not infer an array or map from `alloca`, globals,
+   or aggregate instructions.
+3. Implement only the first explicit collection intrinsic after the gate has
+   positive, malformed, Rust `dump`/`run`, and direct/machine parity tests.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 

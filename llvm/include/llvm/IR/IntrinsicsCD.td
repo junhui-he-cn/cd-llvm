@@ -1,0 +1,13 @@
+//===- IntrinsicsCD.td - CD target intrinsics ----------------*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM
+// Exceptions.  See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+// A CD string is an opaque target value carried in an LLVM ptr token.  The CD
+// target consumes the pointed-to constant initializer while lowering; it is
+// not a native memory read.
+def int_cd_string : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty],
+                                          [IntrNoMem]>;

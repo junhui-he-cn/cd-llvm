@@ -75,6 +75,13 @@ TEST(CDBytecodeFormatTest, RejectsNonFiniteNumberConstant) {
   expectValidationError(Artifact, "finite number");
 }
 
+TEST(CDBytecodeFormatTest, RejectsInvalidStringConstant) {
+  CDArtifact Artifact = minimalArtifact();
+  Artifact.constants.push_back(CDConstant::string(std::string("\xff", 1)));
+
+  expectValidationError(Artifact, "valid UTF-8");
+}
+
 TEST(CDBytecodeFormatTest, RejectsUnexpectedInstructionFields) {
   CDArtifact Artifact = minimalArtifact();
   CDInstruction Return = CDInstruction::returnValue(/*Value=*/0);
@@ -131,7 +138,8 @@ TEST(CDBytecodeFormatTest, SerializesCanonicalSectionsAndEscapes) {
   CDConstant Number;
   Number.kind = CDConstant::Number;
   Number.text = "1.0";
-  Artifact.constants = {Number, CDConstant::boolean(true)};
+  Artifact.constants = {Number, CDConstant::boolean(true),
+                        CDConstant::string("hello\n\"")};
   Artifact.names = {"a\n\""};
   Artifact.main.instructions = {
       CDInstruction::constant(/*Destination=*/0, /*Constant=*/0),
@@ -148,7 +156,8 @@ TEST(CDBytecodeFormatTest, SerializesCanonicalSectionsAndEscapes) {
             "cdbc 0.1\n\n"
             "constants:\n"
             "  c0 = number 1\n"
-            "  c1 = bool true\n\n"
+            "  c1 = bool true\n"
+            "  c2 = string \"hello\\n\\\"\"\n\n"
             "names:\n"
             "  n0 = \"a\\n\\\"\"\n\n"
             "main registers=1:\n"

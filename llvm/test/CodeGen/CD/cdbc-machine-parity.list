@@ -10,6 +10,7 @@ artifact llvm/test/CodeGen/CD/cdbc-machine-storage.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-unary.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-void-call.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-void-return.ll
+artifact llvm/test/CodeGen/CD/cdbc-string.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-arithmetic.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-compare.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll

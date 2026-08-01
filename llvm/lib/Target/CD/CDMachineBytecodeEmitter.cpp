@@ -9,6 +9,7 @@
 #include "CDMachineBytecodeEmitter.h"
 #include "CDBytecodeFormat.h"
 #include "CDInstrInfo.h"
+#include "CDValueABI.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
@@ -26,6 +27,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cmath>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
@@ -44,8 +46,17 @@ static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
 }
 
+static bool isCDStringValue(const Value *Value) {
+  const auto *Call = dyn_cast<CallBase>(Value);
+  return Call && cd::isStringIntrinsic(*Call);
+}
+
 static bool isSupportedValue(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
+}
+
+static bool isSupportedPrintValue(const Value *Value) {
+  return isSupportedValue(Value) || isCDStringValue(Value);
 }
 
 [[noreturn]] static void unsupported(StringRef Message) {
@@ -116,6 +127,18 @@ class CDMachineModuleEmitter {
 
     const unsigned Index = Artifact.constants.size();
     Artifact.constants.push_back(std::move(Value));
+    ConstantIndexes[Key] = Index;
+    return Index;
+  }
+
+  unsigned addString(StringRef Value) {
+    const std::string Key = "string:" + Value.str();
+    auto It = ConstantIndexes.find(Key);
+    if (It != ConstantIndexes.end())
+      return It->second;
+
+    const unsigned Index = Artifact.constants.size();
+    Artifact.constants.push_back(CDConstant::string(Value));
     ConstantIndexes[Key] = Index;
     return Index;
   }
@@ -213,7 +236,8 @@ class CDMachineModuleEmitter {
         if (isa<DbgInfoIntrinsic>(&Instruction) ||
             isa<AllocaInst>(&Instruction) || Instruction.getType()->isVoidTy())
           continue;
-        if (!isScalarType(Instruction.getType()))
+        if (!isScalarType(Instruction.getType()) &&
+            !isCDStringValue(&Instruction))
           unsupported("a non-scalar instruction result");
         createValueRegister(MRI, &Instruction);
       }
@@ -305,10 +329,21 @@ class CDMachineModuleEmitter {
   void lowerCall(const CallInst &Call, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     Function *Callee = Call.getCalledFunction();
+    if (Callee && cd::isStringIntrinsic(Call)) {
+      std::string Error;
+      std::optional<StringRef> Value = cd::getStringConstant(Call, Error);
+      if (!Value)
+        unsupported(Error);
+      Register Result = createValueRegister(MRI, &Call);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
+          .addImm(addString(*Value));
+      return;
+    }
+
     if (Callee && Callee->isDeclaration() &&
         (Callee->getName() == "cd_print" || Callee->getName() == "print") &&
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
-      if (!isSupportedValue(Call.getArgOperand(0)))
+      if (!isSupportedPrintValue(Call.getArgOperand(0)))
         unsupported("a non-scalar print argument");
       Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
       BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_PRINT))
@@ -908,6 +943,22 @@ public:
     Function *Main = M.getFunction("main");
     if (!Main || Main->isDeclaration())
       unsupported("a module without a defined @main entry function");
+
+    for (const GlobalVariable &Global : M.globals()) {
+      if (Global.isDeclaration())
+        continue;
+      if (Global.use_empty())
+        unsupported("unused global variables");
+      for (const User *User : Global.users()) {
+        const auto *Call = dyn_cast<CallBase>(User);
+        if (!Call || !cd::isStringIntrinsic(*Call) ||
+            Call->getArgOperand(0) != &Global)
+          unsupported("globals used outside llvm.cd.string");
+        std::string Error;
+        if (!cd::getStringConstant(*Call, Error))
+          unsupported(Error);
+      }
+    }
 
     FunctionIndexes.clear();
     unsigned FunctionIndex = 0;

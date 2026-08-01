@@ -52,6 +52,15 @@ predicates as floating-point `number` operations: `udiv` and unsigned `icmp`
 ordering predicates are rejected. Integer equality and inequality remain
 supported because they do not select a signed or unsigned ordering.
 
+The first M4 value-ABI operation is `llvm.cd.string(ptr)`. It accepts only a
+private-linkage, constant, address-space-zero byte global with exactly one
+trailing NUL and valid UTF-8 before that terminator; LLVM's canonical
+one-byte-zero initializer represents the empty string. The result is lowered
+to a deduplicated `string` constant and may currently be passed only to a
+one-argument `cd_print` or `print` declaration. Ordinary pointer operations,
+comparisons, storage, function parameters/returns, and non-string globals
+remain rejected.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -60,5 +69,5 @@ must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
 output.  `-filetype=obj` is rejected.  Arrays, maps, structs, variants,
-general globals, native calls, and debug source sections remain deferred until
-an explicit LLVM-to-CD representation is defined.
+non-string globals, native calls, and debug source sections remain deferred
+until an explicit LLVM-to-CD representation is defined.

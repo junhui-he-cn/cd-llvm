@@ -3206,6 +3206,7 @@ def int_protected_field_ptr :
 // Target-specific intrinsics
 //===----------------------------------------------------------------------===//
 
+include "llvm/IR/IntrinsicsCD.td"
 include "llvm/IR/IntrinsicsPowerPC.td"
 include "llvm/IR/IntrinsicsX86.td"
 include "llvm/IR/IntrinsicsARM.td"

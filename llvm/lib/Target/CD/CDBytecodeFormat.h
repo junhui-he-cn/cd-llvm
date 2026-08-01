@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "llvm/ADT/StringRef.h"
+
 namespace llvm {
 class raw_ostream;
 
@@ -21,7 +23,7 @@ namespace cd {
 inline constexpr unsigned InvalidIndex = std::numeric_limits<unsigned>::max();
 
 struct CDConstant {
-  enum Kind { Nil, Number, Bool };
+  enum Kind { Nil, Number, Bool, String };
 
   Kind kind = Nil;
   std::string text;
@@ -29,6 +31,7 @@ struct CDConstant {
   static CDConstant nil();
   static CDConstant number(double value);
   static CDConstant boolean(bool value);
+  static CDConstant string(StringRef value);
 };
 
 enum class CDOpcode {

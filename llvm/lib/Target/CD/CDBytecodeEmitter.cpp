@@ -8,6 +8,7 @@
 
 #include "CDBytecodeEmitter.h"
 #include "CDBytecodeFormat.h"
+#include "CDValueABI.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
@@ -42,8 +43,17 @@ static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
 }
 
+static bool isCDStringValue(const Value *Value) {
+  const auto *Call = dyn_cast<CallBase>(Value);
+  return Call && cd::isStringIntrinsic(*Call);
+}
+
 static bool isSupportedOperand(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
+}
+
+static bool isSupportedPrintValue(const Value *Value) {
+  return isSupportedOperand(Value) || isCDStringValue(Value);
 }
 
 [[noreturn]] static void unsupportedInstruction(const Instruction &I) {
@@ -294,9 +304,21 @@ class CDFunctionEmitter {
     if (!Callee)
       unsupportedInstruction(Call);
 
+    if (cd::isStringIntrinsic(Call)) {
+      std::string Error;
+      std::optional<StringRef> Value = cd::getStringConstant(Call, Error);
+      if (!Value)
+        unsupportedOperation(Error);
+      const unsigned Constant =
+          Module.addConstant(CDConstant::String, *Value);
+      appendInstruction(
+          CDInstruction::constant(resultRegister(Call), Constant));
+      return;
+    }
+
     if (Callee->isDeclaration() && Callee->getName() == "cd_print" &&
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
-      if (!isSupportedOperand(Call.getArgOperand(0)))
+      if (!isSupportedPrintValue(Call.getArgOperand(0)))
         unsupportedInstruction(Call);
       appendInstruction(CDInstruction::print(
           valueRegister(Call.getArgOperand(0))));
@@ -305,7 +327,7 @@ class CDFunctionEmitter {
 
     if (Callee->isDeclaration() && Callee->getName() == "print" &&
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
-      if (!isSupportedOperand(Call.getArgOperand(0)))
+      if (!isSupportedPrintValue(Call.getArgOperand(0)))
         unsupportedInstruction(Call);
       appendInstruction(CDInstruction::print(
           valueRegister(Call.getArgOperand(0))));
@@ -387,9 +409,22 @@ void CDModuleEmitter::emit(Module &M) {
   if (Main->arg_size() != 0)
     report_fatal_error("CD target @main must not have parameters");
 
-  for (const GlobalVariable &Global : M.globals())
-    if (!Global.isDeclaration())
-      report_fatal_error("CD target does not support global variables");
+  for (const GlobalVariable &Global : M.globals()) {
+    if (Global.isDeclaration())
+      continue;
+    if (Global.use_empty())
+      report_fatal_error("CD target does not support unused global variables");
+    for (const User *User : Global.users()) {
+      const auto *Call = dyn_cast<CallBase>(User);
+      if (!Call || !cd::isStringIntrinsic(*Call) ||
+          Call->getArgOperand(0) != &Global)
+        report_fatal_error(
+            "CD target only supports globals used by llvm.cd.string");
+      std::string Error;
+      if (!cd::getStringConstant(*Call, Error))
+        unsupportedOperation(Error);
+    }
+  }
 
   unsigned FunctionIndex = 0;
   for (Function &F : M)
@@ -478,7 +513,7 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
       }
 
       if (!I.getType()->isVoidTy()) {
-        if (!isScalarType(I.getType()))
+        if (!isScalarType(I.getType()) && !isCDStringValue(&I))
           unsupportedInstruction(I);
         ValueRegisters[&I] = allocateRegister();
       }
