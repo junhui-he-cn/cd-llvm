@@ -1,6 +1,6 @@
 # CD bytecode machine-backend design gate
 
-Status: M3 implementation in progress, 2026-08-01.
+Status: M3 complete for the supported scalar/control-flow subset, 2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -15,7 +15,7 @@ remains intentionally incomplete.
   default.
 - The machine path is opt-in and may emit only CD pseudo-instructions with a
   stable `cdbc 0.1` mapping.  Lowering pseudos such as `CD_SELECT` expand only
-  to a documented sequence of existing artifact instructions. TableGen describes instruction shape,
+  to a documented sequence of existing artifact instructions.  TableGen describes instruction shape,
   register classes, calling-convention metadata, and subtarget identity; it
   does not own the `.cdbc 0.1` wire spelling.
 - `CDValue` registers are VM register identities, not native CPU registers.
@@ -45,7 +45,7 @@ and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `move`, `fneg`, boolean inversion as `not`, `nil`/`ret void` returns,
 `cd_print`/`print`, defined-function calls, scalar function parameters,
 single-slot scalar storage through `load_var` and `store_var`, conditional and
-unconditional branches, scalar PHI values, and scalar `select`. Conditional PHI edges use
+unconditional branches, scalar PHI values, and scalar `select`.  Conditional PHI edges use
 synthetic machine edge blocks so each predecessor edge stores the correct
 incoming value before jumping to the successor; symbolic machine block
 targets are patched to artifact instruction offsets before validation.
@@ -53,7 +53,28 @@ targets are patched to artifact instruction offsets before validation.
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
 register definition in one edge block to leak into an unrelated edge.
-Aggregate values and a reproducible direct/machine parity gate remain pending.
+Aggregate values remain pending.  The reproducible parity gate is implemented
+by `llvm/utils/cd_bytecode_parity.py` and the corpus manifest at
+`llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+
+## Direct/machine parity gate
+
+Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
+
+```sh
+cargo build --manifest-path cd-compiler/vm-rs/Cargo.toml --quiet
+python3 llvm/utils/cd_bytecode_parity.py \
+  --llc build-cd/bin/llc \
+  --vm cd-compiler/vm-rs/target/debug/compiler-design-vm \
+  --manifest llvm/test/CodeGen/CD/cdbc-machine-parity.list
+```
+
+Every entry must produce two artifacts from the same LLVM IR, pass Rust
+`dump`, and produce identical Rust VM output.  `artifact` entries additionally
+compare the generated text after canonicalizing only constant, name, function,
+and virtual-register indices.  `behavior` entries cover machine-specific
+control-flow/select expansion and require the same dump/run behavior without
+discarding those instruction-shape differences.
 
 ## TableGen pseudo-instruction mapping
 
@@ -105,6 +126,6 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The next M3 implementation slice should compare direct and machine artifacts
-through Rust `dump`/`run` across the complete shared scalar fixture set. It must
-retain the direct path and keep the machine path opt-in.
+The next stage is the M4 CD value ABI design.  It must retain the direct path,
+keep the machine path opt-in, and define target-specific operations before any
+aggregate or pointer lowering is added.

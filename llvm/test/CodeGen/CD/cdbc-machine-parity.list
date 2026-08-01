@@ -1,0 +1,17 @@
+# Artifact mode compares the cdbc text after canonicalizing only table and
+# virtual-register indices. Behavior mode still requires dump and run parity,
+# while allowing a documented machine-specific lowering shape.
+artifact llvm/test/CodeGen/CD/cdbc-machine.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-call.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-cast.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-nil-return.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-parameters.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-storage.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-unary.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-void-call.ll
+artifact llvm/test/CodeGen/CD/cdbc-machine-void-return.ll
+behavior llvm/test/CodeGen/CD/cdbc-machine-arithmetic.ll
+behavior llvm/test/CodeGen/CD/cdbc-machine-compare.ll
+behavior llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll
+behavior llvm/test/CodeGen/CD/cdbc-machine-not.ll
+behavior llvm/test/CodeGen/CD/cdbc-machine-select.ll

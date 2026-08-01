@@ -49,7 +49,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M0 | Reproducible build, lit tests, Rust `dump`, and explicit object rejection for the existing target | — | Complete; verified in the current checkout |
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
-| M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | In progress; direct/machine parity gate remains |
+| M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Planned; design gate first |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
@@ -198,13 +198,15 @@ The direct `ModulePass` path remains the default compatibility path. The new mac
 - Modify: `llvm/lib/Target/CD/MCTargetDesc/CDMCTargetDesc.cpp` to use generated instruction/register/subtarget descriptions.
 - Create: `llvm/test/CodeGen/CD/cdbc-machine.ll`.
 - Create: `llvm/test/CodeGen/CD/Machine/*.mir`.
+- Create: `llvm/utils/cd_bytecode_parity.py` and its unit test.
+- Create: `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
 
 - [x] Record the CD virtual-value register, module-table ownership, call/branch, and artifact-bridge decisions before creating generated instruction files.
 - [x] Add `CDCommonTableGen` and generated `CDGenInstrInfo.inc`, `CDGenRegisterInfo.inc`, and `CDGenSubtargetInfo.inc` dependencies in CMake.
 - [x] Define only the machine operations that have a stable `cdbc 0.1` mapping; do not use TableGen to hide unsupported arrays, maps, globals, or native calls.
 - [x] Lower the existing scalar/control-flow subset to `MachineInstr` and serialize it through the typed artifact model from M1.
 - [x] Add MIR tests for virtual-value registers, calls, branches, PHI lowering, function boundaries, and constant/name table ownership.
-- [ ] Produce direct and machine-path artifacts from the same LLVM IR, normalize only permitted table/index differences, and require identical VM behavior.
+- [x] Produce direct and machine-path artifacts from the same LLVM IR, normalize only permitted table/index differences, and require identical VM behavior.
 - [x] Keep `-filetype=obj` rejected and keep the machine path text-only until an object format is deliberately designed.
 
 Current M3 progress (2026-08-01): the opt-in machine path bridges the
@@ -219,7 +221,10 @@ and symbolic machine block targets are patched to artifact instruction
 offsets.  The new `cdbc-machine-control-flow.ll` fixture covers loop PHIs,
 multiple predecessors, critical edges, repeated constants across edges, and
 Rust VM output; the MIR fixture covers virtual-value registers and branch
-operands.  Direct/machine VM parity remains the final M3 gate.
+operands.  The parity manifest now validates every supported machine fixture:
+artifact-mode cases compare only canonicalized table/register indices, while
+the machine-specific control-flow and `select` expansions use behavior-mode
+checks.  Every case passes Rust `dump` and direct/machine `run` output parity.
 
 **Exit criteria:** LLVM TableGen generates usable CD instruction/register/subtarget descriptions; `llc` can select the machine path explicitly; MIR and FileCheck tests pass; Rust `dump` accepts the result; and direct and machine paths agree on `cdbc 0.1` execution for the supported subset.
 
@@ -321,12 +326,11 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Finish M3 direct/machine artifact and Rust VM parity checks across the
-   supported scalar/control-flow fixture set.
-2. Re-run the M3 gates and record the normalized artifact comparison before
-   considering the machine backend ready for the next ABI design stage.
-3. Write and review `docs/cd-bytecode-llvm-abi.md` before implementing any M4
+1. Write and review `docs/cd-bytecode-llvm-abi.md` before implementing any M4
    collection, record, variant, or native-call operation.
+2. Define the first `llvm.cd.*` intrinsic group and its malformed-input tests.
+3. Keep both direct and machine paths behind the existing explicit ABI and
+   parity gates while implementing that group.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 
