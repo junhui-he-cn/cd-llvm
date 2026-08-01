@@ -4,6 +4,10 @@ foreach(t ${LLVM_TARGETS_TO_BUILD})
   endif()
 endforeach()
 
+if(TARGET LLVMCDCodeGen AND NOT TARGET CDTests)
+  add_subdirectory(CD)
+endif()
+
 set(LLVM_LINK_COMPONENTS Core Target AllTargetsCodeGens AllTargetsDescs AllTargetsInfos)
 
 add_llvm_unittest(TargetMachineCTests

@@ -1,6 +1,7 @@
 add_llvm_component_group(CD)
 
 add_llvm_target(CDCodeGen
+  CDBytecodeFormat.cpp
   CDBytecodeEmitter.cpp
   CDTargetMachine.cpp
 

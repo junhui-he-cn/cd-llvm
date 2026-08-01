@@ -7,9 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "CDBytecodeEmitter.h"
+#include "CDBytecodeFormat.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -19,7 +20,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/ErrorHandling.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cmath>
@@ -33,72 +33,10 @@ using namespace llvm;
 
 namespace {
 
-struct CDConstant {
-  enum Kind { Nil, Number, Bool };
-
-  Kind Type;
-  std::string Text;
-};
-
-struct CDBody {
-  unsigned Registers = 0;
-  std::vector<std::string> ParameterNames;
-  std::vector<std::string> Instructions;
-};
-
-static std::string registerName(unsigned Register) {
-  return "r" + std::to_string(Register);
-}
-
-static std::string constantName(unsigned Constant) {
-  return "c" + std::to_string(Constant);
-}
-
-static std::string nameName(unsigned Name) { return "n" + std::to_string(Name); }
-
-static std::string functionName(unsigned Function) {
-  return "f" + std::to_string(Function);
-}
-
-static std::string escapeString(StringRef Value) {
-  std::string Result;
-  Result.reserve(Value.size() + 2);
-  for (char Character : Value) {
-    switch (Character) {
-    case '\\':
-      Result += "\\\\";
-      break;
-    case '"':
-      Result += "\\\"";
-      break;
-    case '\n':
-      Result += "\\n";
-      break;
-    case '\r':
-      Result += "\\r";
-      break;
-    case '\t':
-      Result += "\\t";
-      break;
-    default:
-      Result += Character;
-      break;
-    }
-  }
-  return Result;
-}
-
-static void writeQuoted(raw_ostream &OS, StringRef Value) {
-  OS << '"' << escapeString(Value) << '"';
-}
-
-static std::string numberText(double Number) {
-  std::string Text;
-  raw_string_ostream Stream(Text);
-  Stream << format("%.17g", Number);
-  Stream.flush();
-  return Text;
-}
+using CDConstant = cd::CDConstant;
+using CDInstruction = cd::CDInstruction;
+using CDOpcode = cd::CDOpcode;
+using CDBody = cd::CDBody;
 
 static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
@@ -124,25 +62,34 @@ class CDModuleEmitter {
   raw_ostream &OS;
   std::vector<CDConstant> Constants;
   std::vector<std::string> Names;
+  StringMap<unsigned> NameIndexes;
+  StringMap<unsigned> ConstantIndexes;
   DenseMap<const Function *, unsigned> FunctionIndexes;
 
 public:
   explicit CDModuleEmitter(raw_ostream &OS) : OS(OS) {}
 
   unsigned addName(StringRef Name) {
-    for (unsigned Index = 0; Index < Names.size(); ++Index)
-      if (Names[Index] == Name)
-        return Index;
+    auto It = NameIndexes.find(Name);
+    if (It != NameIndexes.end())
+      return It->second;
     Names.push_back(Name.str());
-    return Names.size() - 1;
+    const unsigned Index = Names.size() - 1;
+    NameIndexes[Names.back()] = Index;
+    return Index;
   }
 
   unsigned addConstant(CDConstant::Kind Kind, StringRef Text = {}) {
-    for (unsigned Index = 0; Index < Constants.size(); ++Index)
-      if (Constants[Index].Type == Kind && Constants[Index].Text == Text)
-        return Index;
+    std::string Key;
+    Key.push_back(static_cast<char>('0' + Kind));
+    Key += Text;
+    auto It = ConstantIndexes.find(Key);
+    if (It != ConstantIndexes.end())
+      return It->second;
     Constants.push_back({Kind, Text.str()});
-    return Constants.size() - 1;
+    const unsigned Index = Constants.size() - 1;
+    ConstantIndexes[Key] = Index;
+    return Index;
   }
 
   std::optional<unsigned> functionIndex(const Function *F) const {
@@ -157,11 +104,7 @@ public:
 
 class CDFunctionEmitter {
   struct BranchPatch {
-    enum Kind { Jump, JumpIfFalse, JumpIfTrue };
-
     size_t Line;
-    Kind Opcode;
-    unsigned Condition = 0;
     const BasicBlock *Target = nullptr;
   };
 
@@ -174,7 +117,7 @@ class CDFunctionEmitter {
   DenseMap<const BasicBlock *, unsigned> BlockOffsets;
   DenseMap<const Constant *, unsigned> ConstantRegisters;
   std::vector<BranchPatch> BranchPatches;
-  std::vector<std::string> Lines;
+  std::vector<CDInstruction> Instructions;
   std::vector<std::string> ParameterNames;
   std::vector<unsigned> ParameterNameIndexes;
   std::set<std::string> UsedStorageNames;
@@ -184,8 +127,8 @@ class CDFunctionEmitter {
 
   unsigned allocateRegister() { return NextRegister++; }
 
-  void appendLine(std::string Line) {
-    Lines.push_back("  " + std::move(Line));
+  void appendInstruction(CDInstruction Instruction) {
+    Instructions.push_back(std::move(Instruction));
   }
 
   std::string uniqueStorageName(StringRef Base) {
@@ -221,37 +164,37 @@ class CDFunctionEmitter {
   unsigned materializeNil();
   unsigned valueRegister(const Value *V);
 
-  void emitBinary(const Instruction &I, StringRef Opcode) {
+  void emitBinary(const Instruction &I, CDOpcode Opcode) {
     const auto *BO = cast<BinaryOperator>(&I);
     if (!isScalarType(BO->getType()) || BO->getType()->isIntegerTy(1) ||
         !isSupportedOperand(BO->getOperand(0)) ||
         !isSupportedOperand(BO->getOperand(1)))
       unsupportedInstruction(I);
 
-    appendLine(registerName(resultRegister(I)) + " = " + Opcode.str() + " " +
-                registerName(valueRegister(BO->getOperand(0))) + ", " +
-                registerName(valueRegister(BO->getOperand(1))));
+    appendInstruction(CDInstruction::binary(
+        Opcode, resultRegister(I), valueRegister(BO->getOperand(0)),
+        valueRegister(BO->getOperand(1))));
   }
 
-  void emitCompare(const Instruction &I, StringRef Opcode) {
+  void emitCompare(const Instruction &I, CDOpcode Opcode) {
     const auto *Cmp = cast<CmpInst>(&I);
     if (!isSupportedOperand(Cmp->getOperand(0)) ||
         !isSupportedOperand(Cmp->getOperand(1)))
       unsupportedInstruction(I);
 
-    appendLine(registerName(resultRegister(I)) + " = " + Opcode.str() + " " +
-                registerName(valueRegister(Cmp->getOperand(0))) + ", " +
-                registerName(valueRegister(Cmp->getOperand(1))));
+    appendInstruction(CDInstruction::binary(
+        Opcode, resultRegister(I), valueRegister(Cmp->getOperand(0)),
+        valueRegister(Cmp->getOperand(1))));
   }
 
-  void emitCast(const Instruction &I, StringRef OpcodeName) {
+  void emitCast(const Instruction &I, CDOpcode Opcode) {
     const auto *Cast = cast<CastInst>(&I);
     if (!isScalarType(Cast->getType()) ||
         !isSupportedOperand(Cast->getOperand(0)))
       unsupportedInstruction(I);
 
-    appendLine(registerName(resultRegister(I)) + " = " + OpcodeName.str() +
-                " " + registerName(valueRegister(Cast->getOperand(0))));
+    appendInstruction(CDInstruction::unary(
+        Opcode, resultRegister(I), valueRegister(Cast->getOperand(0))));
   }
 
   unsigned allocaName(const Value *Pointer) const {
@@ -269,8 +212,8 @@ class CDFunctionEmitter {
         !isScalarType(Load.getType()))
       unsupportedInstruction(Load);
 
-    appendLine(registerName(resultRegister(Load)) + " = load_var " +
-                nameName(allocaName(Load.getPointerOperand())));
+    appendInstruction(CDInstruction::loadVar(
+        resultRegister(Load), allocaName(Load.getPointerOperand())));
   }
 
   void emitStore(const StoreInst &Store) {
@@ -278,8 +221,9 @@ class CDFunctionEmitter {
         !isSupportedOperand(Store.getValueOperand()))
       unsupportedInstruction(Store);
 
-    appendLine("store_var " + nameName(allocaName(Store.getPointerOperand())) +
-                ", " + registerName(valueRegister(Store.getValueOperand())));
+    appendInstruction(CDInstruction::storeVar(
+        allocaName(Store.getPointerOperand()),
+        valueRegister(Store.getValueOperand())));
   }
 
   void emitCall(const CallBase &Call) {
@@ -291,7 +235,8 @@ class CDFunctionEmitter {
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
       if (!isSupportedOperand(Call.getArgOperand(0)))
         unsupportedInstruction(Call);
-      appendLine("print " + registerName(valueRegister(Call.getArgOperand(0))));
+      appendInstruction(CDInstruction::print(
+          valueRegister(Call.getArgOperand(0))));
       return;
     }
 
@@ -299,7 +244,8 @@ class CDFunctionEmitter {
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
       if (!isSupportedOperand(Call.getArgOperand(0)))
         unsupportedInstruction(Call);
-      appendLine("print " + registerName(valueRegister(Call.getArgOperand(0))));
+      appendInstruction(CDInstruction::print(
+          valueRegister(Call.getArgOperand(0))));
       return;
     }
 
@@ -316,21 +262,17 @@ class CDFunctionEmitter {
     }
 
     const unsigned FunctionRegister = allocateRegister();
-    appendLine(registerName(FunctionRegister) + " = make_function " +
-                functionName(*FunctionIndex));
+    appendInstruction(
+        CDInstruction::makeFunction(FunctionRegister, *FunctionIndex));
 
     const unsigned Destination = Call.getType()->isVoidTy()
                                      ? allocateRegister()
                                      : resultRegister(Call);
-    std::string Line = registerName(Destination) + " = call " +
-                       registerName(FunctionRegister) + " [";
-    for (unsigned Index = 0; Index < Call.arg_size(); ++Index) {
-      if (Index != 0)
-        Line += ", ";
-      Line += registerName(valueRegister(Call.getArgOperand(Index)));
-    }
-    Line += "]";
-    appendLine(std::move(Line));
+    std::vector<unsigned> Arguments;
+    for (const Use &Argument : Call.args())
+      Arguments.push_back(valueRegister(Argument.get()));
+    appendInstruction(
+        CDInstruction::call(Destination, FunctionRegister, std::move(Arguments)));
   }
 
   void emitPhiStores(const BasicBlock &Predecessor,
@@ -346,17 +288,17 @@ class CDFunctionEmitter {
       if (IncomingIndex < 0)
         unsupportedOperation("PHI node without an incoming value for a branch edge");
 
-      appendLine("store_var " + nameName(PhiNames.lookup(&Phi)) + ", " +
-                  registerName(valueRegister(
-                      Phi.getIncomingValue(static_cast<unsigned>(IncomingIndex)))));
+      appendInstruction(CDInstruction::storeVar(
+          PhiNames.lookup(&Phi),
+          valueRegister(Phi.getIncomingValue(
+              static_cast<unsigned>(IncomingIndex)))));
     }
   }
 
-  size_t appendJump(BranchPatch::Kind Kind, const BasicBlock *Target,
-                    unsigned Condition = 0) {
-    const size_t Line = Lines.size();
-    Lines.emplace_back();
-    BranchPatches.push_back({Line, Kind, Condition, Target});
+  size_t appendJump(const BasicBlock *Target) {
+    const size_t Line = Instructions.size();
+    appendInstruction(CDInstruction::jump(cd::InvalidIndex));
+    BranchPatches.push_back({Line, Target});
     return Line;
   }
 
@@ -395,50 +337,18 @@ void CDModuleEmitter::emit(Module &M) {
       FunctionBodies.emplace_back(&F,
                                   CDFunctionEmitter(*this, F, false).emit());
 
-  OS << "cdbc 0.1\n\nconstants:\n";
-  for (unsigned Index = 0; Index < Constants.size(); ++Index) {
-    OS << "  " << constantName(Index) << " = ";
-    switch (Constants[Index].Type) {
-    case CDConstant::Nil:
-      OS << "nil";
-      break;
-    case CDConstant::Number:
-      OS << "number " << Constants[Index].Text;
-      break;
-    case CDConstant::Bool:
-      OS << "bool " << Constants[Index].Text;
-      break;
-    }
-    OS << '\n';
-  }
-
-  OS << "\nnames:\n";
-  for (unsigned Index = 0; Index < Names.size(); ++Index) {
-    OS << "  " << nameName(Index) << " = ";
-    writeQuoted(OS, Names[Index]);
-    OS << '\n';
-  }
-
-  OS << "\nmain registers=" << MainBody.Registers << ":\n";
-  for (const std::string &Line : MainBody.Instructions)
-    OS << Line << '\n';
-
+  cd::CDArtifact Artifact;
+  Artifact.constants = std::move(Constants);
+  Artifact.names = std::move(Names);
+  Artifact.main = std::move(MainBody);
   for (unsigned Index = 0; Index < FunctionBodies.size(); ++Index) {
     const Function &F = *FunctionBodies[Index].first;
     const CDBody &Body = FunctionBodies[Index].second;
-    OS << "\nfunction " << functionName(Index) << " name=";
-    writeQuoted(OS, F.getName());
-    OS << " arity=" << Body.ParameterNames.size()
-       << " registers=" << Body.Registers << ":\n";
-    for (unsigned Parameter = 0; Parameter < Body.ParameterNames.size();
-         ++Parameter) {
-      OS << "  param " << Parameter << " = ";
-      writeQuoted(OS, Body.ParameterNames[Parameter]);
-      OS << '\n';
-    }
-    for (const std::string &Line : Body.Instructions)
-      OS << Line << '\n';
+    Artifact.functions.push_back(
+        {F.getName().str(), static_cast<unsigned>(Body.parameterNames.size()),
+         std::move(FunctionBodies[Index].second)});
   }
+  cd::serializeArtifact(Artifact, OS);
 }
 
 void CDFunctionEmitter::validateFunctionTypes() {
@@ -515,18 +425,22 @@ unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
       Kind = CDConstant::Bool;
       Text = CI->isOne() ? "true" : "false";
     } else {
-      const double Number = CI->getValue().signedRoundToDouble();
-      if (!std::isfinite(Number))
-        report_fatal_error("CD target integer constant is not representable as a finite number");
+      APFloat Converted(APFloat::IEEEdouble());
+      const APFloat::opStatus Status = Converted.convertFromAPInt(
+          CI->getValue(), /*IsSigned=*/true, APFloat::rmNearestTiesToEven);
+      if (Status != APFloat::opOK)
+        report_fatal_error(
+            "CD target integer constant is not exactly representable as a number");
+      const double Number = Converted.convertToDouble();
       Kind = CDConstant::Number;
-      Text = numberText(Number);
+      Text = cd::CDConstant::number(Number).text;
     }
   } else if (const auto *CFP = dyn_cast<ConstantFP>(C)) {
     const double Number = CFP->getValueAPF().convertToDouble();
     if (!std::isfinite(Number))
       report_fatal_error("CD target floating-point constant is not finite");
     Kind = CDConstant::Number;
-    Text = numberText(Number);
+    Text = cd::CDConstant::number(Number).text;
   } else if (isa<ConstantPointerNull>(C)) {
     Kind = CDConstant::Nil;
   } else {
@@ -536,16 +450,14 @@ unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
   const unsigned ConstantIndex = Module.addConstant(Kind, Text);
   const unsigned Register = allocateRegister();
   ConstantRegisters[C] = Register;
-  appendLine(registerName(Register) + " = constant " +
-              constantName(ConstantIndex));
+  appendInstruction(CDInstruction::constant(Register, ConstantIndex));
   return Register;
 }
 
 unsigned CDFunctionEmitter::materializeNil() {
   const unsigned ConstantIndex = Module.addConstant(CDConstant::Nil);
   const unsigned Register = allocateRegister();
-  appendLine(registerName(Register) + " = constant " +
-              constantName(ConstantIndex));
+  appendInstruction(CDInstruction::constant(Register, ConstantIndex));
   return Register;
 }
 
@@ -571,45 +483,45 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
     return;
   case Instruction::Add:
   case Instruction::FAdd:
-    emitBinary(I, "add");
+    emitBinary(I, CDOpcode::Add);
     return;
   case Instruction::Sub:
   case Instruction::FSub:
-    emitBinary(I, "subtract");
+    emitBinary(I, CDOpcode::Subtract);
     return;
   case Instruction::Mul:
   case Instruction::FMul:
-    emitBinary(I, "multiply");
+    emitBinary(I, CDOpcode::Multiply);
     return;
   case Instruction::SDiv:
   case Instruction::UDiv:
   case Instruction::FDiv:
-    emitBinary(I, "divide");
+    emitBinary(I, CDOpcode::Divide);
     return;
   case Instruction::ICmp: {
     const auto Predicate = cast<ICmpInst>(&I)->getPredicate();
     switch (Predicate) {
     case ICmpInst::ICMP_EQ:
-      emitCompare(I, "equal");
+      emitCompare(I, CDOpcode::Equal);
       return;
     case ICmpInst::ICMP_NE:
-      emitCompare(I, "not_equal");
+      emitCompare(I, CDOpcode::NotEqual);
       return;
     case ICmpInst::ICMP_UGT:
     case ICmpInst::ICMP_SGT:
-      emitCompare(I, "greater");
+      emitCompare(I, CDOpcode::Greater);
       return;
     case ICmpInst::ICMP_UGE:
     case ICmpInst::ICMP_SGE:
-      emitCompare(I, "greater_equal");
+      emitCompare(I, CDOpcode::GreaterEqual);
       return;
     case ICmpInst::ICMP_ULT:
     case ICmpInst::ICMP_SLT:
-      emitCompare(I, "less");
+      emitCompare(I, CDOpcode::Less);
       return;
     case ICmpInst::ICMP_ULE:
     case ICmpInst::ICMP_SLE:
-      emitCompare(I, "less_equal");
+      emitCompare(I, CDOpcode::LessEqual);
       return;
     default:
       unsupportedInstruction(I);
@@ -620,27 +532,27 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
     switch (Predicate) {
     case FCmpInst::FCMP_OEQ:
     case FCmpInst::FCMP_UEQ:
-      emitCompare(I, "equal");
+      emitCompare(I, CDOpcode::Equal);
       return;
     case FCmpInst::FCMP_ONE:
     case FCmpInst::FCMP_UNE:
-      emitCompare(I, "not_equal");
+      emitCompare(I, CDOpcode::NotEqual);
       return;
     case FCmpInst::FCMP_OGT:
     case FCmpInst::FCMP_UGT:
-      emitCompare(I, "greater");
+      emitCompare(I, CDOpcode::Greater);
       return;
     case FCmpInst::FCMP_OGE:
     case FCmpInst::FCMP_UGE:
-      emitCompare(I, "greater_equal");
+      emitCompare(I, CDOpcode::GreaterEqual);
       return;
     case FCmpInst::FCMP_OLT:
     case FCmpInst::FCMP_ULT:
-      emitCompare(I, "less");
+      emitCompare(I, CDOpcode::Less);
       return;
     case FCmpInst::FCMP_OLE:
     case FCmpInst::FCMP_ULE:
-      emitCompare(I, "less_equal");
+      emitCompare(I, CDOpcode::LessEqual);
       return;
     default:
       unsupportedInstruction(I);
@@ -656,7 +568,7 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
   case Instruction::FPToUI:
   case Instruction::FPToSI:
   case Instruction::BitCast:
-    emitCast(I, "move");
+    emitCast(I, CDOpcode::Move);
     return;
   case Instruction::Load:
     emitLoad(cast<LoadInst>(I));
@@ -678,7 +590,7 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
     const unsigned Register = Return->getReturnValue()
                                   ? valueRegister(Return->getReturnValue())
                                   : materializeNil();
-    appendLine("return " + registerName(Register));
+    appendInstruction(CDInstruction::returnValue(Register));
     return;
   }
 
@@ -686,24 +598,24 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
     if (Branch->isUnconditional()) {
       const BasicBlock *Successor = Branch->getSuccessor(0);
       emitPhiStores(BB, *Successor);
-      appendJump(BranchPatch::Jump, Successor);
+      appendJump(Successor);
       return;
     }
 
     const unsigned Condition = valueRegister(Branch->getCondition());
     const BasicBlock *TrueSuccessor = Branch->getSuccessor(0);
     const BasicBlock *FalseSuccessor = Branch->getSuccessor(1);
-    const size_t ConditionalLine = Lines.size();
-    Lines.emplace_back();
+    const size_t ConditionalLine = Instructions.size();
+    appendInstruction(
+        CDInstruction::jumpIfFalse(Condition, cd::InvalidIndex));
 
     emitPhiStores(BB, *TrueSuccessor);
-    appendJump(BranchPatch::Jump, TrueSuccessor);
+    appendJump(TrueSuccessor);
 
-    const unsigned FalseEdge = Lines.size();
-    Lines[ConditionalLine] = "  jump_if_false " + registerName(Condition) +
-                             ", " + std::to_string(FalseEdge);
+    const unsigned FalseEdge = Instructions.size();
+    Instructions[ConditionalLine].target = FalseEdge;
     emitPhiStores(BB, *FalseSuccessor);
-    appendJump(BranchPatch::Jump, FalseSuccessor);
+    appendJump(FalseSuccessor);
     return;
   }
 
@@ -713,15 +625,17 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
 }
 
 void CDFunctionEmitter::emitBody() {
-  for (unsigned Index = 0; Index < F.arg_size(); ++Index)
-    appendLine(registerName(ValueRegisters.lookup(F.getArg(Index))) +
-                " = load_var " + nameName(ParameterNameIndexes[Index]));
+  for (unsigned Index = 0; Index < F.arg_size(); ++Index) {
+    appendInstruction(CDInstruction::loadVar(
+        ValueRegisters.lookup(F.getArg(Index)), ParameterNameIndexes[Index]));
+  }
 
   for (BasicBlock &BB : F) {
-    BlockOffsets[&BB] = Lines.size();
-    for (const PHINode &Phi : BB.phis())
-      appendLine(registerName(resultRegister(Phi)) + " = load_var " +
-                  nameName(PhiNames.lookup(&Phi)));
+    BlockOffsets[&BB] = Instructions.size();
+    for (const PHINode &Phi : BB.phis()) {
+      appendInstruction(CDInstruction::loadVar(resultRegister(Phi),
+                                               PhiNames.lookup(&Phi)));
+    }
 
     const Instruction *Terminator = BB.getTerminator();
     if (!Terminator)
@@ -741,20 +655,7 @@ void CDFunctionEmitter::patchBranches() {
     if (It == BlockOffsets.end())
       unsupportedOperation("branch target outside the emitted function");
     const unsigned Target = It->second;
-    switch (Patch.Opcode) {
-    case BranchPatch::Jump:
-      Lines[Patch.Line] = "  jump " + std::to_string(Target);
-      break;
-    case BranchPatch::JumpIfFalse:
-      Lines[Patch.Line] = "  jump_if_false " +
-                          registerName(Patch.Condition) + ", " +
-                          std::to_string(Target);
-      break;
-    case BranchPatch::JumpIfTrue:
-      Lines[Patch.Line] = "  jump_if_true " + registerName(Patch.Condition) +
-                          ", " + std::to_string(Target);
-      break;
-    }
+    Instructions[Patch.Line].target = Target;
   }
 }
 
@@ -764,9 +665,9 @@ CDBody CDFunctionEmitter::emit() {
   patchBranches();
 
   CDBody Body;
-  Body.Registers = NextRegister;
-  Body.Instructions = std::move(Lines);
-  Body.ParameterNames = std::move(ParameterNames);
+  Body.registers = NextRegister;
+  Body.instructions = std::move(Instructions);
+  Body.parameterNames = std::move(ParameterNames);
   return Body;
 }
 
