@@ -187,6 +187,18 @@ class CDMachineModuleEmitter {
         .addReg(SourceRegister);
   }
 
+  void lowerCast(const CastInst &Cast, MachineRegisterInfo &MRI,
+                 MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (!isScalarType(Cast.getType()) ||
+        !isScalarType(Cast.getOperand(0)->getType()))
+      unsupported("a non-scalar cast");
+
+    Register Source = valueRegister(Cast.getOperand(0), MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Cast);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MOVE), Result)
+        .addReg(Source);
+  }
+
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!isScalarType(Instruction.getType()))
@@ -310,6 +322,11 @@ class CDMachineModuleEmitter {
 
       if (const auto *Compare = dyn_cast<CmpInst>(&Instruction)) {
         lowerCompare(*Compare, MRI, *MBB, TII);
+        continue;
+      }
+
+      if (const auto *Cast = dyn_cast<CastInst>(&Instruction)) {
+        lowerCast(*Cast, MRI, *MBB, TII);
         continue;
       }
 
