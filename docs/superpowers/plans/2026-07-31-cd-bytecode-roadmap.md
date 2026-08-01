@@ -180,7 +180,7 @@ are accepted by Rust `dump` and produce `42` and `7`.
 
 The direct `ModulePass` path remains the default compatibility path. The new machine path is selected explicitly, for example with a target option such as `-mllvm -cd-backend=machine`, and its canonical output is compared with the direct path before it becomes the default. No empty `.td` scaffolding is accepted without a defined machine model.
 
-**Design gate:** Before adding generated instruction files, record decisions for the CD virtual-value register class, constant/name table ownership, function and call representation, branch target patching, `ret void`/nil behavior, and the point at which a `MachineFunction` becomes a `cdbc` body. CD bytecode uses dynamic values and VM registers rather than physical CPU registers, so ordinary native register allocation cannot be assumed to solve this model.
+**Design gate:** Before adding generated instruction files, record decisions for the CD virtual-value register class, constant/name table ownership, function and call representation, branch target patching, `ret void`/nil behavior, and the point at which a `MachineFunction` becomes a `cdbc` body. CD bytecode uses dynamic values and VM registers rather than physical CPU registers, so ordinary native register allocation cannot be assumed to solve this model. The recorded gate is [cd-bytecode-machine-backend.md](../cd-bytecode-machine-backend.md).
 
 **Files:**
 
@@ -199,8 +199,9 @@ The direct `ModulePass` path remains the default compatibility path. The new mac
 - Create: `llvm/test/CodeGen/CD/cdbc-machine.ll`.
 - Create: `llvm/test/CodeGen/CD/Machine/*.mir`.
 
-- [ ] Add `CDCommonTableGen` and generated `CDGenInstrInfo.inc`, `CDGenRegisterInfo.inc`, and `CDGenSubtargetInfo.inc` dependencies in CMake.
-- [ ] Define only the machine operations that have a stable `cdbc 0.1` mapping; do not use TableGen to hide unsupported arrays, maps, globals, or native calls.
+- [x] Record the CD virtual-value register, module-table ownership, call/branch, and artifact-bridge decisions before creating generated instruction files.
+- [x] Add `CDCommonTableGen` and generated `CDGenInstrInfo.inc`, `CDGenRegisterInfo.inc`, and `CDGenSubtargetInfo.inc` dependencies in CMake.
+- [x] Define only the machine operations that have a stable `cdbc 0.1` mapping; do not use TableGen to hide unsupported arrays, maps, globals, or native calls.
 - [ ] Lower the existing scalar/control-flow subset to `MachineInstr` and serialize it through the typed artifact model from M1.
 - [ ] Add MIR tests for virtual-value registers, calls, branches, PHI lowering, function boundaries, and constant/name table ownership.
 - [ ] Produce direct and machine-path artifacts from the same LLVM IR, normalize only permitted table/index differences, and require identical VM behavior.
