@@ -455,6 +455,24 @@ class CDMachineModuleEmitter {
         .addMBB(TrueEdge);
   }
 
+  void lowerSelect(const SelectInst &Select, MachineRegisterInfo &MRI,
+                   MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (!Select.getCondition()->getType()->isIntegerTy(1) ||
+        !isScalarType(Select.getType()) ||
+        !isSupportedValue(Select.getTrueValue()) ||
+        !isSupportedValue(Select.getFalseValue()))
+      unsupported("an unsupported scalar select");
+
+    Register Condition = valueRegister(Select.getCondition(), MRI, MBB, TII);
+    Register TrueValue = valueRegister(Select.getTrueValue(), MRI, MBB, TII);
+    Register FalseValue = valueRegister(Select.getFalseValue(), MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Select);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_SELECT), Result)
+        .addReg(Condition)
+        .addReg(TrueValue)
+        .addReg(FalseValue);
+  }
+
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!isScalarType(Instruction.getType()))
@@ -639,6 +657,11 @@ class CDMachineModuleEmitter {
           continue;
         }
 
+        if (const auto *Select = dyn_cast<SelectInst>(&Instruction)) {
+          lowerSelect(*Select, MRI, *MBB, TII);
+          continue;
+        }
+
         if (const auto *Binary = dyn_cast<BinaryOperator>(&Instruction)) {
           if (Binary->getOpcode() == Instruction::Xor)
             lowerNot(*Binary, MRI, *MBB, TII);
@@ -810,6 +833,33 @@ class CDMachineModuleEmitter {
           Body.instructions.push_back(CDInstruction::print(
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body)));
           break;
+        case CD::CD_SELECT: {
+          if (MI.getNumOperands() != 4 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg() ||
+              !MI.getOperand(3).isReg())
+            unsupported("an invalid CD_SELECT machine instruction");
+          const unsigned Destination =
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body);
+          const unsigned Condition =
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body);
+          const unsigned TrueValue =
+              artifactRegister(MI.getOperand(2).getReg(), Registers, Body);
+          const unsigned FalseValue =
+              artifactRegister(MI.getOperand(3).getReg(), Registers, Body);
+          const size_t Conditional = Body.instructions.size();
+          Body.instructions.push_back(
+              CDInstruction::jumpIfFalse(Condition, cd::InvalidIndex));
+          Body.instructions.push_back(
+              CDInstruction::move(Destination, TrueValue));
+          const size_t Join = Body.instructions.size();
+          Body.instructions.push_back(CDInstruction::jump(cd::InvalidIndex));
+          const unsigned FalseOffset = Body.instructions.size();
+          Body.instructions.push_back(
+              CDInstruction::move(Destination, FalseValue));
+          Body.instructions[Conditional].target = FalseOffset;
+          Body.instructions[Join].target = Body.instructions.size();
+          break;
+        }
         case CD::CD_JUMP: {
           if (MI.getNumOperands() != 1 || !MI.getOperand(0).isMBB())
             unsupported("an invalid CD_JUMP machine instruction");

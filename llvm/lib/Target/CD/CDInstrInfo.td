@@ -97,3 +97,9 @@ def CD_JUMP : CDPseudo<(outs), (ins cdtarget:$target)>;
 // CD_JUMP_IF_FALSE -> CDOpcode::JumpIfFalse.
 def CD_JUMP_IF_FALSE : CDPseudo<(outs),
                                 (ins CDValue:$condition, cdtarget:$target)>;
+
+// CD_SELECT expands to jump_if_false/move/jump/move in the artifact bridge.
+// It is a machine lowering pseudo, not a new cdbc 0.1 wire opcode.
+def CD_SELECT : CDPseudo<(outs CDValue:$dst),
+                         (ins CDValue:$condition, CDValue:$if_true,
+                               CDValue:$if_false)>;

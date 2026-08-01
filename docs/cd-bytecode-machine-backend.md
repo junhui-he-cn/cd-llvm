@@ -14,7 +14,8 @@ remains intentionally incomplete.
   artifact must match its observable Rust VM behavior before it can become a
   default.
 - The machine path is opt-in and may emit only CD pseudo-instructions with a
-  stable one-to-one `CDOpcode` mapping.  TableGen describes instruction shape,
+  stable `cdbc 0.1` mapping.  Lowering pseudos such as `CD_SELECT` expand only
+  to a documented sequence of existing artifact instructions. TableGen describes instruction shape,
   register classes, calling-convention metadata, and subtarget identity; it
   does not own the `.cdbc 0.1` wire spelling.
 - `CDValue` registers are VM register identities, not native CPU registers.
@@ -44,7 +45,7 @@ and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `move`, `fneg`, boolean inversion as `not`, `nil`/`ret void` returns,
 `cd_print`/`print`, defined-function calls, scalar function parameters,
 single-slot scalar storage through `load_var` and `store_var`, conditional and
-unconditional branches, and scalar PHI values.  Conditional PHI edges use
+unconditional branches, scalar PHI values, and scalar `select`. Conditional PHI edges use
 synthetic machine edge blocks so each predecessor edge stores the correct
 incoming value before jumping to the successor; symbolic machine block
 targets are patched to artifact instruction offsets before validation.
@@ -52,8 +53,7 @@ targets are patched to artifact instruction offsets before validation.
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
 register definition in one edge block to leak into an unrelated edge.
-Aggregate values, direct/machine parity, and optimized select lowering remain
-pending.
+Aggregate values and a reproducible direct/machine parity gate remain pending.
 
 ## TableGen pseudo-instruction mapping
 
@@ -85,6 +85,7 @@ the only scalar/control-flow operations that currently have stable
 | `CD_LESS_EQUAL` | `LessEqual` | destination value, left value, right value |
 | `CD_JUMP` | `Jump` | symbolic target block label |
 | `CD_JUMP_IF_FALSE` | `JumpIfFalse` | condition value, symbolic target block label |
+| `CD_SELECT` | `jump_if_false` + `move` + `jump` + `move` | destination value, condition value, true value, false value |
 
 `JumpIfTrue` is not part of the first generated set because the direct emitter
 does not currently produce it.  It can be added only with a matching direct
@@ -105,6 +106,5 @@ the pseudo-instruction model:
   `CDBytecodeFormat` validation.
 
 The next M3 implementation slice should compare direct and machine artifacts
-through Rust `dump`/`run`, then add any scalar operation (such as `select`)
-only when its direct-path lowering and machine artifact bridge have matching
-tests.  It must retain the direct path and keep the machine path opt-in.
+through Rust `dump`/`run` across the complete shared scalar fixture set. It must
+retain the direct path and keep the machine path opt-in.
