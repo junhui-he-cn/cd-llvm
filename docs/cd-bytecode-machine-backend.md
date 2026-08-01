@@ -1,6 +1,7 @@
 # CD bytecode machine-backend design gate
 
-Status: M3 complete for the supported scalar/control-flow subset, 2026-08-01.
+Status: M3 complete for the supported scalar/control-flow subset; M4 string
+and array-constructor slices share the machine artifact bridge, 2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -53,9 +54,12 @@ targets are patched to artifact instruction offsets before validation.
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
 register definition in one edge block to leak into an unrelated edge.
-Aggregate values remain pending.  The reproducible parity gate is implemented
-by `llvm/utils/cd_bytecode_parity.py` and the corpus manifest at
-`llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+The M4 value ABI additionally lowers immutable string tokens to `constant` and
+fresh array constructors to `CD_ARRAY`/`array`.  Array operands are collected
+before the machine pseudo is inserted so constants materialized for operands
+are defined before the array instruction executes.  The reproducible parity
+gate is implemented by `llvm/utils/cd_bytecode_parity.py` and the corpus
+manifest at `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
 
 ## Direct/machine parity gate
 
@@ -86,6 +90,7 @@ the only scalar/control-flow operations that currently have stable
 | --- | --- | --- |
 | `CD_CONSTANT` | `Constant` | destination value, module constant index |
 | `CD_MAKE_FUNCTION` | `MakeFunction` | destination value, module function index |
+| `CD_ARRAY` | `Array` | destination value, variadic element values |
 | `CD_MOVE` | `Move` | destination value, source value |
 | `CD_LOAD_VAR` | `LoadVar` | destination value, module name index |
 | `CD_STORE_VAR` | `StoreVar` | module name index, source value |
@@ -117,8 +122,7 @@ path and artifact-bridge test.
 The following are outside this foundation slice and must not be smuggled into
 the pseudo-instruction model:
 
-- arrays, maps, strings, structs, variants, arbitrary pointers, and aggregate
-  values;
+- maps, structs, variants, arbitrary pointers, and aggregate values;
 - native calls, globals, exception edges, and source/debug sections;
 - object files, assembly encodings, MC emitters, and JIT execution;
 - physical register allocation, spills, and a claim that `R0`--`R31` model a

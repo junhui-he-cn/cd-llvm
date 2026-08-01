@@ -11,3 +11,9 @@
 // not a native memory read.
 def int_cd_string : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty],
                                           [IntrNoMem]>;
+
+// An array is a fresh mutable VM value.  Keep the conservative default memory
+// and side-effect properties so LLVM cannot fold two constructors together.
+def int_cd_array : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<0>>]>;

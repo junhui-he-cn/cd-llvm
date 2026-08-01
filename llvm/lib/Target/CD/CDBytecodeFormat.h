@@ -37,6 +37,7 @@ struct CDConstant {
 enum class CDOpcode {
   Constant,
   MakeFunction,
+  Array,
   Move,
   LoadVar,
   StoreVar,
@@ -70,6 +71,8 @@ struct CDInstruction {
 
   static CDInstruction constant(unsigned destination, unsigned constant);
   static CDInstruction makeFunction(unsigned destination, unsigned function);
+  static CDInstruction array(unsigned destination,
+                             std::vector<unsigned> elements);
   static CDInstruction move(unsigned destination, unsigned source);
   static CDInstruction unary(CDOpcode opcode, unsigned destination,
                              unsigned source);

@@ -13,6 +13,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Type.h"
 #include "llvm/Support/JSON.h"
 
 using namespace llvm;
@@ -23,6 +24,66 @@ bool isStringIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
          Callee->getIntrinsicID() == Intrinsic::cd_string;
+}
+
+bool isArrayIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_array;
+}
+
+bool isArrayElement(const Value &Value) {
+  if (isa<UndefValue>(&Value) || isa<PoisonValue>(&Value))
+    return false;
+
+  if (Value.getType()->isIntegerTy() || Value.getType()->isFloatingPointTy())
+    return true;
+
+  if (const auto *Null = dyn_cast<ConstantPointerNull>(&Value))
+    return cast<PointerType>(Null->getType())->getAddressSpace() == 0;
+
+  const auto *Call = dyn_cast<CallBase>(&Value);
+  return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call));
+}
+
+bool validateArrayCall(const CallBase &Call, std::string &Error) {
+  if (!isArrayIntrinsic(Call)) {
+    Error = "not an llvm.cd.array call";
+    return false;
+  }
+
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.array requires a ptr result";
+    return false;
+  }
+
+  if (Call.arg_size() == 0) {
+    Error = "llvm.cd.array requires an element-count immediate";
+    return false;
+  }
+
+  const auto *Count = dyn_cast<ConstantInt>(Call.getArgOperand(0));
+  if (!Count || !Count->getType()->isIntegerTy(32)) {
+    Error = "llvm.cd.array requires an i32 element-count immediate";
+    return false;
+  }
+
+  const uint64_t ElementCount = Count->getZExtValue();
+  if (ElementCount != Call.arg_size() - 1) {
+    Error = "llvm.cd.array element-count does not match the operand list";
+    return false;
+  }
+
+  for (unsigned Index = 1; Index < Call.arg_size(); ++Index) {
+    if (!isArrayElement(*Call.getArgOperand(Index))) {
+      Error = "llvm.cd.array requires scalar, nil, string-token, or "
+              "array-token operands";
+      return false;
+    }
+  }
+
+  return true;
 }
 
 std::optional<StringRef> getStringConstant(const CallBase &Call,

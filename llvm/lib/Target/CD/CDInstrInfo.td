@@ -26,6 +26,9 @@ def CD_CONSTANT : CDPseudo<(outs CDValue:$dst), (ins cdindex:$constant)>;
 // CD_MAKE_FUNCTION -> CDOpcode::MakeFunction.
 def CD_MAKE_FUNCTION : CDPseudo<(outs CDValue:$dst), (ins cdindex:$function)>;
 
+// CD_ARRAY -> CDOpcode::Array.
+def CD_ARRAY : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
+
 // CD_MOVE -> CDOpcode::Move.
 def CD_MOVE : CDPseudo<(outs CDValue:$dst), (ins CDValue:$source)>;
 

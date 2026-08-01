@@ -245,7 +245,8 @@ before any collection or pointer lowering is added.
 - Create or modify: `llvm/include/llvm/IR/IntrinsicsCD.td` and its include registration in `llvm/include/llvm/IR/Intrinsics.td`.
 - Create: `llvm/lib/Target/CD/CDValueABI.{h,cpp}` if the intrinsic-to-bytecode mapping does not fit the artifact emitter.
 - Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` and `CDBytecodeEmitter.{h,cpp}`.
-- Create: `llvm/test/CodeGen/CD/cdbc-collections.ll`.
+- Create: `llvm/test/CodeGen/CD/cdbc-array.ll` and
+  `llvm/test/CodeGen/CD/cdbc-array-errors.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-records.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-native.ll`.
 - Synchronize, in the independent checkout: `cd-compiler/docs/bytecode-text-format.md`, `cd-compiler/vm-rs/src/format.rs`, `cd-compiler/vm-rs/src/bytecode.rs`, and `cd-compiler/vm-rs/src/vm.rs`.
@@ -272,6 +273,20 @@ deduplication, and empty-string coverage, plus direct/machine malformed-input
 parity, are present. String tokens are intentionally limited to local
 materialization and `print` in this slice; function returns, PHI/`select`
 propagation, and parameters remain a later ABI sub-slice.
+
+The first collection constructor is now implemented as the `llvm.cd.array`
+intrinsic.  LLVM's variadic intrinsic boundary uses an immediate `i32` element
+count followed by payload operands; the count must match exactly, and the
+variadic call type is explicit in textual IR.  Scalar, `nil`, string-token, and
+array-token payloads lower to the existing `array` instruction.  Empty, mixed,
+and nested arrays are covered by `cdbc-array.ll`; mismatched counts, ordinary
+pointers, vectors, foreign-address-space nulls, poison, and non-immediate
+counts are covered by `cdbc-array-errors.ll`.  The direct and machine paths
+share `CDValueABI` validation, `CDBytecodeFormat`, and the Rust VM parity gate;
+machine operand constants are materialized before `CD_ARRAY` so `dump` and
+`run` observe the same values on both paths.  Array results remain limited to
+printing and nested construction; indexing, mutation, `len`, return/parameter,
+PHI/`select`, and ordinary pointer operations remain deferred.
 
 **Exit criteria:** Every newly emitted opcode is documented, parsed, verified, and executed by the Rust VM; collection mutation and failure behavior are covered; ordinary LLVM aggregates remain rejected unless they use the defined CD ABI.
 

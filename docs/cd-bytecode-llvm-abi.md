@@ -1,6 +1,6 @@
 # LLVM CD value ABI
 
-Status: M4 string-constant slice implemented, 2026-08-01.
+Status: M4 string-constant and array-constructor slices implemented, 2026-08-01.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -55,6 +55,23 @@ string token represented by `ptr`; the argument is a pointer to the immutable
 LLVM string global described below.  The intrinsic has no runtime memory
 access: the target reads the initializer while lowering and emits a constant
 table entry.
+
+The first collection intrinsic is:
+
+```tablegen
+def int_cd_array : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<0>>]>;
+```
+
+Its canonical IR spelling is `llvm.cd.array`.  It returns an opaque CD array
+token represented by `ptr` and accepts an immediate `i32` element count followed
+by a variadic list of element operands.  The count must exactly match the
+number of following operands; zero is valid.  Since this is a variadic LLVM
+intrinsic, textual IR spells the call type explicitly, for example
+`call ptr (i32, ...) @llvm.cd.array(i32 0)`.  The intrinsic deliberately has no
+`IntrNoMem` property: array construction creates a fresh mutable VM object and
+must not be treated as a pure, freely CSE-able value by LLVM optimization.
 
 The intrinsic must be used with the registered declaration and exact `ptr`
 signature.  A manually declared function with a similar name is not a CD ABI
@@ -145,6 +162,60 @@ Rust parser/validator coverage, and direct/machine parity before it can be
 implemented.  Existing `cdbc 0.1` opcodes are not permission to map arbitrary
 LLVM IR instructions to those operations.
 
+## Array constructor: first collection ABI group
+
+### Accepted source shape
+
+The operands after the immediate count of `llvm.cd.array` are the complete array
+payload.  Each payload operand must be one of:
+
+- an integer or floating-point scalar, using the existing CD number/bool
+  conversion rules;
+- a `ptr null` constant, which becomes CD `nil`;
+- the result of `llvm.cd.string`; or
+- the result of `llvm.cd.array`.
+
+An arbitrary pointer, aggregate, vector, function value, `undef`, poison, or
+ordinary pointer operation is not an array element.  The target validates every
+operand during lowering, in both direct and machine paths, and reports a
+target error instead of emitting a partially typed array.
+
+The result is local to the call in this first slice.  It may be passed to
+`cd_print`/`print`, or used as an element of another `llvm.cd.array` call.  It
+may not yet be returned from a function, passed to an ordinary function,
+stored in an ordinary alloca, selected by `select`, or used by pointer
+operations.  `index`, `assign_index`, `len`, and `assert_array` are separate
+intrinsics and are not inferred from ordinary LLVM operations.
+
+### Ownership, aliasing, and failure behavior
+
+The `array` bytecode instruction allocates a new mutable array and copies the
+element values into its slots.  Scalar, nil, and string elements have value
+semantics for this purpose.  Nested arrays are copied as dynamic value handles:
+the nested array storage is shared, so a later explicit mutation of that
+nested value is observable through every alias.  The outer array itself is
+never an alias of an input array.
+
+Construction does not validate element types at runtime because LLVM lowering
+has already proven the capability of each operand.  Runtime allocation can
+still fail under the VM resource budget; that failure is a runtime error and
+must not be converted to `nil` or a compile-time diagnostic.  The existing Rust
+VM parser, verifier, and executor own the `array` wire spelling and its
+allocation behavior.
+
+### Wire and runtime behavior
+
+An array constructor lowers to the existing instruction form:
+
+```text
+rD = array [r0, r1, ...]
+```
+
+No new artifact version or native pointer representation is introduced.  The
+direct and machine paths share the typed artifact model, and their only
+permitted difference is virtual/register numbering.  Printing the result uses
+the Rust VM's existing array formatting, including nested values.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -157,6 +228,11 @@ The string group is complete only when all of the following are true:
   are covered;
 - direct/machine parity includes the positive and negative fixtures; and
 - ordinary pointer/global use remains rejected.
+
+The array-constructor group is complete only when `llvm.cd.array` accepts the
+documented operand capabilities, emits `array`, rejects ordinary pointer and
+aggregate substitutes, passes Rust `dump` and `run`, and has direct/machine
+artifact and runtime parity for empty, mixed, and nested values.
 
 The sibling `cd-compiler` checkout already defines `string` constants in the
 `cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the

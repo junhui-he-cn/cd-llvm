@@ -48,12 +48,18 @@ static bool isCDStringValue(const Value *Value) {
   return Call && cd::isStringIntrinsic(*Call);
 }
 
+static bool isCDArrayValue(const Value *Value) {
+  const auto *Call = dyn_cast<CallBase>(Value);
+  return Call && cd::isArrayIntrinsic(*Call);
+}
+
 static bool isSupportedOperand(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
-  return isSupportedOperand(Value) || isCDStringValue(Value);
+  return isSupportedOperand(Value) || isCDStringValue(Value) ||
+         isCDArrayValue(Value);
 }
 
 [[noreturn]] static void unsupportedInstruction(const Instruction &I) {
@@ -316,6 +322,20 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isArrayIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateArrayCall(Call, Error))
+        unsupportedOperation(Error);
+
+      std::vector<unsigned> Elements;
+      Elements.reserve(Call.arg_size() - 1);
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        Elements.push_back(valueRegister(Call.getArgOperand(Index)));
+      appendInstruction(
+          CDInstruction::array(resultRegister(Call), std::move(Elements)));
+      return;
+    }
+
     if (Callee->isDeclaration() && Callee->getName() == "cd_print" &&
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
       if (!isSupportedPrintValue(Call.getArgOperand(0)))
@@ -513,7 +533,8 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
       }
 
       if (!I.getType()->isVoidTy()) {
-        if (!isScalarType(I.getType()) && !isCDStringValue(&I))
+        if (!isScalarType(I.getType()) && !isCDStringValue(&I) &&
+            !isCDArrayValue(&I))
           unsupportedInstruction(I);
         ValueRegisters[&I] = allocateRegister();
       }

@@ -188,6 +188,13 @@ static bool validateInstruction(const CDInstruction &Instruction,
                               Error))
       return false;
     return true;
+  case CDOpcode::Array:
+    if (!validateUnusedFields(Instruction, false, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
   case CDOpcode::Move:
   case CDOpcode::Negate:
   case CDOpcode::Not:
@@ -350,6 +357,11 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
   case CDOpcode::MakeFunction:
     OS << "make_function " << functionName(Instruction.reference);
     break;
+  case CDOpcode::Array:
+    OS << "array [";
+    writeOperands(OS, Instruction.operands);
+    OS << "]";
+    break;
   case CDOpcode::Move:
     OS << "move " << registerName(Instruction.operands[0]);
     break;
@@ -437,6 +449,15 @@ CDInstruction CDInstruction::makeFunction(unsigned Destination,
   return Instruction;
 }
 
+CDInstruction CDInstruction::array(unsigned Destination,
+                                    std::vector<unsigned> Elements) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Array;
+  Instruction.result = Destination;
+  Instruction.operands = std::move(Elements);
+  return Instruction;
+}
+
 CDInstruction CDInstruction::move(unsigned Destination, unsigned Source) {
   return unary(CDOpcode::Move, Destination, Source);
 }
@@ -520,6 +541,8 @@ const char *opcodeName(CDOpcode Opcode) {
     return "constant";
   case CDOpcode::MakeFunction:
     return "make_function";
+  case CDOpcode::Array:
+    return "array";
   case CDOpcode::Move:
     return "move";
   case CDOpcode::LoadVar:

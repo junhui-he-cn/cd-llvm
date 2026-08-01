@@ -51,12 +51,18 @@ static bool isCDStringValue(const Value *Value) {
   return Call && cd::isStringIntrinsic(*Call);
 }
 
+static bool isCDArrayValue(const Value *Value) {
+  const auto *Call = dyn_cast<CallBase>(Value);
+  return Call && cd::isArrayIntrinsic(*Call);
+}
+
 static bool isSupportedValue(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
-  return isSupportedValue(Value) || isCDStringValue(Value);
+  return isSupportedValue(Value) || isCDStringValue(Value) ||
+         isCDArrayValue(Value);
 }
 
 [[noreturn]] static void unsupported(StringRef Message) {
@@ -237,7 +243,7 @@ class CDMachineModuleEmitter {
             isa<AllocaInst>(&Instruction) || Instruction.getType()->isVoidTy())
           continue;
         if (!isScalarType(Instruction.getType()) &&
-            !isCDStringValue(&Instruction))
+            !isCDStringValue(&Instruction) && !isCDArrayValue(&Instruction))
           unsupported("a non-scalar instruction result");
         createValueRegister(MRI, &Instruction);
       }
@@ -337,6 +343,25 @@ class CDMachineModuleEmitter {
       Register Result = createValueRegister(MRI, &Call);
       BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
           .addImm(addString(*Value));
+      return;
+    }
+
+    if (Callee && cd::isArrayIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateArrayCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      std::vector<Register> Elements;
+      Elements.reserve(Call.arg_size() - 1);
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        Elements.push_back(
+            valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
+
+      MachineInstrBuilder ArrayBuilder =
+          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ARRAY), Result);
+      for (Register Element : Elements)
+        ArrayBuilder.addReg(Element);
       return;
     }
 
@@ -760,6 +785,21 @@ class CDMachineModuleEmitter {
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               MI.getOperand(1).getImm()));
           break;
+        case CD::CD_ARRAY: {
+          if (MI.getNumOperands() < 1 || !MI.getOperand(0).isReg())
+            unsupported("an invalid CD_ARRAY machine instruction");
+          std::vector<unsigned> Elements;
+          for (unsigned Index = 1; Index < MI.getNumOperands(); ++Index) {
+            if (!MI.getOperand(Index).isReg())
+              unsupported("an invalid CD_ARRAY element operand");
+            Elements.push_back(artifactRegister(
+                MI.getOperand(Index).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::array(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              std::move(Elements)));
+          break;
+        }
         case CD::CD_LOAD_VAR:
           if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
               !MI.getOperand(1).isImm())

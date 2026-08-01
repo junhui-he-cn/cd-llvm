@@ -61,6 +61,16 @@ one-argument `cd_print` or `print` declaration. Ordinary pointer operations,
 comparisons, storage, function parameters/returns, and non-string globals
 remain rejected.
 
+The first M4 collection operation is `llvm.cd.array(i32 count, ...)`. The
+immediate count must equal the number of following scalar, address-space-zero
+`nil`, string-token, or array-token operands. The variadic textual IR call type
+must be explicit (`call ptr (i32, ...) @llvm.cd.array(...)`). The target lowers
+the payload to the existing `array` instruction; array results may be printed
+or nested in another constructor, while ordinary pointer, aggregate, storage,
+function-parameter/return, and `select` uses remain rejected. The direct and
+machine paths validate the same capability matrix and share the same artifact
+bridge.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -68,6 +78,6 @@ elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
 must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
-output.  `-filetype=obj` is rejected.  Arrays, maps, structs, variants,
-non-string globals, native calls, and debug source sections remain deferred
-until an explicit LLVM-to-CD representation is defined.
+output.  `-filetype=obj` is rejected.  Maps, structs, variants, non-string
+globals, native calls, and debug source sections remain deferred until an
+explicit LLVM-to-CD representation is defined.
