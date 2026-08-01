@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string ABI design gate recorded |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array-constructor, and array-access slices implemented |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -245,8 +245,8 @@ before any collection or pointer lowering is added.
 - Create or modify: `llvm/include/llvm/IR/IntrinsicsCD.td` and its include registration in `llvm/include/llvm/IR/Intrinsics.td`.
 - Create: `llvm/lib/Target/CD/CDValueABI.{h,cpp}` if the intrinsic-to-bytecode mapping does not fit the artifact emitter.
 - Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` and `CDBytecodeEmitter.{h,cpp}`.
-- Create: `llvm/test/CodeGen/CD/cdbc-array.ll` and
-  `llvm/test/CodeGen/CD/cdbc-array-errors.ll`.
+- Create: `llvm/test/CodeGen/CD/cdbc-array.ll`,
+  `llvm/test/CodeGen/CD/cdbc-array-errors.ll`, and the array-access fixtures.
 - Create: `llvm/test/CodeGen/CD/cdbc-records.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-native.ll`.
 - Synchronize, in the independent checkout: `cd-compiler/docs/bytecode-text-format.md`, `cd-compiler/vm-rs/src/format.rs`, `cd-compiler/vm-rs/src/bytecode.rs`, and `cd-compiler/vm-rs/src/vm.rs`.
@@ -284,9 +284,27 @@ pointers, vectors, foreign-address-space nulls, poison, and non-immediate
 counts are covered by `cdbc-array-errors.ll`.  The direct and machine paths
 share `CDValueABI` validation, `CDBytecodeFormat`, and the Rust VM parity gate;
 machine operand constants are materialized before `CD_ARRAY` so `dump` and
-`run` observe the same values on both paths.  Array results remain limited to
-printing and nested construction; indexing, mutation, `len`, return/parameter,
+`run` observe the same values on both paths.  Array results may now be printed,
+nested, indexed, measured, or asserted locally; mutation, return/parameter,
 PHI/`select`, and ordinary pointer operations remain deferred.
+
+The next access ABI gate fixes `llvm.cd.index(ptr, double) -> ptr`,
+`llvm.cd.len(ptr) -> double`, and `llvm.cd.assert.array(ptr) -> ptr`.  The
+collection operand must be an explicit CD dynamic-value token (or CD nil),
+ordinary pointers remain rejected, and results stay local until the
+function-value ABI is specified.  The access group is implemented only after
+positive, malformed, Rust `dump`/`run`, runtime-error, and direct/machine parity
+tests agree with the existing `index`, `len`, and `assert_array` VM operations.
+
+The array-access group is now implemented.  `llvm.cd.index` returns a local
+dynamic-value token, `llvm.cd.len` returns a `double` CD number, and
+`llvm.cd.assert.array` emits the existing `assert_array` operation.  Positive
+coverage in `cdbc-array-access.ll` exercises scalar and nested indexing,
+length, assertion, direct/machine FileCheck, and the parity manifest; malformed
+ordinary-pointer and intrinsic-signature cases are in
+`cdbc-array-access-errors.ll`.  The nil assertion fixture preserves the Rust VM
+runtime error (`for-in expects array, range, or map`) on both paths.  Array
+mutation, maps, and dynamic-value function boundaries remain deferred.
 
 **Exit criteria:** Every newly emitted opcode is documented, parsed, verified, and executed by the Rust VM; collection mutation and failure behavior are covered; ordinary LLVM aggregates remain rejected unless they use the defined CD ABI.
 
@@ -357,14 +375,12 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Record the collection ABI gate: constructor operand capabilities,
-   ownership/aliasing, mutation failure behavior, and the `cdbc 0.1` array/map
-   operation bridge.
-2. Keep ordinary LLVM aggregates and pointers rejected while the collection
-   gate is being reviewed; do not infer an array or map from `alloca`, globals,
-   or aggregate instructions.
-3. Implement only the first explicit collection intrinsic after the gate has
-   positive, malformed, Rust `dump`/`run`, and direct/machine parity tests.
+1. Record the array-mutation ABI gate for `llvm.cd.assign_index`: collection,
+   index, value capabilities, aliasing, result identity, and failure behavior.
+2. Keep ordinary LLVM aggregates and pointers rejected; do not infer mutation
+   from `alloca`, globals, stores, or aggregate instructions.
+3. Implement only `assign_index` after positive, malformed, Rust `dump`/`run`,
+   runtime-error, and direct/machine parity tests agree with the VM contract.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 

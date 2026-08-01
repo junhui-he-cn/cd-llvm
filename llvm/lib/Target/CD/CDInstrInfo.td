@@ -29,6 +29,16 @@ def CD_MAKE_FUNCTION : CDPseudo<(outs CDValue:$dst), (ins cdindex:$function)>;
 // CD_ARRAY -> CDOpcode::Array.
 def CD_ARRAY : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 
+// CD_INDEX -> CDOpcode::Index.
+def CD_INDEX : CDPseudo<(outs CDValue:$dst),
+                        (ins CDValue:$collection, CDValue:$index)>;
+
+// CD_LEN -> CDOpcode::Len.
+def CD_LEN : CDPseudo<(outs CDValue:$dst), (ins CDValue:$value)>;
+
+// CD_ASSERT_ARRAY -> CDOpcode::AssertArray.
+def CD_ASSERT_ARRAY : CDPseudo<(outs CDValue:$dst), (ins CDValue:$value)>;
+
 // CD_MOVE -> CDOpcode::Move.
 def CD_MOVE : CDPseudo<(outs CDValue:$dst), (ins CDValue:$source)>;
 

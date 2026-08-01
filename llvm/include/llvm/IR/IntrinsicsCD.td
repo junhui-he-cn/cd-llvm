@@ -17,3 +17,10 @@ def int_cd_string : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty],
 def int_cd_array : DefaultAttrsIntrinsic<
     [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
     [ImmArg<ArgIndex<0>>]>;
+
+def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
+                                         [llvm_ptr_ty, llvm_double_ty]>;
+
+def int_cd_len : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty]>;
+
+def int_cd_assert_array : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty]>;

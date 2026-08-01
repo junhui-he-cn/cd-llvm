@@ -1,6 +1,7 @@
 # LLVM CD value ABI
 
-Status: M4 string-constant and array-constructor slices implemented, 2026-08-01.
+Status: M4 string-constant, array-constructor, and array-access slices
+implemented, 2026-08-01.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -72,6 +73,25 @@ intrinsic, textual IR spells the call type explicitly, for example
 `call ptr (i32, ...) @llvm.cd.array(i32 0)`.  The intrinsic deliberately has no
 `IntrNoMem` property: array construction creates a fresh mutable VM object and
 must not be treated as a pure, freely CSE-able value by LLVM optimization.
+
+The first array-access operations use these signatures:
+
+```tablegen
+def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
+                                         [llvm_ptr_ty, llvm_double_ty]>;
+def int_cd_len : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty]>;
+def int_cd_assert_array : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty]>;
+```
+
+`llvm.cd.index` takes a CD dynamic-value token and a CD number index. Its
+result is another dynamic-value token because an array slot may contain any
+value capability admitted by `llvm.cd.array`. `llvm.cd.len` returns the CD
+number representation as `double`. `llvm.cd.assert.array` preserves the
+existing VM assertion/conversion operation: it returns an array-compatible
+dynamic value or raises the VM's normal runtime error. These operations are
+not pure in the LLVM sense; their declarations intentionally retain the
+default memory/side-effect properties so an optimizer cannot erase a bounds
+or type failure or duplicate a mutable-value observation.
 
 The intrinsic must be used with the registered declaration and exact `ptr`
 signature.  A manually declared function with a similar name is not a CD ABI
@@ -216,6 +236,39 @@ direct and machine paths share the typed artifact model, and their only
 permitted difference is virtual/register numbering.  Printing the result uses
 the Rust VM's existing array formatting, including nested values.
 
+### Array access and assertion
+
+The access group maps directly to existing `cdbc 0.1` operations:
+
+```text
+rD = index rArray, rIndex
+rD = len rArray
+rD = assert_array rValue
+```
+
+The collection operand must be a CD dynamic-value token produced by an
+explicit `llvm.cd.*` intrinsic or the `ptr null` CD nil token. An arbitrary
+LLVM pointer, alloca, global, aggregate, or pointer operation is rejected
+during lowering. `index` uses the Rust VM's array index rules: the index must
+be a finite, non-negative integer-valued number and the position must be in
+range. The VM owns the exact runtime error text. `len` observes the current
+length of an array-compatible value and returns a number. `assert_array`
+passes arrays through and applies the VM's existing iterable-to-array
+conversion for future map/range producers; a nil or other incompatible value
+is a runtime error rather than a compile-time reinterpretation.
+
+Array handles retain the existing ownership contract: `index` returns a value
+handle, and `assert_array` returns either the original array handle or a fresh
+conversion-owned array as defined by the VM. Neither operation mutates the
+source array. `len` is an observation only. Resource-budget failures and
+runtime type/bounds failures remain VM errors and are never lowered to `nil`.
+
+The first LLVM access slice permits these results only as local dynamic values:
+they may be printed, used as array-constructor elements, or fed to another
+explicit access/assertion intrinsic. Ordinary pointer operations, external
+calls, function parameters/returns, PHI/select propagation, and mutation via
+`assign_index` remain outside this slice.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -233,6 +286,14 @@ The array-constructor group is complete only when `llvm.cd.array` accepts the
 documented operand capabilities, emits `array`, rejects ordinary pointer and
 aggregate substitutes, passes Rust `dump` and `run`, and has direct/machine
 artifact and runtime parity for empty, mixed, and nested values.
+
+The array-access group is complete only when `llvm.cd.index`, `llvm.cd.len`,
+and `llvm.cd.assert.array` have exact intrinsic signatures, reject ordinary
+pointer substitutes in both backends, emit the existing `index`, `len`, and
+`assert_array` operations, and pass Rust `dump`/`run` plus direct/machine
+behavior parity. The positive path must cover a scalar array element, a nested
+array handle, length observation, and assertion; a separate runtime check must
+preserve the VM's bounds/type errors.
 
 The sibling `cd-compiler` checkout already defines `string` constants in the
 `cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the

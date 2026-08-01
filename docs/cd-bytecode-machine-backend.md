@@ -1,7 +1,8 @@
 # CD bytecode machine-backend design gate
 
-Status: M3 complete for the supported scalar/control-flow subset; M4 string
-and array-constructor slices share the machine artifact bridge, 2026-08-01.
+Status: M3 complete for the supported scalar/control-flow subset; M4 string,
+array-constructor, and array-access slices share the machine artifact bridge,
+2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -61,6 +62,13 @@ are defined before the array instruction executes.  The reproducible parity
 gate is implemented by `llvm/utils/cd_bytecode_parity.py` and the corpus
 manifest at `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
 
+The array-access slice adds `CD_INDEX`, `CD_LEN`, and `CD_ASSERT_ARRAY`. Their
+operands stay in the `CDValue` virtual register class, and the bridge emits
+the existing `index`, `len`, and `assert_array` artifact operations after
+validating that every opaque pointer operand came from an explicit CD
+intrinsic. Scalar index constants are materialized before `CD_INDEX`, so the
+machine path preserves the direct path's definition-before-use ordering.
+
 ## Direct/machine parity gate
 
 Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
@@ -91,6 +99,9 @@ the only scalar/control-flow operations that currently have stable
 | `CD_CONSTANT` | `Constant` | destination value, module constant index |
 | `CD_MAKE_FUNCTION` | `MakeFunction` | destination value, module function index |
 | `CD_ARRAY` | `Array` | destination value, variadic element values |
+| `CD_INDEX` | `Index` | destination value, collection value, index value |
+| `CD_LEN` | `Len` | destination value, collection value |
+| `CD_ASSERT_ARRAY` | `AssertArray` | destination value, value |
 | `CD_MOVE` | `Move` | destination value, source value |
 | `CD_LOAD_VAR` | `LoadVar` | destination value, module name index |
 | `CD_STORE_VAR` | `StoreVar` | module name index, source value |
@@ -130,6 +141,6 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The next stage is the M4 CD value ABI design.  It must retain the direct path,
-keep the machine path opt-in, and define target-specific operations before any
-aggregate or pointer lowering is added.
+The next stage is the M4 array-mutation ABI. It must retain the direct path,
+keep the machine path opt-in, and define `assign_index` before any map,
+aggregate, or ordinary-pointer lowering is added.

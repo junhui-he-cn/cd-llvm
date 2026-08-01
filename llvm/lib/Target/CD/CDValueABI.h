@@ -24,12 +24,27 @@ bool isStringIntrinsic(const CallBase &Call);
 
 bool isArrayIntrinsic(const CallBase &Call);
 
+bool isIndexIntrinsic(const CallBase &Call);
+
+bool isLenIntrinsic(const CallBase &Call);
+
+bool isAssertArrayIntrinsic(const CallBase &Call);
+
+/// Return whether a value is an opaque CD dynamic-value token.
+bool isCDValue(const Value &Value);
+
 /// Return whether a value is a valid operand capability for llvm.cd.array.
 bool isArrayElement(const Value &Value);
 
 /// Validate the result, immediate element count, and variadic operands of
 /// llvm.cd.array.
 bool validateArrayCall(const CallBase &Call, std::string &Error);
+
+bool validateIndexCall(const CallBase &Call, std::string &Error);
+
+bool validateLenCall(const CallBase &Call, std::string &Error);
+
+bool validateAssertArrayCall(const CallBase &Call, std::string &Error);
 
 /// Extract the immutable UTF-8 payload accepted by llvm.cd.string.
 ///

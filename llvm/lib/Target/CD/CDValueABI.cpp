@@ -32,6 +32,33 @@ bool isArrayIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_array;
 }
 
+bool isIndexIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_index;
+}
+
+bool isLenIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_len;
+}
+
+bool isAssertArrayIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_assert_array;
+}
+
+bool isCDValue(const Value &Value) {
+  if (const auto *Null = dyn_cast<ConstantPointerNull>(&Value))
+    return cast<PointerType>(Null->getType())->getAddressSpace() == 0;
+
+  const auto *Call = dyn_cast<CallBase>(&Value);
+  return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
+                  isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call));
+}
+
 bool isArrayElement(const Value &Value) {
   if (isa<UndefValue>(&Value) || isa<PoisonValue>(&Value))
     return false;
@@ -39,11 +66,7 @@ bool isArrayElement(const Value &Value) {
   if (Value.getType()->isIntegerTy() || Value.getType()->isFloatingPointTy())
     return true;
 
-  if (const auto *Null = dyn_cast<ConstantPointerNull>(&Value))
-    return cast<PointerType>(Null->getType())->getAddressSpace() == 0;
-
-  const auto *Call = dyn_cast<CallBase>(&Value);
-  return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call));
+  return isCDValue(Value);
 }
 
 bool validateArrayCall(const CallBase &Call, std::string &Error) {
@@ -84,6 +107,76 @@ bool validateArrayCall(const CallBase &Call, std::string &Error) {
   }
 
   return true;
+}
+
+static bool validateCDValueOperand(const CallBase &Call, unsigned Index,
+                                   StringRef Operation, StringRef Role,
+                                   std::string &Error) {
+  if (Index >= Call.arg_size() || !isCDValue(*Call.getArgOperand(Index))) {
+    Error = (Operation + " requires a CD dynamic-value " + Role).str();
+    return false;
+  }
+  return true;
+}
+
+bool validateIndexCall(const CallBase &Call, std::string &Error) {
+  if (!isIndexIntrinsic(Call)) {
+    Error = "not an llvm.cd.index call";
+    return false;
+  }
+
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.index requires a ptr result";
+    return false;
+  }
+  if (Call.arg_size() != 2) {
+    Error = "llvm.cd.index requires a collection and index operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.index", "collection", Error))
+    return false;
+  if (!Call.getArgOperand(1)->getType()->isDoubleTy()) {
+    Error = "llvm.cd.index requires a double index";
+    return false;
+  }
+  return true;
+}
+
+bool validateLenCall(const CallBase &Call, std::string &Error) {
+  if (!isLenIntrinsic(Call)) {
+    Error = "not an llvm.cd.len call";
+    return false;
+  }
+
+  if (!Call.getType()->isDoubleTy()) {
+    Error = "llvm.cd.len requires a double result";
+    return false;
+  }
+  if (Call.arg_size() != 1) {
+    Error = "llvm.cd.len requires one collection operand";
+    return false;
+  }
+  return validateCDValueOperand(Call, 0, "llvm.cd.len", "operand", Error);
+}
+
+bool validateAssertArrayCall(const CallBase &Call, std::string &Error) {
+  if (!isAssertArrayIntrinsic(Call)) {
+    Error = "not an llvm.cd.assert.array call";
+    return false;
+  }
+
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.assert.array requires a ptr result";
+    return false;
+  }
+  if (Call.arg_size() != 1) {
+    Error = "llvm.cd.assert.array requires one operand";
+    return false;
+  }
+  return validateCDValueOperand(Call, 0, "llvm.cd.assert.array", "operand",
+                                Error);
 }
 
 std::optional<StringRef> getStringConstant(const CallBase &Call,

@@ -43,23 +43,12 @@ static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
 }
 
-static bool isCDStringValue(const Value *Value) {
-  const auto *Call = dyn_cast<CallBase>(Value);
-  return Call && cd::isStringIntrinsic(*Call);
-}
-
-static bool isCDArrayValue(const Value *Value) {
-  const auto *Call = dyn_cast<CallBase>(Value);
-  return Call && cd::isArrayIntrinsic(*Call);
-}
-
 static bool isSupportedOperand(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
-  return isSupportedOperand(Value) || isCDStringValue(Value) ||
-         isCDArrayValue(Value);
+  return isSupportedOperand(Value) || cd::isCDValue(*Value);
 }
 
 [[noreturn]] static void unsupportedInstruction(const Instruction &I) {
@@ -336,6 +325,34 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isIndexIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateIndexCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::index(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          valueRegister(Call.getArgOperand(1))));
+      return;
+    }
+
+    if (cd::isLenIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateLenCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::len(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0))));
+      return;
+    }
+
+    if (cd::isAssertArrayIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssertArrayCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::assertArray(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0))));
+      return;
+    }
+
     if (Callee->isDeclaration() && Callee->getName() == "cd_print" &&
         Call.arg_size() == 1 && Call.getType()->isVoidTy()) {
       if (!isSupportedPrintValue(Call.getArgOperand(0)))
@@ -533,8 +550,7 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
       }
 
       if (!I.getType()->isVoidTy()) {
-        if (!isScalarType(I.getType()) && !isCDStringValue(&I) &&
-            !isCDArrayValue(&I))
+        if (!isScalarType(I.getType()) && !cd::isCDValue(I))
           unsupportedInstruction(I);
         ValueRegisters[&I] = allocateRegister();
       }

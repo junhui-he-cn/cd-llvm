@@ -195,6 +195,17 @@ static bool validateInstruction(const CDInstruction &Instruction,
         !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
       return false;
     return true;
+  case CDOpcode::Index:
+    if (!validateUnusedFields(Instruction, false, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 2, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
+  case CDOpcode::Len:
+  case CDOpcode::AssertArray:
   case CDOpcode::Move:
   case CDOpcode::Negate:
   case CDOpcode::Not:
@@ -362,6 +373,16 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     writeOperands(OS, Instruction.operands);
     OS << "]";
     break;
+  case CDOpcode::Index:
+    OS << "index ";
+    writeOperands(OS, Instruction.operands);
+    break;
+  case CDOpcode::Len:
+    OS << "len " << registerName(Instruction.operands[0]);
+    break;
+  case CDOpcode::AssertArray:
+    OS << "assert_array " << registerName(Instruction.operands[0]);
+    break;
   case CDOpcode::Move:
     OS << "move " << registerName(Instruction.operands[0]);
     break;
@@ -458,6 +479,23 @@ CDInstruction CDInstruction::array(unsigned Destination,
   return Instruction;
 }
 
+CDInstruction CDInstruction::index(unsigned Destination, unsigned Collection,
+                                    unsigned Index) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Index;
+  Instruction.result = Destination;
+  Instruction.operands = {Collection, Index};
+  return Instruction;
+}
+
+CDInstruction CDInstruction::len(unsigned Destination, unsigned Value) {
+  return unary(CDOpcode::Len, Destination, Value);
+}
+
+CDInstruction CDInstruction::assertArray(unsigned Destination, unsigned Value) {
+  return unary(CDOpcode::AssertArray, Destination, Value);
+}
+
 CDInstruction CDInstruction::move(unsigned Destination, unsigned Source) {
   return unary(CDOpcode::Move, Destination, Source);
 }
@@ -543,6 +581,12 @@ const char *opcodeName(CDOpcode Opcode) {
     return "make_function";
   case CDOpcode::Array:
     return "array";
+  case CDOpcode::Index:
+    return "index";
+  case CDOpcode::Len:
+    return "len";
+  case CDOpcode::AssertArray:
+    return "assert_array";
   case CDOpcode::Move:
     return "move";
   case CDOpcode::LoadVar:

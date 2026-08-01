@@ -71,6 +71,17 @@ function-parameter/return, and `select` uses remain rejected. The direct and
 machine paths validate the same capability matrix and share the same artifact
 bridge.
 
+The first M4 array-access operations use `llvm.cd.index(ptr, double)`,
+`llvm.cd.len(ptr)`, and `llvm.cd.assert.array(ptr)`. Their collection operands
+must be explicit CD dynamic-value tokens (or the CD nil token), not arbitrary
+LLVM pointers. They lower to the existing `index`, `len`, and `assert_array`
+instructions. Index results remain dynamic-value tokens so scalar and nested
+array elements can share one ABI; `len` returns a CD number as `double`.
+`assert.array` preserves the VM's runtime type/conversion behavior. The direct
+and machine paths share validation, artifact serialization, and Rust VM output
+parity. These results remain local and cannot yet cross ordinary function,
+pointer, PHI/select, or mutation boundaries.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code

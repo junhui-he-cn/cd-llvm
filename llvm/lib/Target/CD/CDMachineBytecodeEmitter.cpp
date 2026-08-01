@@ -46,23 +46,12 @@ static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
 }
 
-static bool isCDStringValue(const Value *Value) {
-  const auto *Call = dyn_cast<CallBase>(Value);
-  return Call && cd::isStringIntrinsic(*Call);
-}
-
-static bool isCDArrayValue(const Value *Value) {
-  const auto *Call = dyn_cast<CallBase>(Value);
-  return Call && cd::isArrayIntrinsic(*Call);
-}
-
 static bool isSupportedValue(const Value *Value) {
   return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
-  return isSupportedValue(Value) || isCDStringValue(Value) ||
-         isCDArrayValue(Value);
+  return isSupportedValue(Value) || cd::isCDValue(*Value);
 }
 
 [[noreturn]] static void unsupported(StringRef Message) {
@@ -243,7 +232,7 @@ class CDMachineModuleEmitter {
             isa<AllocaInst>(&Instruction) || Instruction.getType()->isVoidTy())
           continue;
         if (!isScalarType(Instruction.getType()) &&
-            !isCDStringValue(&Instruction) && !isCDArrayValue(&Instruction))
+            !cd::isCDValue(Instruction))
           unsupported("a non-scalar instruction result");
         createValueRegister(MRI, &Instruction);
       }
@@ -362,6 +351,45 @@ class CDMachineModuleEmitter {
           BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ARRAY), Result);
       for (Register Element : Elements)
         ArrayBuilder.addReg(Element);
+      return;
+    }
+
+    if (Callee && cd::isIndexIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateIndexCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Collection =
+          valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      Register Index = valueRegister(Call.getArgOperand(1), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_INDEX), Result)
+          .addReg(Collection)
+          .addReg(Index);
+      return;
+    }
+
+    if (Callee && cd::isLenIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateLenCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_LEN), Result)
+          .addReg(Value);
+      return;
+    }
+
+    if (Callee && cd::isAssertArrayIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssertArrayCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSERT_ARRAY), Result)
+          .addReg(Value);
       return;
     }
 
@@ -800,6 +828,26 @@ class CDMachineModuleEmitter {
               std::move(Elements)));
           break;
         }
+        case CD::CD_INDEX:
+          if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg())
+            unsupported("an invalid CD_INDEX machine instruction");
+          Body.instructions.push_back(CDInstruction::index(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(2).getReg(), Registers, Body)));
+          break;
+        case CD::CD_LEN:
+        case CD::CD_ASSERT_ARRAY:
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg())
+            unsupported("an invalid unary collection machine instruction");
+          Body.instructions.push_back(CDInstruction::unary(
+              MI.getOpcode() == CD::CD_LEN ? CDOpcode::Len
+                                           : CDOpcode::AssertArray,
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body)));
+          break;
         case CD::CD_LOAD_VAR:
           if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
               !MI.getOperand(1).isImm())
