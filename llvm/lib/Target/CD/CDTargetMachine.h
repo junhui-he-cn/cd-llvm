@@ -10,14 +10,17 @@
 #define LLVM_LIB_TARGET_CD_CDTARGETMACHINE_H
 
 #include "llvm/CodeGen/CodeGenTargetMachineImpl.h"
+#include <memory>
 #include <optional>
 
 namespace llvm {
 class Function;
+class CDSubtarget;
 class TargetLoweringObjectFile;
 
 class CDTargetMachine final : public CodeGenTargetMachineImpl {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
+  mutable std::unique_ptr<CDSubtarget> Subtarget;
 
 public:
   CDTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
@@ -28,8 +31,11 @@ public:
 
   bool addPassesToEmitFile(PassManagerBase &PM, raw_pwrite_stream &Out,
                            raw_pwrite_stream *DwoOut,
-                           CodeGenFileType FileType, bool DisableVerify,
+          CodeGenFileType FileType, bool DisableVerify,
                            MachineModuleInfoWrapperPass *MMIWP) override;
+
+  const TargetSubtargetInfo *
+  getSubtargetImpl(const Function &F) const override;
 
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();

@@ -8,6 +8,7 @@
 
 #include "CDTargetMachine.h"
 #include "CDBytecodeEmitter.h"
+#include "CDSubtarget.h"
 #include "TargetInfo/CDTargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/IR/LegacyPassManager.h"
@@ -56,4 +57,15 @@ bool CDTargetMachine::addPassesToEmitFile(
 
   PM.add(createCDBytecodeEmitterPass(Out));
   return false;
+}
+
+const TargetSubtargetInfo *
+CDTargetMachine::getSubtargetImpl(const Function &) const {
+  if (!Subtarget) {
+    const StringRef CPU = getTargetCPU();
+    const std::string CPUName = CPU.empty() ? "generic" : CPU.str();
+    Subtarget = std::make_unique<CDSubtarget>(
+        getTargetTriple(), CPUName, getTargetFeatureString().str(), *this);
+  }
+  return Subtarget.get();
 }

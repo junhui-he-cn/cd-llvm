@@ -7,21 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "../TargetInfo/CDTargetInfo.h"
+#include "../CD.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Compiler.h"
-
-#define GET_INSTRINFO_ENUM
-#include "CDGenInstrInfo.inc"
-
-#define GET_REGINFO_ENUM
-#include "CDGenRegisterInfo.inc"
-
-#define GET_SUBTARGETINFO_ENUM
-#include "CDGenSubtargetInfo.inc"
 
 #define GET_INSTRINFO_MC_DESC
 #include "CDGenInstrInfo.inc"

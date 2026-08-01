@@ -11,6 +11,10 @@ add_public_tablegen_target(CDCommonTableGen)
 add_llvm_target(CDCodeGen
   CDBytecodeFormat.cpp
   CDBytecodeEmitter.cpp
+  CDInstrInfo.cpp
+  CDRegisterInfo.cpp
+  CDISelLowering.cpp
+  CDSubtarget.cpp
   CDTargetMachine.cpp
 
   DEPENDS
