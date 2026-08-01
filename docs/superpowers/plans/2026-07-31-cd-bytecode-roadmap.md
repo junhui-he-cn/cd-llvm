@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Planned; design gate first |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string ABI design gate recorded |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -234,6 +234,11 @@ checks.  Every case passes Rust `dump` and direct/machine `run` output parity.
 
 **Design decision:** Use target-specific CD IR operations, preferably `llvm.cd.*` intrinsics declared in `llvm/include/llvm/IR/IntrinsicsCD.td`, for dynamic CD values. Both the direct emitter and the TableGen machine path recognize those operations and reject ordinary aggregate/pointer instructions used as substitutes. The exact intrinsic signatures and ownership rules must be written in `docs/cd-bytecode-llvm-abi.md` before implementation.
 
+The first design gate is recorded in
+[`docs/cd-bytecode-llvm-abi.md`](../cd-bytecode-llvm-abi.md).  It fixes the
+opaque CD-value token boundary and the `llvm.cd.string` constant contract
+before any collection or pointer lowering is added.
+
 **Files:**
 
 - Create: `docs/cd-bytecode-llvm-abi.md`.
@@ -326,11 +331,12 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Write and review `docs/cd-bytecode-llvm-abi.md` before implementing any M4
-   collection, record, variant, or native-call operation.
-2. Define the first `llvm.cd.*` intrinsic group and its malformed-input tests.
-3. Keep both direct and machine paths behind the existing explicit ABI and
-   parity gates while implementing that group.
+1. Implement the documented `llvm.cd.string` intrinsic and its malformed-input
+   tests.
+2. Run direct/machine `dump`/`run` parity for ASCII, UTF-8, escaping,
+   deduplication, and empty-string fixtures.
+3. Keep both direct and machine paths behind the explicit ABI and parity gates;
+   do not begin collection lowering until its ownership contract is recorded.
 
 Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
 
