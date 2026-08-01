@@ -7,10 +7,12 @@ compare a normalized artifact projection that only canonicalizes constant,
 name, function, and virtual-register indices.  Machine-specific control-flow
 expansions can therefore be covered by behavior-mode cases without hiding an
 unexpected scalar instruction change behind a broad text normalization.
+Error-mode cases require both paths to fail with the same exact VM diagnostic.
 """
 
 import argparse
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -133,19 +135,28 @@ def normalize_artifact_indices(text):
 
 
 def parse_manifest(lines):
-    """Return (mode, input path) entries from a parity manifest."""
+    """Return manifest entries; error entries also carry an expected diagnostic."""
 
     entries = []
     for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        fields = stripped.split()
+        try:
+            fields = shlex.split(stripped)
+        except ValueError as error:
+            raise ValueError(f"manifest line {line_number}: {error}") from error
+        if len(fields) == 2 and fields[0] in {"artifact", "behavior"}:
+            entries.append((fields[0], fields[1]))
+            continue
+        if len(fields) == 3 and fields[0] == "error" and fields[2]:
+            entries.append((fields[0], fields[1], fields[2]))
+            continue
         if len(fields) != 2 or fields[0] not in {"artifact", "behavior"}:
             raise ValueError(
-                f"manifest line {line_number}: expected '<artifact|behavior> <input>'"
+                f"manifest line {line_number}: expected '<artifact|behavior> <input>' "
+                "or 'error <input> \"<diagnostic>\"'"
             )
-        entries.append((fields[0], fields[1]))
     return entries
 
 
@@ -158,7 +169,23 @@ def _run(command, description):
     return result.stdout
 
 
-def _check_case(llc, vm, root, mode, input_path):
+def _run_expected_failure(command, description, expected):
+    result = subprocess.run(
+        command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    if result.returncode == 0:
+        command_text = " ".join(str(argument) for argument in command)
+        raise RuntimeError(f"{description} unexpectedly succeeded ({command_text})")
+    diagnostic = result.stderr.strip() or result.stdout.strip()
+    if diagnostic != expected:
+        raise RuntimeError(
+            f"{description} diagnostic mismatch:\n"
+            f"expected: {expected!r}\nactual: {diagnostic!r}"
+        )
+    return diagnostic
+
+
+def _check_case(llc, vm, root, mode, input_path, expected_error=None):
     source = (root / input_path).resolve()
     if not source.is_file():
         raise RuntimeError(f"input does not exist: {source}")
@@ -187,6 +214,26 @@ def _check_case(llc, vm, root, mode, input_path):
         machine_dump = _run([str(vm), "dump", str(machine)], f"machine dump for {input_path}")
         if not direct_dump.startswith("cdbc 0.1") or not machine_dump.startswith("cdbc 0.1"):
             raise RuntimeError(f"VM dump did not produce cdbc 0.1 for {input_path}")
+
+        if mode == "error":
+            if expected_error is None:
+                raise RuntimeError(f"error case has no expected diagnostic: {input_path}")
+            direct_error = _run_expected_failure(
+                [str(vm), "run", str(direct)],
+                f"direct run for {input_path}",
+                expected_error,
+            )
+            machine_error = _run_expected_failure(
+                [str(vm), "run", str(machine)],
+                f"machine run for {input_path}",
+                expected_error,
+            )
+            if direct_error != machine_error:
+                raise RuntimeError(
+                    f"VM error mismatch for {input_path}:\n"
+                    f"direct: {direct_error!r}\nmachine: {machine_error!r}"
+                )
+            return
 
         direct_output = _run([str(vm), "run", str(direct)], f"direct run for {input_path}")
         machine_output = _run([str(vm), "run", str(machine)], f"machine run for {input_path}")
@@ -222,8 +269,10 @@ def main(argv=None):
     args = _parser().parse_args(argv)
     try:
         entries = parse_manifest(args.manifest.read_text(encoding="utf-8").splitlines())
-        for mode, input_path in entries:
-            _check_case(args.llc, args.vm, args.root, mode, input_path)
+        for entry in entries:
+            mode, input_path = entry[:2]
+            expected_error = entry[2] if len(entry) == 3 else None
+            _check_case(args.llc, args.vm, args.root, mode, input_path, expected_error)
             print(f"{mode} parity: {input_path}")
     except (OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
