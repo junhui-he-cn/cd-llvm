@@ -42,6 +42,10 @@ static bool isScalarType(const Type *Type) {
   return Type->isIntegerTy() || Type->isFloatingPointTy();
 }
 
+static bool isSupportedValue(const Value *Value) {
+  return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
+}
+
 [[noreturn]] static void unsupported(StringRef Message) {
   report_fatal_error(Twine("CD machine backend does not support ") + Message);
 }
@@ -114,6 +118,13 @@ class CDMachineModuleEmitter {
         .addImm(addConstant(*ConstantValue));
     ConstantRegisters[ConstantValue] = Result;
     return Result;
+  }
+
+  Register materializeNil(MachineRegisterInfo &MRI, MachineBasicBlock &MBB,
+                          const TargetInstrInfo &TII) {
+    const auto *Nil =
+        ConstantPointerNull::get(PointerType::getUnqual(M.getContext()));
+    return materializeConstant(Nil, MRI, MBB, TII);
   }
 
   Register valueRegister(const Value *Value, MachineRegisterInfo &MRI,
@@ -301,12 +312,12 @@ class CDMachineModuleEmitter {
         continue;
 
       if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
-        if (!Return->getReturnValue())
-          unsupported("a void @main return in the first machine slice");
         const Value *ReturnValue = Return->getReturnValue();
-        if (!isScalarType(ReturnValue->getType()))
+        if (ReturnValue && !isSupportedValue(ReturnValue))
           unsupported("a non-scalar @main return");
-        Register Result = valueRegister(ReturnValue, MRI, *MBB, TII);
+        Register Result = ReturnValue
+                              ? valueRegister(ReturnValue, MRI, *MBB, TII)
+                              : materializeNil(MRI, *MBB, TII);
         BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
             .addReg(Result);
         continue;

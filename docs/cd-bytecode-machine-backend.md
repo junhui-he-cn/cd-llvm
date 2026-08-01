@@ -1,11 +1,12 @@
 # CD bytecode machine-backend design gate
 
-Status: M3 foundation design, 2026-08-01.
+Status: M3 implementation in progress, 2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
-existing `cdbc 0.1` artifact.  It is intentionally a design gate: the current
-direct `ModulePass` emitter remains the default compatibility path, and this
-document does not claim that an opt-in machine path is available yet.
+existing `cdbc 0.1` artifact.  It remains a design gate while the current
+direct `ModulePass` emitter stays the default compatibility path.  The opt-in
+machine path is available for the narrow implementation boundary below and
+remains intentionally incomplete.
 
 ## Invariants
 
@@ -33,6 +34,15 @@ document does not claim that an opt-in machine path is available yet.
 - A later artifact bridge resolves symbolic block labels to instruction offsets,
   constructs `llvm::cd::CDArtifact`, and runs `validateArtifact` before the
   canonical serializer writes any output.
+
+## Current implementation boundary
+
+`llc -mtriple=cd-unknown-unknown -cd-backend=machine` currently constructs a
+single `MachineFunction` for a no-argument, single-basic-block `@main` and
+bridges it to the typed artifact model.  The supported values and operations
+are scalar constants, arithmetic, comparisons, scalar casts as `move`, `fneg`,
+boolean inversion as `not`, and `nil`/`ret void` returns.  Function calls,
+parameters, storage, branches, PHI nodes, and aggregate values remain pending.
 
 ## TableGen pseudo-instruction mapping
 
