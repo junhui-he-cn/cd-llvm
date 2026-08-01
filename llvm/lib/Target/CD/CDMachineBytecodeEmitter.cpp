@@ -63,7 +63,10 @@ class CDMachineModuleEmitter {
   DenseMap<const Constant *, Register> ConstantRegisters;
   DenseMap<const Function *, Register> FunctionRegisters;
   DenseMap<const Value *, Register> ValueRegisters;
+  DenseMap<const AllocaInst *, unsigned> AllocaNames;
   std::vector<std::string> ParameterNames;
+  std::set<std::string> UsedStorageNames;
+  unsigned AllocaSerial = 0;
 
   unsigned addName(StringRef Name) {
     auto It = NameIndexes.find(Name);
@@ -161,6 +164,37 @@ class CDMachineModuleEmitter {
         .addImm(FunctionIndex->second);
     FunctionRegisters[FunctionValue] = Result;
     return Result;
+  }
+
+  std::string uniqueStorageName(StringRef Base) {
+    std::string Name = Base.str();
+    if (Name.empty())
+      Name = "alloca" + std::to_string(AllocaSerial++);
+    if (!UsedStorageNames.insert(Name).second) {
+      const std::string Original = Name;
+      unsigned Suffix = 1;
+      do {
+        Name = Original + "#" + std::to_string(Suffix++);
+      } while (!UsedStorageNames.insert(Name).second);
+    }
+    return Name;
+  }
+
+  void prepareStorage(Function &F) {
+    for (BasicBlock &BB : F)
+      for (Instruction &Instruction : BB) {
+        const auto *Alloca = dyn_cast<AllocaInst>(&Instruction);
+        if (!Alloca)
+          continue;
+
+        const auto *ArraySize = dyn_cast<ConstantInt>(Alloca->getArraySize());
+        if (!ArraySize || !ArraySize->isOne() ||
+            !isScalarType(Alloca->getAllocatedType()))
+          unsupported("an unsupported alloca shape");
+        const std::string Name = uniqueStorageName(
+            Alloca->hasName() ? Alloca->getName() : StringRef());
+        AllocaNames[Alloca] = addName(Name);
+      }
   }
 
   Register valueRegister(const Value *Value, MachineRegisterInfo &MRI,
@@ -272,6 +306,40 @@ class CDMachineModuleEmitter {
       CallBuilder.addReg(Argument);
   }
 
+  unsigned allocaName(const Value *Pointer) const {
+    const auto *Alloca = dyn_cast<AllocaInst>(Pointer);
+    if (!Alloca)
+      unsupported("an indirect load or store");
+    auto It = AllocaNames.find(Alloca);
+    if (It == AllocaNames.end())
+      unsupported("an unknown alloca value");
+    return It->second;
+  }
+
+  void lowerLoad(const LoadInst &Load, MachineRegisterInfo &MRI,
+                 MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (Load.isVolatile() || Load.isAtomic() ||
+        !isScalarType(Load.getType()))
+      unsupported("an unsupported load");
+
+    Register Result = createValueRegister(MRI, &Load);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR), Result)
+        .addImm(allocaName(Load.getPointerOperand()));
+  }
+
+  void lowerStore(const StoreInst &Store, MachineRegisterInfo &MRI,
+                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (Store.isVolatile() || Store.isAtomic() ||
+        !isSupportedValue(Store.getValueOperand()))
+      unsupported("an unsupported store");
+
+    Register Source =
+        valueRegister(Store.getValueOperand(), MRI, MBB, TII);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STORE_VAR))
+        .addImm(allocaName(Store.getPointerOperand()))
+        .addReg(Source);
+  }
+
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!isScalarType(Instruction.getType()))
@@ -355,7 +423,10 @@ class CDMachineModuleEmitter {
     ValueRegisters.clear();
     ConstantRegisters.clear();
     FunctionRegisters.clear();
+    AllocaNames.clear();
     ParameterNames.clear();
+    UsedStorageNames.clear();
+    AllocaSerial = 0;
 
     if (IsMain && F.getName() != "main")
       unsupported("a non-main function as the entry body");
@@ -375,7 +446,6 @@ class CDMachineModuleEmitter {
     MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-    std::set<std::string> UsedParameterNames;
     unsigned AnonymousArgumentSerial = 0;
     for (Argument &Argument : F.args()) {
       if (!isScalarType(Argument.getType()))
@@ -384,12 +454,12 @@ class CDMachineModuleEmitter {
       std::string Name = Argument.hasName()
                              ? Argument.getName().str()
                              : "arg" + std::to_string(AnonymousArgumentSerial++);
-      if (!UsedParameterNames.insert(Name).second) {
+      if (!UsedStorageNames.insert(Name).second) {
         const std::string Original = Name;
         unsigned Suffix = 1;
         do {
           Name = Original + "#" + std::to_string(Suffix++);
-        } while (!UsedParameterNames.insert(Name).second);
+        } while (!UsedStorageNames.insert(Name).second);
       }
 
       ParameterNames.push_back(Name);
@@ -398,9 +468,24 @@ class CDMachineModuleEmitter {
           .addImm(addName(Name));
     }
 
+    prepareStorage(F);
+
     for (const Instruction &Instruction : F.getEntryBlock()) {
       if (isa<DbgInfoIntrinsic>(&Instruction))
         continue;
+
+      if (isa<AllocaInst>(&Instruction))
+        continue;
+
+      if (const auto *Load = dyn_cast<LoadInst>(&Instruction)) {
+        lowerLoad(*Load, MRI, *MBB, TII);
+        continue;
+      }
+
+      if (const auto *Store = dyn_cast<StoreInst>(&Instruction)) {
+        lowerStore(*Store, MRI, *MBB, TII);
+        continue;
+      }
 
       if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
         const Value *ReturnValue = Return->getReturnValue();
@@ -476,6 +561,14 @@ class CDMachineModuleEmitter {
           Body.instructions.push_back(CDInstruction::loadVar(
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               MI.getOperand(1).getImm()));
+          break;
+        case CD::CD_STORE_VAR:
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isImm() ||
+              !MI.getOperand(1).isReg())
+            unsupported("an invalid CD_STORE_VAR machine instruction");
+          Body.instructions.push_back(CDInstruction::storeVar(
+              MI.getOperand(0).getImm(),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body)));
           break;
         case CD::CD_MOVE:
         case CD::CD_NEGATE:

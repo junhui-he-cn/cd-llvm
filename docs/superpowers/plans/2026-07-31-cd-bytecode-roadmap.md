@@ -215,7 +215,8 @@ comparisons, scalar casts, `fneg`, boolean inversion, and `nil`/`ret void`
 returns with TableGen-defined pseudo-instructions and focused FileCheck
 coverage.  It now also emits defined-function boundaries, `make_function`,
 `call`, parameter metadata, and `load_var` for scalar function parameters.
-Storage, control flow, PHI lowering, and direct/machine VM parity remain
+Single-slot scalar `alloca` storage now lowers through `load_var` and
+`store_var`.  Control flow, PHI lowering, and direct/machine VM parity remain
 pending.
 
 **Exit criteria:** LLVM TableGen generates usable CD instruction/register/subtarget descriptions; `llc` can select the machine path explicitly; MIR and FileCheck tests pass; Rust `dump` accepts the result; and direct and machine paths agree on `cdbc 0.1` execution for the supported subset.

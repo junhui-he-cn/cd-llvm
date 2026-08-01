@@ -42,8 +42,8 @@ single `MachineFunction` for a no-argument, single-basic-block `@main` and
 bridges it to the typed artifact model.  The supported values and operations
 are scalar constants, arithmetic, comparisons, scalar casts as `move`, `fneg`,
 boolean inversion as `not`, `nil`/`ret void` returns, defined-function calls,
-and scalar function parameters.  Storage, branches, PHI nodes, and aggregate
-values remain pending.
+scalar function parameters, and single-slot scalar storage through `load_var`
+and `store_var`.  Branches, PHI nodes, and aggregate values remain pending.
 
 ## TableGen pseudo-instruction mapping
 
