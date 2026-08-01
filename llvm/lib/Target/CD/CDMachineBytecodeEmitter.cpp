@@ -354,6 +354,25 @@ class CDMachineModuleEmitter {
       return;
     }
 
+    if (Callee && cd::isMapIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateMapCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      std::vector<Register> KeyValueOperands;
+      KeyValueOperands.reserve(Call.arg_size() - 1);
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        KeyValueOperands.push_back(
+            valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
+
+      MachineInstrBuilder MapBuilder =
+          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAP), Result);
+      for (Register KeyValueOperand : KeyValueOperands)
+        MapBuilder.addReg(KeyValueOperand);
+      return;
+    }
+
     if (Callee && cd::isIndexIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateIndexCall(Call, Error))
@@ -843,6 +862,22 @@ class CDMachineModuleEmitter {
           Body.instructions.push_back(CDInstruction::array(
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               std::move(Elements)));
+          break;
+        }
+        case CD::CD_MAP: {
+          if (MI.getNumOperands() < 1 || !MI.getOperand(0).isReg() ||
+              (MI.getNumOperands() - 1) % 2 != 0)
+            unsupported("an invalid CD_MAP machine instruction");
+          std::vector<unsigned> KeyValueOperands;
+          for (unsigned Index = 1; Index < MI.getNumOperands(); ++Index) {
+            if (!MI.getOperand(Index).isReg())
+              unsupported("an invalid CD_MAP operand");
+            KeyValueOperands.push_back(artifactRegister(
+                MI.getOperand(Index).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::map(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              std::move(KeyValueOperands)));
           break;
         }
         case CD::CD_INDEX:

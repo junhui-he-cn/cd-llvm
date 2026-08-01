@@ -1,8 +1,8 @@
 # CD bytecode machine-backend design gate
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
-array-constructor, array-access, and array-mutation slices share the machine
-artifact bridge, 2026-08-01.
+array-constructor, array-access, array-mutation, and map-constructor slices
+share the machine artifact bridge, 2026-08-01.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -76,6 +76,12 @@ existing `assign_index` operation. Scalar and pointer overloads both return
 the assigned value's register type. No ordinary pointer or LLVM store is
 treated as a mutation operation.
 
+The map-constructor slice adds `CD_MAP`. Its alternating key/value operands are
+collected and materialized before the pseudo is inserted, preserving
+definition-before-use ordering for scalar constants. The bridge validates the
+even operand shape and emits the existing `map` artifact operation; duplicate
+keys, nested handles, and runtime lookup failures remain Rust VM semantics.
+
 ## Direct/machine parity gate
 
 Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
@@ -100,14 +106,15 @@ diagnostics to contain the declared expected substring and match each other.
 ## TableGen pseudo-instruction mapping
 
 The generated machine opcode names are deliberately explicit.  They describe
-the only scalar/control-flow operations that currently have stable
-`cdbc 0.1` representations.
+the only currently supported operations that have stable `cdbc 0.1`
+representations.
 
 | TableGen opcode | Artifact opcode | Machine operands |
 | --- | --- | --- |
 | `CD_CONSTANT` | `Constant` | destination value, module constant index |
 | `CD_MAKE_FUNCTION` | `MakeFunction` | destination value, module function index |
 | `CD_ARRAY` | `Array` | destination value, variadic element values |
+| `CD_MAP` | `Map` | destination value, variadic key/value values |
 | `CD_INDEX` | `Index` | destination value, collection value, index value |
 | `CD_ASSIGN_INDEX` | `AssignIndex` | destination value, collection value, index value, assigned value |
 | `CD_LEN` | `Len` | destination value, collection value |
@@ -143,7 +150,7 @@ path and artifact-bridge test.
 The following are outside this foundation slice and must not be smuggled into
 the pseudo-instruction model:
 
-- maps, structs, variants, arbitrary pointers, and aggregate values;
+- structs, variants, arbitrary pointers, and aggregate values;
 - native calls, globals, exception edges, and source/debug sections;
 - object files, assembly encodings, MC emitters, and JIT execution;
 - physical register allocation, spills, and a claim that `R0`--`R31` model a
@@ -151,7 +158,7 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The current M4 array-mutation slice retains the direct path, keeps the machine
-path opt-in, and defines `assign_index` before any map, aggregate, or
-ordinary-pointer lowering. The next collection work must define map
-construction and its capability matrix separately.
+The current M4 map-constructor slice retains the direct path, keeps the machine
+path opt-in, and defines map construction separately from aggregate or
+ordinary-pointer lowering. Records, variants, and native calls still require
+their own capability matrices.

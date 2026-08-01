@@ -325,6 +325,20 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isMapIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateMapCall(Call, Error))
+        unsupportedOperation(Error);
+
+      std::vector<unsigned> KeyValueOperands;
+      KeyValueOperands.reserve((Call.arg_size() - 1));
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        KeyValueOperands.push_back(valueRegister(Call.getArgOperand(Index)));
+      appendInstruction(CDInstruction::map(resultRegister(Call),
+                                            std::move(KeyValueOperands)));
+      return;
+    }
+
     if (cd::isIndexIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateIndexCall(Call, Error))

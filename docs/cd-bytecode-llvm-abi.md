@@ -1,7 +1,7 @@
 # LLVM CD value ABI
 
-Status: M4 string-constant, array-constructor, array-access, and
-array-mutation slices implemented, 2026-08-01.
+Status: M4 string-constant, array-constructor, array-access, array-mutation,
+and map-constructor slices implemented, 2026-08-01.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -311,6 +311,44 @@ intrinsic. It may not cross ordinary function parameters/returns, PHI/select,
 alloca, pointer operations, or external calls. Ordinary LLVM stores and
 aggregate operations never imply `assign_index`.
 
+### Map constructor ABI gate
+
+The next collection operation is the explicit `llvm.cd.map` intrinsic:
+
+```tablegen
+def int_cd_map : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<0>>]>;
+```
+
+The immediate count is the number of map entries, and the variadic payload is
+exactly `2 * count` operands in source order: key, value, key, value. A key is
+statically limited to an integer or floating scalar, `ptr null` for CD nil, or
+the result of `llvm.cd.string`. A value uses the existing array-element
+capability matrix: scalar, nil, string token, array token, map token, or a
+later explicit CD dynamic-value token. Ordinary pointers, aggregates,
+vectors, poison, and undef are rejected before emission. The result is an
+opaque address-space-zero CD map token.
+
+The wire operation is:
+
+```text
+rD = map [rKey0: rValue0, rKey1: rValue1, ...]
+```
+
+Construction allocates a fresh mutable map. Values that are CD handles retain
+the VM's existing shared-handle aliasing, while the map storage itself is not
+aliased with any input. Duplicate runtime-equal keys are accepted and follow
+the Rust VM contract: the last value wins while the first insertion position
+is retained. Invalid key kinds and resource-budget failures remain runtime
+errors owned by the VM; lowering does not silently coerce a key or emit nil.
+
+The map token is local in the first slice. It may be printed, indexed, measured,
+asserted, used as an explicit `assign_index` collection, or nested as a value
+in another explicit constructor. It may not cross ordinary function
+parameters/returns, PHI/select, allocas, pointer operations, or external calls.
+The intrinsic is the only proof that an LLVM `ptr` denotes a CD map.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -343,6 +381,12 @@ rejects ordinary pointer/value substitutes, emits `assign_index` through both
 backends, and passes Rust `dump`/`run`, mutation behavior parity, and explicit
 runtime bounds-error parity. The Rust VM's existing in-place aliasing and
 failure behavior remains authoritative.
+
+The map-constructor group is complete only when `llvm.cd.map` enforces the
+entry-count/pair shape and key/value capability matrix, emits `map` through
+both backends, preserves duplicate-key ordering and shared-value behavior,
+and passes Rust `dump`/`run`, malformed-input checks, direct/machine parity,
+and runtime resource/error checks.
 
 The sibling `cd-compiler` checkout already defines `string` constants in the
 `cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the

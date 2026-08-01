@@ -38,6 +38,7 @@ enum class CDOpcode {
   Constant,
   MakeFunction,
   Array,
+  Map,
   Index,
   AssignIndex,
   Len,
@@ -77,6 +78,8 @@ struct CDInstruction {
   static CDInstruction makeFunction(unsigned destination, unsigned function);
   static CDInstruction array(unsigned destination,
                              std::vector<unsigned> elements);
+  static CDInstruction map(unsigned destination,
+                           std::vector<unsigned> keyValueOperands);
   static CDInstruction index(unsigned destination, unsigned collection,
                              unsigned index);
   static CDInstruction assignIndex(unsigned destination, unsigned collection,

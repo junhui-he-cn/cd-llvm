@@ -195,6 +195,18 @@ static bool validateInstruction(const CDInstruction &Instruction,
         !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
       return false;
     return true;
+  case CDOpcode::Map:
+    if (!validateUnusedFields(Instruction, false, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    if (Instruction.operands.size() % 2 != 0)
+      return fail(Error, Twine(BodyName) + " instruction " +
+                           Twine(InstructionIndex) +
+                           " map requires key/value operand pairs");
+    if (!validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
   case CDOpcode::Index:
     if (!validateUnusedFields(Instruction, false, false, false, BodyName,
                               InstructionIndex, Error) ||
@@ -382,6 +394,16 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     writeOperands(OS, Instruction.operands);
     OS << "]";
     break;
+  case CDOpcode::Map:
+    OS << "map [";
+    for (unsigned Index = 0; Index < Instruction.operands.size(); Index += 2) {
+      if (Index != 0)
+        OS << ", ";
+      OS << registerName(Instruction.operands[Index]) << ": "
+         << registerName(Instruction.operands[Index + 1]);
+    }
+    OS << "]";
+    break;
   case CDOpcode::Index:
     OS << "index ";
     writeOperands(OS, Instruction.operands);
@@ -489,6 +511,15 @@ CDInstruction CDInstruction::array(unsigned Destination,
   Instruction.opcode = CDOpcode::Array;
   Instruction.result = Destination;
   Instruction.operands = std::move(Elements);
+  return Instruction;
+}
+
+CDInstruction CDInstruction::map(unsigned Destination,
+                                  std::vector<unsigned> KeyValueOperands) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Map;
+  Instruction.result = Destination;
+  Instruction.operands = std::move(KeyValueOperands);
   return Instruction;
 }
 
@@ -604,6 +635,8 @@ const char *opcodeName(CDOpcode Opcode) {
     return "make_function";
   case CDOpcode::Array:
     return "array";
+  case CDOpcode::Map:
+    return "map";
   case CDOpcode::Index:
     return "index";
   case CDOpcode::AssignIndex:

@@ -24,6 +24,8 @@ bool isStringIntrinsic(const CallBase &Call);
 
 bool isArrayIntrinsic(const CallBase &Call);
 
+bool isMapIntrinsic(const CallBase &Call);
+
 bool isIndexIntrinsic(const CallBase &Call);
 
 bool isAssignIndexIntrinsic(const CallBase &Call);
@@ -41,6 +43,8 @@ bool isArrayElement(const Value &Value);
 /// Validate the result, immediate element count, and variadic operands of
 /// llvm.cd.array.
 bool validateArrayCall(const CallBase &Call, std::string &Error);
+
+bool validateMapCall(const CallBase &Call, std::string &Error);
 
 bool validateIndexCall(const CallBase &Call, std::string &Error);
 

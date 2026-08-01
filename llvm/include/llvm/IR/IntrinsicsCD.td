@@ -18,6 +18,11 @@ def int_cd_array : DefaultAttrsIntrinsic<
     [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
     [ImmArg<ArgIndex<0>>]>;
 
+// A map is a fresh mutable VM value with alternating key/value operands.
+def int_cd_map : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<0>>]>;
+
 def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
                                          [llvm_ptr_ty, llvm_double_ty]>;
 

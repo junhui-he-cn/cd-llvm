@@ -29,6 +29,9 @@ def CD_MAKE_FUNCTION : CDPseudo<(outs CDValue:$dst), (ins cdindex:$function)>;
 // CD_ARRAY -> CDOpcode::Array.
 def CD_ARRAY : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 
+// CD_MAP -> CDOpcode::Map. Operands are alternating key/value registers.
+def CD_MAP : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
+
 // CD_INDEX -> CDOpcode::Index.
 def CD_INDEX : CDPseudo<(outs CDValue:$dst),
                         (ins CDValue:$collection, CDValue:$index)>;

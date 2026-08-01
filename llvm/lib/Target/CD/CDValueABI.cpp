@@ -16,6 +16,8 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/JSON.h"
 
+#include <limits>
+
 using namespace llvm;
 
 namespace llvm::cd {
@@ -30,6 +32,12 @@ bool isArrayIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
          Callee->getIntrinsicID() == Intrinsic::cd_array;
+}
+
+bool isMapIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_map;
 }
 
 bool isIndexIntrinsic(const CallBase &Call) {
@@ -62,6 +70,7 @@ bool isCDValue(const Value &Value) {
 
   const auto *Call = dyn_cast<CallBase>(&Value);
   return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
+                  isMapIntrinsic(*Call) ||
                   isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
                   (isAssignIndexIntrinsic(*Call) &&
                    Call->getType()->isPointerTy() &&
@@ -115,6 +124,64 @@ bool validateArrayCall(const CallBase &Call, std::string &Error) {
     }
   }
 
+  return true;
+}
+
+static bool isMapKey(const Value &Value) {
+  if (isa<UndefValue>(&Value) || isa<PoisonValue>(&Value))
+    return false;
+  if (Value.getType()->isIntegerTy() || Value.getType()->isFloatingPointTy())
+    return true;
+  if (const auto *Null = dyn_cast<ConstantPointerNull>(&Value))
+    return cast<PointerType>(Null->getType())->getAddressSpace() == 0;
+  const auto *Call = dyn_cast<CallBase>(&Value);
+  return Call && isStringIntrinsic(*Call);
+}
+
+bool validateMapCall(const CallBase &Call, std::string &Error) {
+  if (!isMapIntrinsic(Call)) {
+    Error = "not an llvm.cd.map call";
+    return false;
+  }
+
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.map requires a ptr result";
+    return false;
+  }
+  if (Call.arg_size() == 0) {
+    Error = "llvm.cd.map requires an entry-count immediate";
+    return false;
+  }
+
+  const auto *Count = dyn_cast<ConstantInt>(Call.getArgOperand(0));
+  if (!Count || !Count->getType()->isIntegerTy(32)) {
+    Error = "llvm.cd.map requires an i32 entry-count immediate";
+    return false;
+  }
+
+  const uint64_t EntryCount = Count->getZExtValue();
+  const uint64_t PayloadCount = Call.arg_size() - 1;
+  if (EntryCount > std::numeric_limits<uint64_t>::max() / 2 ||
+      EntryCount * 2 != PayloadCount) {
+    Error = "llvm.cd.map entry-count does not match the key/value operand list";
+    return false;
+  }
+
+  for (uint64_t Entry = 0; Entry < EntryCount; ++Entry) {
+    const unsigned KeyIndex = 1 + static_cast<unsigned>(Entry * 2);
+    const unsigned ValueIndex = KeyIndex + 1;
+    if (!isMapKey(*Call.getArgOperand(KeyIndex))) {
+      Error = "llvm.cd.map requires a scalar, nil, or string-token key "
+              "operand";
+      return false;
+    }
+    if (!isArrayElement(*Call.getArgOperand(ValueIndex))) {
+      Error = "llvm.cd.map requires a scalar, nil, or CD dynamic-value "
+              "value operand";
+      return false;
+    }
+  }
   return true;
 }
 

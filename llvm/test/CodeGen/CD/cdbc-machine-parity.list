@@ -13,6 +13,8 @@ artifact llvm/test/CodeGen/CD/cdbc-machine-void-return.ll
 artifact llvm/test/CodeGen/CD/cdbc-string.ll
 artifact llvm/test/CodeGen/CD/cdbc-array.ll
 artifact llvm/test/CodeGen/CD/cdbc-array-access.ll
+behavior llvm/test/CodeGen/CD/cdbc-map.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-map-runtime.ll "map key not found"
 behavior llvm/test/CodeGen/CD/cdbc-array-assign.ll
 behavior llvm/test/CodeGen/CD/cdbc-array-assign-scalar.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"

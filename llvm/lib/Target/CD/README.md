@@ -91,6 +91,14 @@ not imply mutation, and the result remains local in this slice. Direct and
 machine lowering share the validator and the Rust VM runtime-error/parity
 gate.
 
+`llvm.cd.map(i32 count, ...)` is the explicit map-constructor boundary. The
+count is an immediate entry count and the variadic payload is an even
+key/value list. Keys are scalar, CD nil, or string tokens; values use the
+existing scalar, nil, string, array, map, and local CD-token capability matrix.
+It lowers to `map [rKey: rValue, ...]` through both direct and opt-in machine
+paths. Duplicate keys retain first insertion position while the last value
+wins, and map lookup/resource failures remain Rust VM runtime behavior.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -98,6 +106,6 @@ elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
 must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
-output.  `-filetype=obj` is rejected.  Maps, structs, variants, non-string
-globals, native calls, and debug source sections remain deferred until an
-explicit LLVM-to-CD representation is defined.
+output.  `-filetype=obj` is rejected.  Structs, variants, non-string globals,
+native calls, and debug source sections remain deferred until an explicit
+LLVM-to-CD representation is defined.

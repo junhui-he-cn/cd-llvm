@@ -417,6 +417,43 @@ aggregates, records, native calls, function/parameter/PHI/select propagation,
 and implicit mutation through LLVM stores remain rejected.  No new Rust opcode,
 artifact version, object output, or default machine backend is introduced.
 
+### Narrow M4 slice: `llvm.cd.map` (2026-08-01)
+
+**Goal:** Lower only the explicit map constructor to the existing `cdbc 0.1`
+`map` operation through the direct and opt-in machine paths.
+
+**ABI gate:** `llvm.cd.map(i32 entryCount, ...) -> ptr` uses an immediate entry
+count and exactly two variadic operands per entry in source order. Keys are
+scalar, CD nil, or explicit string tokens; values use the existing scalar,
+nil, string, array, map, and local dynamic-value capability matrix. Duplicate
+runtime-equal keys preserve the Rust VM's last-value-wins/first-position
+ordering. The result is a local opaque CD map token and ordinary LLVM pointers
+remain invalid.
+
+**Files:** modify the CD intrinsic/ABI/artifact/direct/machine layers and
+documentation; create `cdbc-map.ll`, malformed map fixtures, and runtime
+resource/error fixtures; extend the parity manifest for positive and
+`runtime-error` cases. The nested Rust VM checkout is read-only unless a
+contract gap is proven.
+
+- [x] Record the map key/value, duplicate-key, aliasing, ordering, and failure
+  behavior gate in the ABI and roadmap documents.
+- [x] Add the red constructor fixture and verify it fails before lowering.
+- [x] Add `llvm.cd.map`, `CDOpcode::Map`, `CD_MAP`, shared validation, and both
+  direct/machine artifact paths.
+- [x] Add positive, malformed, duplicate-key, nested-value, and runtime
+  error parity coverage. The positive fixture covers empty maps, nil/string/
+  scalar keys, nested array/map values, and last-value-wins duplicate keys;
+  the runtime fixture preserves the VM's missing-key error.
+- [x] Run focused lit, Rust `dump`/`run`, full direct/machine parity, and
+  `git diff --check`, then commit the slice.
+
+The map slice is now implemented. Both lowering paths share the map ABI
+validator and artifact serializer, and the machine path materializes all
+constant operands before inserting `CD_MAP` so execution order remains valid.
+The direct/machine parity manifest covers the positive constructor and the
+missing-key runtime error; the nested Rust VM checkout remains unchanged.
+
 ## 9. M5 — Add source-backed debug metadata
 
 **Purpose:** Preserve source locations and runtime diagnostics across LLVM lowering without fabricating source text that is not present in LLVM IR.
