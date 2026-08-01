@@ -197,6 +197,43 @@ class CDFunctionEmitter {
         Opcode, resultRegister(I), valueRegister(Cast->getOperand(0))));
   }
 
+  void emitUnary(const Instruction &I, CDOpcode Opcode) {
+    if (!isScalarType(I.getType()) || !isSupportedOperand(I.getOperand(0)))
+      unsupportedInstruction(I);
+
+    appendInstruction(CDInstruction::unary(
+        Opcode, resultRegister(I), valueRegister(I.getOperand(0))));
+  }
+
+  void emitNot(const Instruction &I) {
+    const auto *BO = cast<BinaryOperator>(&I);
+    if (!I.getType()->isIntegerTy(1))
+      unsupportedInstruction(I);
+
+    const Value *Input = nullptr;
+    bool HasTrueConstant = false;
+    for (const Use &Operand : BO->operands()) {
+      if (const auto *Constant = dyn_cast<ConstantInt>(Operand.get())) {
+        if (!Constant->getType()->isIntegerTy(1) || !Constant->isOne() ||
+            HasTrueConstant)
+          unsupportedInstruction(I);
+        HasTrueConstant = true;
+        continue;
+      }
+
+      if (Input || !Operand->getType()->isIntegerTy(1) ||
+          !isSupportedOperand(Operand.get()))
+        unsupportedInstruction(I);
+      Input = Operand.get();
+    }
+
+    if (!Input || !HasTrueConstant)
+      unsupportedInstruction(I);
+
+    appendInstruction(CDInstruction::unary(
+        CDOpcode::Not, resultRegister(I), valueRegister(Input)));
+  }
+
   unsigned allocaName(const Value *Pointer) const {
     const auto *AI = dyn_cast<AllocaInst>(Pointer);
     if (!AI)
@@ -492,6 +529,12 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
   case Instruction::Mul:
   case Instruction::FMul:
     emitBinary(I, CDOpcode::Multiply);
+    return;
+  case Instruction::FNeg:
+    emitUnary(I, CDOpcode::Negate);
+    return;
+  case Instruction::Xor:
+    emitNot(I);
     return;
   case Instruction::SDiv:
   case Instruction::UDiv:

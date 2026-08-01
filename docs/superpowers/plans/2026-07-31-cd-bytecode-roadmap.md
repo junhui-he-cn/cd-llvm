@@ -48,7 +48,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | --- | --- | --- | --- |
 | M0 | Reproducible build, lit tests, Rust `dump`, and explicit object rejection for the existing target | — | Complete; verified in the current checkout |
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
-| M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Planned |
+| M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | In progress; unary scalar slice started |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Planned; backend design gate first |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Planned; design gate first |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
@@ -138,6 +138,7 @@ The model validator must reject before writing:
 - Modify: `llvm/lib/Target/CD/CDBytecodeEmitter.cpp`.
 - Modify: `llvm/lib/Target/CD/CDTargetMachine.{h,cpp}` only if the pass pipeline needs target-specific configuration.
 - Create: `llvm/test/CodeGen/CD/cdbc-scalar.ll`.
+- Create: `llvm/test/CodeGen/CD/cdbc-fneg.ll` and `llvm/test/CodeGen/CD/cdbc-not.ll` for the first unary slice.
 - Create: `llvm/test/CodeGen/CD/cdbc-control-flow.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-optimization.ll`.
 - Modify: `llvm/lib/Target/CD/README.md`.
@@ -152,11 +153,16 @@ Freeze the scalar policy before adding opcodes:
 - `fneg` maps to `negate`, boolean inversion maps to `not`, and only semantically equivalent casts map to `move`.
 - `select`, `switch`, `indirectbr`, exception edges, poison/undef, and overflow-sensitive integer operations receive an explicit lowering or an explicit diagnostic; they are never serialized as an unrelated opcode.
 
-- [ ] Add unary operations that have direct `cdbc 0.1` equivalents.
+- [x] Add the first unary operations with direct `cdbc 0.1` equivalents: `fneg` to `negate`, and `xor i1 <value>, true` (in either operand order) to `not`; reject other XOR shapes.
 - [ ] Add loop, multiple-predecessor PHI, critical-edge, and recursive-call fixtures.
 - [ ] Run the same fixtures with `-O0` and `-O2`; verify that mem2reg, constant folding, dead-code elimination, and block reordering do not change observable CD behavior.
 - [ ] Add a FileCheck failure fixture for an operation whose LLVM semantics cannot be represented by a CD number.
 - [ ] Run positive artifacts through Rust `dump` and `run`, comparing output with a hand-written expected result.
+
+Current M2 progress (2026-08-01): `cdbc-fneg.ll` covers `fneg` to `negate`,
+`cdbc-not.ll` covers the restricted boolean inversion form, and both artifacts
+are accepted by Rust `dump` with matching `-O0`/`-O2` Rust `run` output.  The
+loop/control-flow and broader optimization fixtures remain open.
 
 **Exit criteria:** The documented scalar subset passes at `-O0` and `-O2`, loop/PHI/call behavior is covered, and every unsupported semantic boundary has a stable diagnostic test.
 

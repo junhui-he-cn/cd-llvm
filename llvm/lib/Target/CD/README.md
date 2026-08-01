@@ -17,8 +17,11 @@ The initial lowering supports scalar integer and floating-point constants,
 arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca`
 storage with `load`/`store`, direct calls to defined functions, conditional and
 unconditional branches, PHI edge stores, returns, and declarations named
-`cd_print` or `print` with one argument.  Unsupported LLVM instructions fail
-with a CD-target diagnostic rather than producing an invalid artifact.
+`cd_print` or `print` with one argument.  `fneg` lowers to `negate`.  The only
+supported `xor` form is boolean inversion: an `i1` value XORed with the literal
+`true` (in either operand order) lowers to `not`; other XOR operations remain
+unsupported.  Unsupported LLVM instructions fail with a CD-target diagnostic
+rather than producing an invalid artifact.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
