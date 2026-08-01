@@ -26,8 +26,10 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cmath>
+#include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 using namespace llvm;
 
@@ -56,8 +58,23 @@ class CDMachineModuleEmitter {
   raw_ostream &OS;
   cd::CDArtifact Artifact;
   StringMap<unsigned> ConstantIndexes;
+  StringMap<unsigned> NameIndexes;
+  DenseMap<const Function *, unsigned> FunctionIndexes;
   DenseMap<const Constant *, Register> ConstantRegisters;
+  DenseMap<const Function *, Register> FunctionRegisters;
   DenseMap<const Value *, Register> ValueRegisters;
+  std::vector<std::string> ParameterNames;
+
+  unsigned addName(StringRef Name) {
+    auto It = NameIndexes.find(Name);
+    if (It != NameIndexes.end())
+      return It->second;
+
+    const unsigned Index = Artifact.names.size();
+    Artifact.names.push_back(Name.str());
+    NameIndexes[Artifact.names.back()] = Index;
+    return Index;
+  }
 
   unsigned addConstant(const Constant &C) {
     CDConstant Value;
@@ -125,6 +142,25 @@ class CDMachineModuleEmitter {
     const auto *Nil =
         ConstantPointerNull::get(PointerType::getUnqual(M.getContext()));
     return materializeConstant(Nil, MRI, MBB, TII);
+  }
+
+  Register materializeFunction(const Function *FunctionValue,
+                               MachineRegisterInfo &MRI,
+                               MachineBasicBlock &MBB,
+                               const TargetInstrInfo &TII) {
+    auto It = FunctionRegisters.find(FunctionValue);
+    if (It != FunctionRegisters.end())
+      return It->second;
+
+    auto FunctionIndex = FunctionIndexes.find(FunctionValue);
+    if (FunctionIndex == FunctionIndexes.end())
+      unsupported("a call to an undefined, declared, or @main function");
+
+    Register Result = createValueRegister(MRI, FunctionValue);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAKE_FUNCTION), Result)
+        .addImm(FunctionIndex->second);
+    FunctionRegisters[FunctionValue] = Result;
+    return Result;
   }
 
   Register valueRegister(const Value *Value, MachineRegisterInfo &MRI,
@@ -210,6 +246,32 @@ class CDMachineModuleEmitter {
         .addReg(Source);
   }
 
+  void lowerCall(const CallInst &Call, MachineRegisterInfo &MRI,
+                 MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    Function *Callee = Call.getCalledFunction();
+    if (!Callee || Callee->isDeclaration() || Callee->isIntrinsic() ||
+        FunctionIndexes.find(Callee) == FunctionIndexes.end())
+      unsupported("a call to an undefined, declared, intrinsic, or @main function");
+    if (Call.arg_size() != Callee->arg_size())
+      unsupported("a function call with mismatched arity");
+    for (const Use &Argument : Call.args())
+      if (!isSupportedValue(Argument.get()))
+        unsupported("a non-scalar function call argument");
+
+    Register Result = createValueRegister(MRI, &Call);
+    Register CalleeRegister =
+        materializeFunction(Callee, MRI, MBB, TII);
+    std::vector<Register> Arguments;
+    for (const Use &Argument : Call.args())
+      Arguments.push_back(valueRegister(Argument.get(), MRI, MBB, TII));
+
+    MachineInstrBuilder CallBuilder =
+        BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CALL), Result)
+            .addReg(CalleeRegister);
+    for (Register Argument : Arguments)
+      CallBuilder.addReg(Argument);
+  }
+
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!isScalarType(Instruction.getType()))
@@ -289,32 +351,61 @@ class CDMachineModuleEmitter {
     return Result;
   }
 
-  CDBody lowerMain() {
-    Function *Main = M.getFunction("main");
-    if (!Main || Main->isDeclaration())
-      unsupported("a module without a defined @main entry function");
-    if (Main->arg_size() != 0)
-      unsupported("@main parameters in the first machine slice");
-    if (Main->size() != 1)
-      unsupported("multiple @main basic blocks in the first machine slice");
+  CDBody lowerFunction(Function &F, bool IsMain) {
+    ValueRegisters.clear();
+    ConstantRegisters.clear();
+    FunctionRegisters.clear();
+    ParameterNames.clear();
 
-    MachineFunction &MF = MMI.getOrCreateMachineFunction(*Main);
+    if (IsMain && F.getName() != "main")
+      unsupported("a non-main function as the entry body");
+    if (F.isDeclaration())
+      unsupported("a declared function body");
+    if (IsMain && F.arg_size() != 0)
+      unsupported("@main parameters in the first machine slice");
+    if (F.size() != 1)
+      unsupported("multiple basic blocks in the first machine slice");
+
+    MachineFunction &MF = MMI.getOrCreateMachineFunction(F);
     if (MF.size() != 0)
       unsupported("pre-existing machine basic blocks");
 
-    MachineBasicBlock *MBB = MF.CreateMachineBasicBlock(&Main->getEntryBlock());
+    MachineBasicBlock *MBB = MF.CreateMachineBasicBlock(&F.getEntryBlock());
     MF.insert(MF.end(), MBB);
     MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-    for (const Instruction &Instruction : Main->getEntryBlock()) {
+    std::set<std::string> UsedParameterNames;
+    unsigned AnonymousArgumentSerial = 0;
+    for (Argument &Argument : F.args()) {
+      if (!isScalarType(Argument.getType()))
+        unsupported("a non-scalar function parameter");
+
+      std::string Name = Argument.hasName()
+                             ? Argument.getName().str()
+                             : "arg" + std::to_string(AnonymousArgumentSerial++);
+      if (!UsedParameterNames.insert(Name).second) {
+        const std::string Original = Name;
+        unsigned Suffix = 1;
+        do {
+          Name = Original + "#" + std::to_string(Suffix++);
+        } while (!UsedParameterNames.insert(Name).second);
+      }
+
+      ParameterNames.push_back(Name);
+      Register Result = createValueRegister(MRI, &Argument);
+      BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR), Result)
+          .addImm(addName(Name));
+    }
+
+    for (const Instruction &Instruction : F.getEntryBlock()) {
       if (isa<DbgInfoIntrinsic>(&Instruction))
         continue;
 
       if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
         const Value *ReturnValue = Return->getReturnValue();
         if (ReturnValue && !isSupportedValue(ReturnValue))
-          unsupported("a non-scalar @main return");
+          unsupported("a non-scalar function return");
         Register Result = ReturnValue
                               ? valueRegister(ReturnValue, MRI, *MBB, TII)
                               : materializeNil(MRI, *MBB, TII);
@@ -341,6 +432,11 @@ class CDMachineModuleEmitter {
         continue;
       }
 
+      if (const auto *Call = dyn_cast<CallInst>(&Instruction)) {
+        lowerCall(*Call, MRI, *MBB, TII);
+        continue;
+      }
+
       if (Instruction.getOpcode() == Instruction::FNeg) {
         lowerFNeg(Instruction, MRI, *MBB, TII);
         continue;
@@ -362,6 +458,22 @@ class CDMachineModuleEmitter {
               !MI.getOperand(1).isImm())
             unsupported("an invalid CD_CONSTANT machine instruction");
           Body.instructions.push_back(CDInstruction::constant(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              MI.getOperand(1).getImm()));
+          break;
+        case CD::CD_MAKE_FUNCTION:
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isImm())
+            unsupported("an invalid CD_MAKE_FUNCTION machine instruction");
+          Body.instructions.push_back(CDInstruction::makeFunction(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              MI.getOperand(1).getImm()));
+          break;
+        case CD::CD_LOAD_VAR:
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isImm())
+            unsupported("an invalid CD_LOAD_VAR machine instruction");
+          Body.instructions.push_back(CDInstruction::loadVar(
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               MI.getOperand(1).getImm()));
           break;
@@ -434,6 +546,23 @@ class CDMachineModuleEmitter {
               artifactRegister(MI.getOperand(2).getReg(), Registers, Body)));
           break;
         }
+        case CD::CD_CALL: {
+          if (MI.getNumOperands() < 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg())
+            unsupported("an invalid CD_CALL machine instruction");
+          std::vector<unsigned> Arguments;
+          for (unsigned Index = 2; Index < MI.getNumOperands(); ++Index) {
+            if (!MI.getOperand(Index).isReg())
+              unsupported("an invalid CD_CALL argument operand");
+            Arguments.push_back(artifactRegister(
+                MI.getOperand(Index).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::call(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              std::move(Arguments)));
+          break;
+        }
         case CD::CD_RETURN:
           if (MI.getNumOperands() != 1 || !MI.getOperand(0).isReg())
             unsupported("an invalid CD_RETURN machine instruction");
@@ -445,6 +574,7 @@ class CDMachineModuleEmitter {
         }
       }
     }
+    Body.parameterNames = ParameterNames;
     return Body;
   }
 
@@ -453,7 +583,26 @@ public:
       : M(M), MMI(MMI), OS(OS) {}
 
   void emit() {
-    Artifact.main = lowerMain();
+    Function *Main = M.getFunction("main");
+    if (!Main || Main->isDeclaration())
+      unsupported("a module without a defined @main entry function");
+
+    FunctionIndexes.clear();
+    unsigned FunctionIndex = 0;
+    for (Function &F : M)
+      if (&F != Main && !F.isDeclaration() && !F.isIntrinsic())
+        FunctionIndexes[&F] = FunctionIndex++;
+
+    Artifact.main = lowerFunction(*Main, true);
+    for (Function &F : M) {
+      auto It = FunctionIndexes.find(&F);
+      if (It == FunctionIndexes.end())
+        continue;
+      Artifact.functions.push_back(
+          {F.getName().str(), static_cast<unsigned>(F.arg_size()),
+           lowerFunction(F, false)});
+    }
+
     std::string Error;
     if (!cd::validateArtifact(Artifact, Error))
       report_fatal_error(Twine("CD machine artifact validation failed: ") +

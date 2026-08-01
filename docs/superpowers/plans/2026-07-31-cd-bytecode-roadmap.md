@@ -207,13 +207,16 @@ The direct `ModulePass` path remains the default compatibility path. The new mac
 - [ ] Produce direct and machine-path artifacts from the same LLVM IR, normalize only permitted table/index differences, and require identical VM behavior.
 - [ ] Keep `-filetype=obj` rejected and keep the machine path text-only until an object format is deliberately designed.
 
-Current M3 progress (2026-08-01): the opt-in machine path now bridges a
-single `MachineFunction` for a no-argument, single-basic-block `@main` through
-the typed artifact model.  It covers scalar constants, arithmetic,
+Current M3 progress (2026-08-01): the opt-in machine path now bridges the
+no-argument, single-basic-block `@main` body and defined helper
+`MachineFunction` bodies through the typed artifact model.  It covers scalar
+constants, arithmetic,
 comparisons, scalar casts, `fneg`, boolean inversion, and `nil`/`ret void`
 returns with TableGen-defined pseudo-instructions and focused FileCheck
-coverage.  Function boundaries, parameters, storage, control flow, PHI
-lowering, and direct/machine VM parity remain pending.
+coverage.  It now also emits defined-function boundaries, `make_function`,
+`call`, parameter metadata, and `load_var` for scalar function parameters.
+Storage, control flow, PHI lowering, and direct/machine VM parity remain
+pending.
 
 **Exit criteria:** LLVM TableGen generates usable CD instruction/register/subtarget descriptions; `llc` can select the machine path explicitly; MIR and FileCheck tests pass; Rust `dump` accepts the result; and direct and machine paths agree on `cdbc 0.1` execution for the supported subset.
 
