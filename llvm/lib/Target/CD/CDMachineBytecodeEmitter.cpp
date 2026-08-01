@@ -10,6 +10,7 @@
 #include "CDBytecodeFormat.h"
 #include "CDInstrInfo.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -18,6 +19,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -50,6 +52,8 @@ class CDMachineModuleEmitter {
   raw_ostream &OS;
   cd::CDArtifact Artifact;
   StringMap<unsigned> ConstantIndexes;
+  DenseMap<const Constant *, Register> ConstantRegisters;
+  DenseMap<const Value *, Register> ValueRegisters;
 
   unsigned addConstant(const Constant &C) {
     CDConstant Value;
@@ -91,6 +95,85 @@ class CDMachineModuleEmitter {
     return Index;
   }
 
+  Register createValueRegister(MachineRegisterInfo &MRI, const Value *Value) {
+    Register Result = MRI.createVirtualRegister(&CD::CDValueRegClass);
+    ValueRegisters[Value] = Result;
+    return Result;
+  }
+
+  Register materializeConstant(const Constant *ConstantValue,
+                               MachineRegisterInfo &MRI,
+                               MachineBasicBlock &MBB,
+                               const TargetInstrInfo &TII) {
+    auto It = ConstantRegisters.find(ConstantValue);
+    if (It != ConstantRegisters.end())
+      return It->second;
+
+    Register Result = createValueRegister(MRI, ConstantValue);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
+        .addImm(addConstant(*ConstantValue));
+    ConstantRegisters[ConstantValue] = Result;
+    return Result;
+  }
+
+  Register valueRegister(const Value *Value, MachineRegisterInfo &MRI,
+                         MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (const auto *ConstantValue = dyn_cast<Constant>(Value))
+      return materializeConstant(ConstantValue, MRI, MBB, TII);
+
+    auto It = ValueRegisters.find(Value);
+    if (It != ValueRegisters.end())
+      return It->second;
+    unsupported("an unassigned or non-scalar SSA value");
+  }
+
+  static unsigned binaryOpcode(const Instruction &I) {
+    switch (I.getOpcode()) {
+    case Instruction::Add:
+    case Instruction::FAdd:
+      return CD::CD_ADD;
+    case Instruction::Sub:
+    case Instruction::FSub:
+      return CD::CD_SUBTRACT;
+    case Instruction::Mul:
+    case Instruction::FMul:
+      return CD::CD_MULTIPLY;
+    case Instruction::SDiv:
+    case Instruction::FDiv:
+      return CD::CD_DIVIDE;
+    case Instruction::UDiv:
+      unsupported("unsigned integer division");
+    default:
+      unsupported("an unsupported binary instruction");
+    }
+  }
+
+  void lowerBinary(const BinaryOperator &Binary, MachineRegisterInfo &MRI,
+                   MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (!isScalarType(Binary.getType()) ||
+        Binary.getType()->isIntegerTy(1))
+      unsupported("a boolean or non-scalar binary operation");
+
+    Register Left = valueRegister(Binary.getOperand(0), MRI, MBB, TII);
+    Register Right = valueRegister(Binary.getOperand(1), MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Binary);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(binaryOpcode(Binary)), Result)
+        .addReg(Left)
+        .addReg(Right);
+  }
+
+  void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
+                 MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (!isScalarType(Instruction.getType()))
+      unsupported("a non-scalar floating-point negation");
+
+    Register Source =
+        valueRegister(Instruction.getOperand(0), MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Instruction);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NEGATE), Result)
+        .addReg(Source);
+  }
+
   static unsigned artifactRegister(
       Register RegisterValue, DenseMap<unsigned, unsigned> &Registers,
       CDBody &Body) {
@@ -113,6 +196,8 @@ class CDMachineModuleEmitter {
       unsupported("a module without a defined @main entry function");
     if (Main->arg_size() != 0)
       unsupported("@main parameters in the first machine slice");
+    if (Main->size() != 1)
+      unsupported("multiple @main basic blocks in the first machine slice");
 
     MachineFunction &MF = MMI.getOrCreateMachineFunction(*Main);
     if (MF.size() != 0)
@@ -123,19 +208,34 @@ class CDMachineModuleEmitter {
     MachineRegisterInfo &MRI = MF.getRegInfo();
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
 
-    const ReturnInst *Return = dyn_cast<ReturnInst>(Main->getEntryBlock().getTerminator());
-    if (!Return || !Return->getReturnValue())
-      unsupported("a non-constant @main return in the first machine slice");
-    const auto *Value = dyn_cast<Constant>(Return->getReturnValue());
-    if (!Value || !isScalarType(Value->getType()))
-      unsupported("a non-scalar or non-constant @main return");
+    for (const Instruction &Instruction : Main->getEntryBlock()) {
+      if (isa<DbgInfoIntrinsic>(&Instruction))
+        continue;
 
-    const unsigned ConstantIndex = addConstant(*Value);
-    Register Result = MRI.createVirtualRegister(&CD::CDValueRegClass);
-    BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
-        .addImm(ConstantIndex);
-    BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
-        .addReg(Result);
+      if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
+        if (!Return->getReturnValue())
+          unsupported("a void @main return in the first machine slice");
+        const Value *ReturnValue = Return->getReturnValue();
+        if (!isScalarType(ReturnValue->getType()))
+          unsupported("a non-scalar @main return");
+        Register Result = valueRegister(ReturnValue, MRI, *MBB, TII);
+        BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
+            .addReg(Result);
+        continue;
+      }
+
+      if (const auto *Binary = dyn_cast<BinaryOperator>(&Instruction)) {
+        lowerBinary(*Binary, MRI, *MBB, TII);
+        continue;
+      }
+
+      if (Instruction.getOpcode() == Instruction::FNeg) {
+        lowerFNeg(Instruction, MRI, *MBB, TII);
+        continue;
+      }
+
+      unsupported(Instruction.getOpcodeName());
+    }
 
     CDBody Body;
     DenseMap<unsigned, unsigned> Registers;
@@ -153,6 +253,75 @@ class CDMachineModuleEmitter {
               artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
               MI.getOperand(1).getImm()));
           break;
+        case CD::CD_MOVE:
+        case CD::CD_NEGATE:
+        case CD::CD_NOT: {
+          if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg())
+            unsupported("an invalid unary CD machine instruction");
+          CDOpcode Opcode = CDOpcode::Move;
+          if (MI.getOpcode() == CD::CD_NEGATE)
+            Opcode = CDOpcode::Negate;
+          else if (MI.getOpcode() == CD::CD_NOT)
+            Opcode = CDOpcode::Not;
+          Body.instructions.push_back(CDInstruction::unary(
+              Opcode,
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body)));
+          break;
+        }
+        case CD::CD_ADD:
+        case CD::CD_SUBTRACT:
+        case CD::CD_MULTIPLY:
+        case CD::CD_DIVIDE:
+        case CD::CD_EQUAL:
+        case CD::CD_NOT_EQUAL:
+        case CD::CD_GREATER:
+        case CD::CD_GREATER_EQUAL:
+        case CD::CD_LESS:
+        case CD::CD_LESS_EQUAL: {
+          if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg())
+            unsupported("an invalid binary CD machine instruction");
+          CDOpcode Opcode = CDOpcode::Add;
+          switch (MI.getOpcode()) {
+          case CD::CD_SUBTRACT:
+            Opcode = CDOpcode::Subtract;
+            break;
+          case CD::CD_MULTIPLY:
+            Opcode = CDOpcode::Multiply;
+            break;
+          case CD::CD_DIVIDE:
+            Opcode = CDOpcode::Divide;
+            break;
+          case CD::CD_EQUAL:
+            Opcode = CDOpcode::Equal;
+            break;
+          case CD::CD_NOT_EQUAL:
+            Opcode = CDOpcode::NotEqual;
+            break;
+          case CD::CD_GREATER:
+            Opcode = CDOpcode::Greater;
+            break;
+          case CD::CD_GREATER_EQUAL:
+            Opcode = CDOpcode::GreaterEqual;
+            break;
+          case CD::CD_LESS:
+            Opcode = CDOpcode::Less;
+            break;
+          case CD::CD_LESS_EQUAL:
+            Opcode = CDOpcode::LessEqual;
+            break;
+          default:
+            break;
+          }
+          Body.instructions.push_back(CDInstruction::binary(
+              Opcode,
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(2).getReg(), Registers, Body)));
+          break;
+        }
         case CD::CD_RETURN:
           if (MI.getNumOperands() != 1 || !MI.getOperand(0).isReg())
             unsupported("an invalid CD_RETURN machine instruction");
