@@ -162,6 +162,31 @@ class CDMachineModuleEmitter {
         .addReg(Right);
   }
 
+  static bool isTrueBoolean(const Value *Value) {
+    const auto *Constant = dyn_cast<ConstantInt>(Value);
+    return Constant && Constant->getType()->isIntegerTy(1) &&
+           Constant->isOne();
+  }
+
+  void lowerNot(const BinaryOperator &Binary, MachineRegisterInfo &MRI,
+                MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    const Value *Source = nullptr;
+    if (isTrueBoolean(Binary.getOperand(0)))
+      Source = Binary.getOperand(1);
+    else if (isTrueBoolean(Binary.getOperand(1)))
+      Source = Binary.getOperand(0);
+    else
+      unsupported("an unsupported boolean XOR operation");
+
+    if (!Source->getType()->isIntegerTy(1))
+      unsupported("a non-boolean XOR operand");
+
+    Register SourceRegister = valueRegister(Source, MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Binary);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NOT), Result)
+        .addReg(SourceRegister);
+  }
+
   void lowerFNeg(const Instruction &Instruction, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!isScalarType(Instruction.getType()))
@@ -172,6 +197,57 @@ class CDMachineModuleEmitter {
     Register Result = createValueRegister(MRI, &Instruction);
     BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NEGATE), Result)
         .addReg(Source);
+  }
+
+  static unsigned comparisonOpcode(const CmpInst &Compare) {
+    switch (Compare.getPredicate()) {
+    case CmpInst::ICMP_EQ:
+    case CmpInst::FCMP_OEQ:
+    case CmpInst::FCMP_UEQ:
+      return CD::CD_EQUAL;
+    case CmpInst::ICMP_NE:
+    case CmpInst::FCMP_ONE:
+    case CmpInst::FCMP_UNE:
+      return CD::CD_NOT_EQUAL;
+    case CmpInst::ICMP_SGT:
+    case CmpInst::FCMP_OGT:
+    case CmpInst::FCMP_UGT:
+      return CD::CD_GREATER;
+    case CmpInst::ICMP_SGE:
+    case CmpInst::FCMP_OGE:
+    case CmpInst::FCMP_UGE:
+      return CD::CD_GREATER_EQUAL;
+    case CmpInst::ICMP_SLT:
+    case CmpInst::FCMP_OLT:
+    case CmpInst::FCMP_ULT:
+      return CD::CD_LESS;
+    case CmpInst::ICMP_SLE:
+    case CmpInst::FCMP_OLE:
+    case CmpInst::FCMP_ULE:
+      return CD::CD_LESS_EQUAL;
+    case CmpInst::ICMP_UGT:
+    case CmpInst::ICMP_UGE:
+    case CmpInst::ICMP_ULT:
+    case CmpInst::ICMP_ULE:
+      unsupported("unsigned integer ordering");
+    default:
+      unsupported("an unsupported comparison predicate");
+    }
+  }
+
+  void lowerCompare(const CmpInst &Compare, MachineRegisterInfo &MRI,
+                    MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (!isScalarType(Compare.getOperand(0)->getType()) ||
+        !isScalarType(Compare.getOperand(1)->getType()))
+      unsupported("a non-scalar comparison");
+
+    Register Left = valueRegister(Compare.getOperand(0), MRI, MBB, TII);
+    Register Right = valueRegister(Compare.getOperand(1), MRI, MBB, TII);
+    Register Result = createValueRegister(MRI, &Compare);
+    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(comparisonOpcode(Compare)),
+            Result)
+        .addReg(Left)
+        .addReg(Right);
   }
 
   static unsigned artifactRegister(
@@ -225,7 +301,15 @@ class CDMachineModuleEmitter {
       }
 
       if (const auto *Binary = dyn_cast<BinaryOperator>(&Instruction)) {
-        lowerBinary(*Binary, MRI, *MBB, TII);
+        if (Binary->getOpcode() == Instruction::Xor)
+          lowerNot(*Binary, MRI, *MBB, TII);
+        else
+          lowerBinary(*Binary, MRI, *MBB, TII);
+        continue;
+      }
+
+      if (const auto *Compare = dyn_cast<CmpInst>(&Instruction)) {
+        lowerCompare(*Compare, MRI, *MBB, TII);
         continue;
       }
 
