@@ -537,10 +537,11 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
     emitNot(I);
     return;
   case Instruction::SDiv:
-  case Instruction::UDiv:
   case Instruction::FDiv:
     emitBinary(I, CDOpcode::Divide);
     return;
+  case Instruction::UDiv:
+    unsupportedInstruction(I);
   case Instruction::ICmp: {
     const auto Predicate = cast<ICmpInst>(&I)->getPredicate();
     switch (Predicate) {
@@ -550,22 +551,23 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
     case ICmpInst::ICMP_NE:
       emitCompare(I, CDOpcode::NotEqual);
       return;
-    case ICmpInst::ICMP_UGT:
     case ICmpInst::ICMP_SGT:
       emitCompare(I, CDOpcode::Greater);
       return;
-    case ICmpInst::ICMP_UGE:
     case ICmpInst::ICMP_SGE:
       emitCompare(I, CDOpcode::GreaterEqual);
       return;
-    case ICmpInst::ICMP_ULT:
     case ICmpInst::ICMP_SLT:
       emitCompare(I, CDOpcode::Less);
       return;
-    case ICmpInst::ICMP_ULE:
     case ICmpInst::ICMP_SLE:
       emitCompare(I, CDOpcode::LessEqual);
       return;
+    case ICmpInst::ICMP_UGT:
+    case ICmpInst::ICMP_UGE:
+    case ICmpInst::ICMP_ULT:
+    case ICmpInst::ICMP_ULE:
+      unsupportedOperation("unsigned integer comparison predicate");
     default:
       unsupportedInstruction(I);
     }

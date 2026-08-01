@@ -35,6 +35,11 @@ representable as an IEEE-754 double; otherwise the target reports a diagnostic
 instead of silently changing the value. Number constants are serialized with a
 canonical `%.17g` spelling after finite-value validation.
 
+The target does not reinterpret unsigned integer division or unsigned ordering
+predicates as floating-point `number` operations: `udiv` and unsigned `icmp`
+ordering predicates are rejected. Integer equality and inequality remain
+supported because they do not select a signed or unsigned ordering.
+
 This target deliberately has no object-file, assembler, JIT, or native-call
 output.  `-filetype=obj` is rejected.  Arrays, maps, structs, variants,
 general globals, native calls, and debug source sections remain deferred until
