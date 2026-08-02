@@ -601,8 +601,8 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
   source location, caret, and call-stack reporting on both artifact paths.
 - [x] Verify a failed `sqrt(-1)` native call through the Rust VM's source
   location, caret, and main call-stack reporting on both artifact paths.
-- [ ] Verify invalid-index errors through the Rust VM's location and call-stack
-  reporting.
+- [x] Verify invalid-index errors through the Rust VM's location and call-stack
+  reporting on both artifact paths.
 - [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
@@ -613,8 +613,9 @@ The explicit `!cd.sources` foundation and the follow-on `DILocation` mapping
 slice are complete. Source records and sparse `debug_locations` are validated
 and emitted through both direct and machine artifact paths, and the Rust VM
 accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
-source-backed runtime diagnostics and call-stack parity. `debug_ranges`,
-invalid-index diagnostics, and debugger behavior remain
+source-backed runtime diagnostics and call-stack parity for divide-by-zero,
+failed native calls, and invalid indexes. `debug_ranges` and debugger behavior
+remain
 the next independent M5 boundaries.
 
 ## 10. M6 — Support module products and linking

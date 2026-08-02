@@ -652,5 +652,6 @@ synthetic constants and instructions without a source location remain sparse.
 The Rust VM can therefore render source lines, carets, and nested call stacks
 for these locations; the LLVM parity fixture covers a nested divide-by-zero
 failure through both direct and machine artifacts. This slice deliberately
-emits no `debug_ranges`; source-local byte ranges, invalid-index diagnostics,
-and debugger behavior remain later M5 gates.
+emits no `debug_ranges`; the parity fixtures also cover a failed `sqrt(-1)`
+native call and an out-of-range array index with source-backed diagnostics.
+Source-local byte ranges and debugger behavior remain later M5 gates.

@@ -183,5 +183,5 @@ direct/machine parity `37/37` all passed. The nested checkout remained clean.
   contracts; it introduces no new opcode or metadata format.
 - The fixture uses the exact `sqrt` failure already covered without metadata,
   adding only source-backed rendering and direct/machine parity.
-- Invalid-index diagnostics, `debug_ranges`, and debugger behavior remain
-  explicit later M5 boundaries.
+- `debug_ranges` and debugger behavior remain explicit later M5 boundaries;
+  invalid-index coverage is delivered by the follow-on index fixture.

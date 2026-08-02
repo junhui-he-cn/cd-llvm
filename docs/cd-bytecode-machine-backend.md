@@ -120,7 +120,8 @@ entries. `debug_ranges` remains a later parity gate.
 The runtime-error parity gate also confirms that a nested divide-by-zero keeps
 the same source line, caret, and call stack through both artifact paths. It also
 covers the bounded `sqrt(-1)` native failure with the same source-backed main
-call stack.
+call stack. It also covers an out-of-range array index with the same source
+line, caret, and main call stack.
 
 ## Direct/machine parity gate
 

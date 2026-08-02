@@ -186,6 +186,6 @@ direct/machine parity `36/36` all passed. The nested checkout remained clean.
 - The fixture checks the direct and machine sparse-table indexes separately
   because the machine path omits the direct path's synthetic `make_function`
   location, while both runtime diagnostics must remain byte-for-byte equal.
-- Invalid-index diagnostics and `debug_ranges` remain explicit future M5
-  slices; failed-native-call coverage is delivered by the follow-on native
-  runtime-diagnostics fixture.
+- `debug_ranges` and debugger behavior remain explicit future M5 slices;
+  failed-native-call and invalid-index coverage are delivered by follow-on
+  fixtures.

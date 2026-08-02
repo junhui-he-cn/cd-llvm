@@ -140,8 +140,8 @@ metadata still do not supply source bytes. Unmatched locations are omitted,
 ambiguous source-path matches are rejected. The Rust VM parity fixture covers
 the resulting source line, caret, and nested call stack for divide-by-zero;
 the bounded `sqrt(-1)` native failure has the same source-backed main call
-stack. `debug_ranges`, invalid-index diagnostics, and debugger behavior remain
-deferred.
+stack, and an out-of-range array index has the same source-backed main call
+stack. `debug_ranges` and debugger behavior remain deferred.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
