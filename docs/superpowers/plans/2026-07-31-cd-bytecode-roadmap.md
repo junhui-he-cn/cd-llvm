@@ -51,7 +51,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, and step/next debugger parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
+| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next, and line-breakpoint deletion parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only and explicit VM integration boundaries plus focused CI jobs are verified; the broader release matrix remains |
 
@@ -634,7 +634,12 @@ profile, and debug; the metadata-free contract verifies no debug tail,
 The follow-on interactive debugger slice adds a `step-next` observability
 contract. It uses the same explicit-range artifact and verifies the entry,
 step, and next pause reasons plus their resume commands on both direct and
-machine artifacts. Breakpoint deletion, aliases, and more complete interactive
+machine artifacts. Command aliases and more complete interactive session
+behavior remain deferred.
+
+The line-breakpoint slice extends the contract with `line-delete`: it verifies
+source-line breakpoint creation and one matching pause, deletion by ID, and
+successful execution after resuming. Command aliases and other interactive
 session behavior remain deferred.
 
 ## 10. M6 — Support module products and linking

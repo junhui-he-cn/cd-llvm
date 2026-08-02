@@ -96,6 +96,7 @@ runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects 
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;continue;quit" ranges
 observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;step;next;quit" step-next
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;continue;delete 1;continue" line-delete
 """
 
         self.assertEqual(
@@ -118,6 +119,12 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6
                     "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
                     "break-range ranges.cd:6-11;step;next;quit",
                     "step-next",
+                ),
+                (
+                    "observability",
+                    "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
+                    "break ranges.cd:1;continue;delete 1;continue",
+                    "line-delete",
                 ),
             ],
         )
@@ -241,6 +248,36 @@ debug_ranges:
                 "run\n",
                 "break-range ranges.cd:6-11;step;next;quit",
                 "step-next",
+            )
+
+    def test_line_delete_requires_one_breakpoint_pause_and_program_output(self):
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "trace status=ok\n",
+                "profile": "profile status=ok\n",
+                "debug": (
+                    "pause reason=entry\n"
+                    "debug breakpoint id=1 spec=ranges.cd:1\n"
+                    "debug resumed command=continue\n"
+                    "pause reason=breakpoint\n"
+                    "debug breakpoint-deleted id=1\n"
+                    "debug resumed command=continue\n"
+                    "2\n"
+                ),
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            cd_bytecode_parity._check_observability(
+                pathlib.Path("vm"),
+                "fixture.ll",
+                pathlib.Path("direct.cdbc"),
+                pathlib.Path("machine.cdbc"),
+                "cdbc 0.1\n",
+                "cdbc 0.1\n",
+                "run\n",
+                "run\n",
+                "break ranges.cd:1;continue;delete 1;continue",
+                "line-delete",
             )
 
 

@@ -11,7 +11,8 @@ Runtime-error cases require both paths to fail with the same VM diagnostic.
 Observability cases additionally compare debug sections, trace, profile, and
 scripted interactive-debugger output for metadata-backed and metadata-free
 artifacts. The step-next contract also checks the debugger's distinct resume
-and pause reasons.
+and pause reasons. The line-delete contract also checks breakpoint removal
+before execution resumes.
 """
 
 import argparse
@@ -161,7 +162,7 @@ def parse_manifest(lines):
             len(fields) == 4
             and fields[0] == "observability"
             and fields[2]
-            and fields[3] in {"ranges", "metadata-free", "step-next"}
+            and fields[3] in {"ranges", "metadata-free", "step-next", "line-delete"}
         ):
             entries.append((fields[0], fields[1], fields[2], fields[3]))
             continue
@@ -170,7 +171,7 @@ def parse_manifest(lines):
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>', "
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
-                "<ranges|metadata-free|step-next>'"
+                "<ranges|metadata-free|step-next|line-delete>'"
             )
     return entries
 
@@ -320,6 +321,28 @@ def _check_observability(
                 raise RuntimeError(
                     f"{label} missing for {input_path}: expected {expected!r}"
                 )
+    elif contract == "line-delete":
+        required = {
+            "breakpoint creation": "debug breakpoint id=1 spec=ranges.cd:1",
+            "continue before hit": "debug resumed command=continue",
+            "breakpoint pause": "pause reason=breakpoint",
+            "breakpoint deletion": "debug breakpoint-deleted id=1",
+        }
+        for label, expected in required.items():
+            if expected not in debug_output:
+                raise RuntimeError(
+                    f"{label} missing for {input_path}: expected {expected!r}"
+                )
+        if debug_output.count("pause reason=breakpoint") != 1:
+            raise RuntimeError(
+                f"line-delete contract expected exactly one breakpoint pause for "
+                f"{input_path}"
+            )
+        if not debug_output.endswith("2\n"):
+            raise RuntimeError(
+                f"line-delete contract did not finish with program output for "
+                f"{input_path}"
+            )
     else:
         raise RuntimeError(f"unknown observability contract {contract!r}")
 
