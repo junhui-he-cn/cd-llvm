@@ -4,7 +4,7 @@ Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
 implemented; M5 explicit debug-source-table, instruction-location,
 source-backed runtime-diagnostic, and debug-range slices implemented,
-2026-08-02.
+M6 module-envelope foundation implemented, 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -623,6 +623,46 @@ The sibling `cd-compiler` checkout already defines the string, collection,
 record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and
 VM. These M4 slices therefore change the LLVM artifact model and lowering only;
 they do not add a new Rust opcode or alter the artifact version.
+
+## Module artifact envelope: M6 foundation
+
+Program mode remains the default for `llc -mtriple=cd-unknown-unknown` and emits
+the existing linked-program envelope. The opt-in `-cd-artifact=module` mode
+emits the Rust VM's existing `artifact: module` envelope; it never changes the
+`cdbc 0.1` version or the ordinary constants, names, function, body, and debug
+sections.
+
+Module mode consumes exactly one `!cd.module` record. Its positional shape is
+four operands for a non-entry module and five operands for an entry module:
+
+```llvm
+!cd.module = !{!0}
+!0 = !{!"entry", !"entry.cd", !"/workspace/entry.cd", i1 true, i64 0}
+```
+
+The operands are `identity`, display `path`, `canonical_path`, the `i1` entry
+flag, and the optional non-negative 64-bit `entry_order`. An entry module must
+have an order, and a non-entry module must omit it. All strings are UTF-8 and
+all identities and paths are non-empty.
+
+Dependencies are an optional ordered `!cd.dependencies` named-metadata list.
+Each record has four operands: dependency kind (`import` or `re_export`),
+target module identity, non-negative 64-bit local main-instruction offset, and
+requested source path:
+
+```llvm
+!cd.dependencies = !{!1}
+!1 = !{!"import", !"/workspace/lib.cd", i64 1, !"./lib.cd"}
+```
+
+Offsets are serialized as the existing `dN target=... kind=... at=...
+requested=...` records and must be nondecreasing and no greater than the
+lowered main instruction count. If `llvm-link` combines input modules, LLVM
+concatenates their named-metadata records; the resulting multiple
+`!cd.module` records are rejected rather than synthesized into one module
+product. Module products are linked by the Rust VM's module-aware linker in a
+later M6 slice. Supplying module metadata without `-cd-artifact=module` is also
+an error, so the default program path cannot silently discard it.
 
 ## Debug source tables: M5A foundation
 

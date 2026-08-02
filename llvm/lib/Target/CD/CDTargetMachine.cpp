@@ -32,6 +32,17 @@ static cl::opt<CDBackend> CDBackendOption(
                           "Use the direct LLVM IR emitter"),
                clEnumValN(CDBackend::Machine, "machine",
                           "Use the TableGen-backed machine emitter")));
+
+enum class CDArtifactModeOption { Program, Module };
+
+static cl::opt<CDArtifactModeOption> CDArtifactModeOptionValue(
+    "cd-artifact", cl::Hidden,
+    cl::desc("Select the CD bytecode artifact envelope"),
+    cl::init(CDArtifactModeOption::Program),
+    cl::values(clEnumValN(CDArtifactModeOption::Program, "program",
+                          "Emit the linked-program envelope"),
+               clEnumValN(CDArtifactModeOption::Module, "module",
+                          "Emit the module-product envelope")));
 } // namespace
 
 namespace {
@@ -72,15 +83,20 @@ bool CDTargetMachine::addPassesToEmitFile(
   if (FileType != CodeGenFileType::AssemblyFile)
     return true;
 
+  const cd::CDArtifactMode ArtifactMode =
+      CDArtifactModeOptionValue == CDArtifactModeOption::Module
+          ? cd::CDArtifactMode::Module
+          : cd::CDArtifactMode::Program;
+
   if (CDBackendOption == CDBackend::Machine) {
     if (!MMIWP)
       MMIWP = new MachineModuleInfoWrapperPass(this);
     PM.add(MMIWP);
-    PM.add(createCDMachineBytecodeEmitterPass(Out));
+    PM.add(createCDMachineBytecodeEmitterPass(Out, ArtifactMode));
     return false;
   }
 
-  PM.add(createCDBytecodeEmitterPass(Out));
+  PM.add(createCDBytecodeEmitterPass(Out, ArtifactMode));
   return false;
 }
 

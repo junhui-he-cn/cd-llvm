@@ -558,6 +558,45 @@ static bool validateDebugSources(const CDArtifact &Artifact,
   return true;
 }
 
+static bool validateModuleMetadata(const CDArtifact &Artifact,
+                                   std::string &Error) {
+  if (!Artifact.module)
+    return true;
+
+  const CDModuleMetadata &Module = *Artifact.module;
+  if (Module.identity.empty())
+    return fail(Error, "module identity must not be empty");
+  if (Module.path.empty())
+    return fail(Error, "module path must not be empty");
+  if (Module.canonicalPath.empty())
+    return fail(Error, "module canonical path must not be empty");
+  if (!json::isUTF8(Module.identity) || !json::isUTF8(Module.path) ||
+      !json::isUTF8(Module.canonicalPath))
+    return fail(Error, "module metadata contains invalid UTF-8");
+  if (Module.isEntry != Module.entryOrder.has_value())
+    return fail(Error,
+                "module entry_order must be present exactly for entry modules");
+
+  uint64_t PreviousOffset = 0;
+  for (unsigned Index = 0; Index < Module.dependencies.size(); ++Index) {
+    const CDModuleDependency &Dependency = Module.dependencies[Index];
+    if (Dependency.identity.empty() || Dependency.requestedPath.empty())
+      return fail(Error, Twine("module dependency d") + Twine(Index) +
+                           " has an empty identity or path");
+    if (!json::isUTF8(Dependency.identity) ||
+        !json::isUTF8(Dependency.requestedPath))
+      return fail(Error, Twine("module dependency d") + Twine(Index) +
+                           " contains invalid UTF-8");
+    if (Dependency.instructionOffset > Artifact.main.instructions.size())
+      return fail(Error, Twine("module dependency d") + Twine(Index) +
+                           " instruction offset out of range");
+    if (Index != 0 && Dependency.instructionOffset < PreviousOffset)
+      return fail(Error, "module dependency offsets must be nondecreasing");
+    PreviousOffset = Dependency.instructionOffset;
+  }
+  return true;
+}
+
 static void writeOperands(raw_ostream &OS, ArrayRef<unsigned> Operands) {
   for (unsigned Index = 0; Index < Operands.size(); ++Index) {
     if (Index != 0)
@@ -1016,6 +1055,8 @@ bool validateArtifact(const CDArtifact &Artifact, std::string &Error) {
     return false;
   if (!validateDebugSources(Artifact, Error))
     return false;
+  if (!validateModuleMetadata(Artifact, Error))
+    return false;
 
   for (unsigned Index = 0; Index < Artifact.names.size(); ++Index)
     if (Artifact.names[Index].empty())
@@ -1043,7 +1084,34 @@ void serializeArtifact(const CDArtifact &Artifact, raw_ostream &OS) {
   if (!validateArtifact(Artifact, Error))
     report_fatal_error(Twine("CD bytecode artifact is invalid: ") + Error);
 
-  OS << "cdbc 0.1\n\nconstants:\n";
+  OS << "cdbc 0.1\n\n";
+  if (Artifact.module) {
+    const CDModuleMetadata &Module = *Artifact.module;
+    OS << "artifact: module\n\nmodule:\n";
+    OS << "  identity = ";
+    writeQuoted(OS, Module.identity);
+    OS << "\n  path = ";
+    writeQuoted(OS, Module.path);
+    OS << "\n  canonical_path = ";
+    writeQuoted(OS, Module.canonicalPath);
+    OS << "\n  entry = " << (Module.isEntry ? "true" : "false") << '\n';
+    if (Module.entryOrder)
+      OS << "  entry_order = " << *Module.entryOrder << '\n';
+    OS << "  dependencies:\n";
+    for (unsigned Index = 0; Index < Module.dependencies.size(); ++Index) {
+      const CDModuleDependency &Dependency = Module.dependencies[Index];
+      OS << "    d" << Index << " target=";
+      writeQuoted(OS, Dependency.identity);
+      OS << " kind="
+         << (Dependency.kind == CDModuleDependencyKind::Import ? "import"
+                                                                 : "re_export")
+         << " at=" << Dependency.instructionOffset << " requested=";
+      writeQuoted(OS, Dependency.requestedPath);
+      OS << '\n';
+    }
+    OS << '\n';
+  }
+  OS << "constants:\n";
   for (unsigned Index = 0; Index < Artifact.constants.size(); ++Index) {
     OS << "  " << constantName(Index) << " = ";
     switch (Artifact.constants[Index].kind) {

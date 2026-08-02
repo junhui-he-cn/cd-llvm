@@ -9,6 +9,7 @@
 #include "CDBytecodeEmitter.h"
 #include "CDBytecodeFormat.h"
 #include "CDDebugInfo.h"
+#include "CDModuleInfo.h"
 #include "CDValueABI.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
@@ -66,6 +67,7 @@ class CDFunctionEmitter;
 
 class CDModuleEmitter {
   raw_ostream &OS;
+  cd::CDArtifactMode Mode;
   std::vector<CDConstant> Constants;
   std::vector<std::string> Names;
   StringMap<unsigned> NameIndexes;
@@ -75,7 +77,8 @@ class CDModuleEmitter {
   std::vector<cd::CDDebugRangeMetadata> DebugRanges;
 
 public:
-  explicit CDModuleEmitter(raw_ostream &OS) : OS(OS) {}
+  CDModuleEmitter(raw_ostream &OS, cd::CDArtifactMode Mode)
+      : OS(OS), Mode(Mode) {}
 
   unsigned addName(StringRef Name) {
     auto It = NameIndexes.find(Name);
@@ -613,6 +616,16 @@ void CDModuleEmitter::emit(Module &M) {
   if (!cd::parseCDDebugRanges(M, DebugSources, DebugRanges, DebugError))
     unsupportedOperation(DebugError);
 
+  std::optional<cd::CDModuleMetadata> ModuleMetadata;
+  if (Mode == cd::CDArtifactMode::Module) {
+    cd::CDModuleMetadata ParsedModule;
+    if (!cd::parseCDModuleMetadata(M, ParsedModule, DebugError))
+      unsupportedOperation(DebugError);
+    ModuleMetadata = std::move(ParsedModule);
+  } else if (cd::hasCDModuleMetadata(M)) {
+    unsupportedOperation("module metadata requires -cd-artifact=module");
+  }
+
   for (const GlobalVariable &Global : M.globals()) {
     if (Global.isDeclaration())
       continue;
@@ -657,6 +670,7 @@ void CDModuleEmitter::emit(Module &M) {
   Artifact.names = std::move(Names);
   Artifact.main = std::move(MainBody);
   Artifact.debugSources = std::move(DebugSources);
+  Artifact.module = std::move(ModuleMetadata);
   for (unsigned Index = 0; Index < FunctionBodies.size(); ++Index) {
     const Function &F = *FunctionBodies[Index].first;
     const CDBody &Body = FunctionBodies[Index].second;
@@ -1007,14 +1021,16 @@ CDBody CDFunctionEmitter::emit() {
 
 class CDBytecodeEmitter final : public ModulePass {
   raw_ostream &OS;
+  cd::CDArtifactMode Mode;
 
 public:
   static char ID;
 
-  explicit CDBytecodeEmitter(raw_ostream &OS) : ModulePass(ID), OS(OS) {}
+  CDBytecodeEmitter(raw_ostream &OS, cd::CDArtifactMode Mode)
+      : ModulePass(ID), OS(OS), Mode(Mode) {}
 
   bool runOnModule(Module &M) override {
-    CDModuleEmitter(OS).emit(M);
+    CDModuleEmitter(OS, Mode).emit(M);
     return false;
   }
 
@@ -1025,6 +1041,7 @@ char CDBytecodeEmitter::ID = 0;
 
 } // namespace
 
-ModulePass *llvm::createCDBytecodeEmitterPass(raw_ostream &OS) {
-  return new CDBytecodeEmitter(OS);
+ModulePass *llvm::createCDBytecodeEmitterPass(raw_ostream &OS,
+                                              cd::CDArtifactMode Mode) {
+  return new CDBytecodeEmitter(OS, Mode);
 }

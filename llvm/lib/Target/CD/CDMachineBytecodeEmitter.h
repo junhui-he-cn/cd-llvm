@@ -9,11 +9,14 @@
 #ifndef LLVM_LIB_TARGET_CD_CDMACHINEBYTECODEEMITTER_H
 #define LLVM_LIB_TARGET_CD_CDMACHINEBYTECODEEMITTER_H
 
+#include "CDBytecodeFormat.h"
+
 namespace llvm {
 class ModulePass;
 class raw_ostream;
 
-ModulePass *createCDMachineBytecodeEmitterPass(raw_ostream &OS);
+ModulePass *createCDMachineBytecodeEmitterPass(raw_ostream &OS,
+                                               cd::CDArtifactMode Mode);
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_CD_CDMACHINEBYTECODEEMITTER_H

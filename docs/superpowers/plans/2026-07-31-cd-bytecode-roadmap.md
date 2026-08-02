@@ -52,7 +52,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, and direct/machine trace/observability parity are implemented; more complete interactive debugger behavior and other uncovered capabilities remain deferred |
-| M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
+| M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | In progress; LLVM module envelope and metadata foundation implemented; VM graph linking remains |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
 
 ## 4. M0 — Revalidate the existing target
@@ -637,7 +637,7 @@ any surface. M6 and M7 remain planned.
 **Files:**
 
 - Modify: `llvm/lib/Target/CD/CDTargetMachine.{h,cpp}` to select program versus module artifact mode.
-- Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` and `CDBytecodeEmitter.cpp`.
+- Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}`, `CDModuleInfo.{h,cpp}`, and both bytecode emitters.
 - Create: `llvm/test/CodeGen/CD/cdbc-modules.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-module-errors.ll`.
 - Modify: `docs/cd-bytecode-llvm-abi.md` and `llvm/lib/Target/CD/README.md`.
@@ -645,8 +645,11 @@ any surface. M6 and M7 remain planned.
 
 The recommended input boundary is named metadata for module identity, entry order, dependency identity, dependency kind, and source-order insertion points. Program mode remains the default and emits the current linked-program envelope. Module mode emits `artifact: module` only when all required metadata is present; missing or inconsistent metadata is a target error.
 
-- [ ] Define stable LLVM module metadata and how `llvm-link` affects it.
-- [ ] Preserve deterministic function, constant, name, debug-source, and dependency ordering through module emission.
+- [x] Define stable LLVM module metadata and how `llvm-link` affects it. The
+  `!cd.module` and `!cd.dependencies` records are explicit, and multiple
+  module records produced by `llvm-link` are rejected rather than merged.
+- [x] Preserve deterministic function, constant, name, debug-source, and
+  dependency ordering through the shared module serializer.
 - [ ] Add tests for duplicate identities, missing dependencies, cycles, invalid insertion offsets, and non-contiguous entry order.
 - [ ] Produce module products, run the Rust `link` command, then execute the linked output with `run`.
 - [ ] Confirm a module product is rejected by direct VM `run` until linking.
@@ -678,8 +681,10 @@ The next development session should execute only this narrow sequence:
 1. Keep the M5 direct/machine observability parity gate opt-in and extend it
    only with explicit contracts for more complete interactive debugger behavior
    and other observability capabilities not covered by the completed slices.
-2. Enter M6 by defining program/module products, dependency metadata, and the
-   Rust VM linking boundary without changing the `cdbc 0.1` version.
+2. Continue M6 from the completed LLVM module-envelope foundation by producing
+   multiple module products, exercising the existing Rust linker, and covering
+   missing dependencies, cycles, entry ordering, and linked diagnostics without
+   changing the `cdbc 0.1` version.
 3. Keep M7 as an independent planned CI and release-quality boundary, including
    opt-in VM integration and reproducible verification rather than a default
    parity gate.

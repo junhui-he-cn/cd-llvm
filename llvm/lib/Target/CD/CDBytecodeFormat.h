@@ -146,6 +146,24 @@ struct CDDebugLocation {
   std::optional<CDDebugRange> range;
 };
 
+enum class CDModuleDependencyKind { Import, ReExport };
+
+struct CDModuleDependency {
+  std::string identity;
+  CDModuleDependencyKind kind = CDModuleDependencyKind::Import;
+  uint64_t instructionOffset = 0;
+  std::string requestedPath;
+};
+
+struct CDModuleMetadata {
+  std::string identity;
+  std::string path;
+  std::string canonicalPath;
+  bool isEntry = false;
+  std::optional<uint64_t> entryOrder;
+  std::vector<CDModuleDependency> dependencies;
+};
+
 struct CDBody {
   unsigned registers = 0;
   std::vector<std::string> parameterNames;
@@ -165,7 +183,10 @@ struct CDArtifact {
   CDBody main;
   std::vector<CDFunction> functions;
   std::vector<CDDebugSource> debugSources;
+  std::optional<CDModuleMetadata> module;
 };
+
+enum class CDArtifactMode { Program, Module };
 
 /// Validate all references and structural invariants before serialization.
 /// The returned error is suitable for inclusion in a target diagnostic.

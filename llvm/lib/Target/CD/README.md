@@ -42,6 +42,32 @@ block operands are patched to final bytecode instruction offsets. The direct
 emitter remains the default compatibility path until direct/machine Rust VM
 parity is gated.
 
+## Module artifacts
+
+Program mode is the default. Use `-cd-artifact=module` to emit the existing
+Rust VM `cdbc 0.1` module envelope through either the direct or machine path:
+
+```text
+llc -mtriple=cd-unknown-unknown -cd-artifact=module input.ll -o module.cdbc
+llc -mtriple=cd-unknown-unknown -cd-backend=machine -cd-artifact=module input.ll -o module-machine.cdbc
+```
+
+Module mode requires exactly one `!cd.module` record with positional
+`identity`, `path`, `canonical_path`, `i1 entry`, and optional `i64
+entry_order` operands. An optional `!cd.dependencies` list contains ordered
+`kind`, target identity, local instruction offset, and requested path records.
+The shared typed artifact validator enforces non-empty UTF-8 identities and
+paths, entry-order consistency, ordered in-range offsets, and the allowlisted
+dependency kinds. The serializer writes the VM's existing `artifact: module`
+header before the ordinary sections. Program mode rejects these metadata nodes
+instead of silently dropping them.
+
+`llvm-link` does not combine module products: because it concatenates named
+metadata, the target rejects a linked IR module with multiple `!cd.module`
+records. The Rust VM's module-aware `link` command remains responsible for
+resolving dependency identities and expanding products; missing dependencies,
+cycles, entry-order graphs, and linked execution are the next M6 boundary.
+
 Integer constants are accepted only when their signed value is exactly
 representable as an IEEE-754 double; otherwise the target reports a diagnostic
 instead of silently changing the value. Number constants are serialized with a
