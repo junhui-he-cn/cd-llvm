@@ -35,3 +35,6 @@ artifact llvm/test/CodeGen/CD/cdbc-native.ll
 artifact llvm/test/CodeGen/CD/cdbc-native-values.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-runtime.ll "sqrt expects non-negative number"
 artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
+# The location fixture has identical debug tables, while direct and machine
+# constant scheduling gives the main add different operand/register order.
+behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll

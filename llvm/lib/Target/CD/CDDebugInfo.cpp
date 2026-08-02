@@ -8,10 +8,13 @@
 
 #include "CDDebugInfo.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Path.h"
 
 #include <set>
 
@@ -90,6 +93,67 @@ bool parseCDSources(const Module &M, std::vector<CDDebugSource> &Sources,
     Source.text = Text.str();
     Sources.push_back(std::move(Source));
   }
+  return true;
+}
+
+static bool findCDSource(ArrayRef<CDDebugSource> Sources, const DIFile &File,
+                         unsigned &SourceIndex, std::string &Error) {
+  SmallString<256> QualifiedPath(File.getDirectory());
+  if (!File.getDirectory().empty())
+    sys::path::append(QualifiedPath, File.getFilename());
+
+  const StringRef Candidates[] = {File.getFilename(), QualifiedPath};
+  for (StringRef Candidate : Candidates) {
+    if (Candidate.empty())
+      continue;
+
+    unsigned Match = InvalidIndex;
+    unsigned MatchCount = 0;
+    for (unsigned Index = 0; Index < Sources.size(); ++Index) {
+      if (Sources[Index].path != Candidate)
+        continue;
+      Match = Index;
+      ++MatchCount;
+    }
+    if (MatchCount > 1)
+      return fail(Error, Twine("debug location file `") + Candidate +
+                           " matches multiple CD sources");
+    if (MatchCount == 1) {
+      SourceIndex = Match;
+      return true;
+    }
+  }
+
+  SourceIndex = InvalidIndex;
+  return true;
+}
+
+bool resolveCDDebugLocation(const DebugLoc &Location,
+                            ArrayRef<CDDebugSource> Sources,
+                            std::optional<CDDebugLocation> &Resolved,
+                            std::string &Error) {
+  Resolved.reset();
+  if (!Location || Sources.empty())
+    return true;
+
+  const DILocation *DILocationValue = Location.get();
+  if (!DILocationValue || DILocationValue->getLine() == 0 ||
+      DILocationValue->getColumn() == 0)
+    return true;
+
+  const DILocalScope *Scope = DILocationValue->getScope();
+  const DIFile *File = Scope ? Scope->getFile() : nullptr;
+  if (!File)
+    return true;
+
+  unsigned SourceIndex = InvalidIndex;
+  if (!findCDSource(Sources, *File, SourceIndex, Error))
+    return false;
+  if (SourceIndex == InvalidIndex)
+    return true;
+
+  Resolved = CDDebugLocation{SourceIndex, DILocationValue->getLine(),
+                             DILocationValue->getColumn()};
   return true;
 }
 

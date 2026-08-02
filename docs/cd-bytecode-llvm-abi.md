@@ -2,7 +2,8 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
-implemented; M5 explicit debug-source-table foundation implemented,
+implemented; M5 explicit debug-source-table and instruction-location slices
+implemented,
 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
@@ -639,6 +640,14 @@ A two-string record is `path,text`; a three-string record is
 `module,path,text`. Paths are non-empty, module identities are non-empty when
 present, all strings must be valid UTF-8, and `(module,path)` identities must
 be unique. Valid records are emitted as the optional `debug_sources` section
-in source order through both direct and machine artifact paths. This first
-slice deliberately emits no `debug_locations` or `debug_ranges`; instruction
-location mapping from `DILocation` and byte ranges remain the next M5 gate.
+in source order through both direct and machine artifact paths.
+
+When an explicit source table is present, a non-zero `DILocation` is emitted as
+an optional sparse `debug_locations` entry when its `DIFile` filename, or its
+directory-qualified filename, matches exactly one source path. Locations with
+no matching explicit source, no file scope, or a zero line/column are omitted;
+ambiguous path matches are target errors. Direct and machine lowering preserve
+the same source, line, and one-based column values after branch patching, while
+synthetic constants and instructions without a source location remain sparse.
+This slice deliberately emits no `debug_ranges`; source-local byte ranges and
+source-backed runtime diagnostics remain later M5 gates.

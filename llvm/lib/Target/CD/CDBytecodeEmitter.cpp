@@ -71,6 +71,7 @@ class CDModuleEmitter {
   StringMap<unsigned> NameIndexes;
   StringMap<unsigned> ConstantIndexes;
   DenseMap<const Function *, unsigned> FunctionIndexes;
+  std::vector<cd::CDDebugSource> DebugSources;
 
 public:
   explicit CDModuleEmitter(raw_ostream &OS) : OS(OS) {}
@@ -105,6 +106,21 @@ public:
     return It->second;
   }
 
+  bool hasDebugSources() const { return !DebugSources.empty(); }
+
+  std::optional<cd::CDDebugLocation>
+  debugLocation(const Instruction *I) const {
+    if (!I || DebugSources.empty())
+      return std::nullopt;
+
+    std::optional<cd::CDDebugLocation> Location;
+    std::string Error;
+    if (!cd::resolveCDDebugLocation(I->getDebugLoc(), DebugSources, Location,
+                                    Error))
+      unsupportedOperation(std::string("debug location ") + Error);
+    return Location;
+  }
+
   void emit(Module &M);
 };
 
@@ -123,17 +139,26 @@ class CDFunctionEmitter {
   DenseMap<const BasicBlock *, unsigned> BlockOffsets;
   std::vector<BranchPatch> BranchPatches;
   std::vector<CDInstruction> Instructions;
+  std::vector<std::optional<cd::CDDebugLocation>> Locations;
   std::vector<std::string> ParameterNames;
   std::vector<unsigned> ParameterNameIndexes;
   std::set<std::string> UsedStorageNames;
   unsigned NextRegister = 0;
   unsigned AllocaSerial = 0;
   unsigned ValueSerial = 0;
+  const Instruction *DebugInstruction = nullptr;
 
   unsigned allocateRegister() { return NextRegister++; }
 
+  void appendInstruction(CDInstruction BytecodeInstruction,
+                         const llvm::Instruction *Source) {
+    Instructions.push_back(std::move(BytecodeInstruction));
+    if (Module.hasDebugSources())
+      Locations.push_back(Module.debugLocation(Source));
+  }
+
   void appendInstruction(CDInstruction Instruction) {
-    Instructions.push_back(std::move(Instruction));
+    appendInstruction(std::move(Instruction), DebugInstruction);
   }
 
   std::string uniqueStorageName(StringRef Base) {
@@ -579,10 +604,11 @@ void CDModuleEmitter::emit(Module &M) {
   if (Main->arg_size() != 0)
     report_fatal_error("CD target @main must not have parameters");
 
-  std::vector<cd::CDDebugSource> DebugSources;
+  std::vector<cd::CDDebugSource> ParsedDebugSources;
   std::string DebugError;
-  if (!cd::parseCDSources(M, DebugSources, DebugError))
+  if (!cd::parseCDSources(M, ParsedDebugSources, DebugError))
     unsupportedOperation(DebugError);
+  DebugSources = std::move(ParsedDebugSources);
 
   for (const GlobalVariable &Global : M.globals()) {
     if (Global.isDeclaration())
@@ -739,14 +765,14 @@ unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
 
   const unsigned ConstantIndex = Module.addConstant(Kind, Text);
   const unsigned Register = allocateRegister();
-  appendInstruction(CDInstruction::constant(Register, ConstantIndex));
+  appendInstruction(CDInstruction::constant(Register, ConstantIndex), nullptr);
   return Register;
 }
 
 unsigned CDFunctionEmitter::materializeNil() {
   const unsigned ConstantIndex = Module.addConstant(CDConstant::Nil);
   const unsigned Register = allocateRegister();
-  appendInstruction(CDInstruction::constant(Register, ConstantIndex));
+  appendInstruction(CDInstruction::constant(Register, ConstantIndex), nullptr);
   return Register;
 }
 
@@ -764,6 +790,7 @@ unsigned CDFunctionEmitter::valueRegister(const Value *V) {
 }
 
 void CDFunctionEmitter::emitInstruction(const Instruction &I) {
+  DebugInstruction = &I;
   if (isa<DbgInfoIntrinsic>(&I) || isa<PHINode>(&I))
     return;
 
@@ -886,6 +913,7 @@ void CDFunctionEmitter::emitInstruction(const Instruction &I) {
 
 void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
                                        const Instruction &Terminator) {
+  DebugInstruction = &Terminator;
   if (const auto *Return = dyn_cast<ReturnInst>(&Terminator)) {
     const unsigned Register = Return->getReturnValue()
                                   ? valueRegister(Return->getReturnValue())
@@ -932,6 +960,7 @@ void CDFunctionEmitter::emitBody() {
   }
 
   for (BasicBlock &BB : F) {
+    DebugInstruction = nullptr;
     BlockOffsets[&BB] = Instructions.size();
     for (const PHINode &Phi : BB.phis()) {
       appendInstruction(CDInstruction::loadVar(resultRegister(Phi),
@@ -968,6 +997,7 @@ CDBody CDFunctionEmitter::emit() {
   CDBody Body;
   Body.registers = NextRegister;
   Body.instructions = std::move(Instructions);
+  Body.locations = std::move(Locations);
   Body.parameterNames = std::move(ParameterNames);
   return Body;
 }

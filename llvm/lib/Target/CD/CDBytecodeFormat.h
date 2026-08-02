@@ -126,22 +126,29 @@ struct CDInstruction {
   static CDInstruction jumpIfFalse(unsigned condition, unsigned target);
 };
 
+struct CDDebugSource {
+  std::optional<std::string> module;
+  std::string path;
+  std::string text;
+};
+
+struct CDDebugLocation {
+  unsigned source = InvalidIndex;
+  unsigned line = 0;
+  unsigned column = 0;
+};
+
 struct CDBody {
   unsigned registers = 0;
   std::vector<std::string> parameterNames;
   std::vector<CDInstruction> instructions;
+  std::vector<std::optional<CDDebugLocation>> locations;
 };
 
 struct CDFunction {
   std::string name;
   unsigned arity = 0;
   CDBody body;
-};
-
-struct CDDebugSource {
-  std::optional<std::string> module;
-  std::string path;
-  std::string text;
 };
 
 struct CDArtifact {

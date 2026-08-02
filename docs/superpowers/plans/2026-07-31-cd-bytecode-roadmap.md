@@ -584,27 +584,31 @@ nested checkout remained clean.
 
 - Create: `llvm/lib/Target/CD/CDDebugInfo.{h,cpp}`.
 - Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` and `CDBytecodeEmitter.cpp`.
-- Create: `llvm/test/CodeGen/CD/cdbc-debug.ll`.
+- Create: `llvm/test/CodeGen/CD/cdbc-debug-sources.ll`,
+  `llvm/test/CodeGen/CD/cdbc-debug-locations.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-debug-source-errors.ll`.
 - Modify: `llvm/lib/Target/CD/README.md` and `docs/cd-bytecode-llvm-abi.md`.
 - Synchronize, in the independent checkout: `cd-compiler/vm-rs/src/format.rs`, `cd-compiler/vm-rs/src/vm.rs`, and debug/trace tests.
 
 Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LLVM debug metadata does not contain the original source bytes, emit `debug_sources` only when a defined `!cd.sources` named-metadata record supplies the display path, canonical module identity, and exact source text. Without that record, the target may emit no debug sections while retaining correct program execution.
 
 - [x] Define the `!cd.sources` record and reject malformed records, duplicate source identities, empty paths/module identities, and invalid UTF-8. The source-table foundation intentionally defers instruction indexes and byte ranges.
-- [ ] Map main/function instruction locations deterministically after branch patching.
+- [x] Map main/function instruction locations deterministically after branch
+  patching, resolving explicit source paths through both direct and machine
+  artifact paths.
 - [ ] Emit optional half-open byte ranges only when the source metadata supplies exact byte offsets.
 - [ ] Verify divide-by-zero, invalid index, failed native call, and nested-function errors through the Rust VM's location and call-stack reporting.
 - [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
 
-### Narrow M5 slice: explicit debug source tables (2026-08-02)
+### Narrow M5 slices: explicit source tables and locations (2026-08-02)
 
-The first M5 slice is complete: explicit `!cd.sources` metadata is validated
-and emitted as `debug_sources` through both direct and machine artifact paths.
-The Rust VM accepts the source table, while `DILocation` mapping,
-`debug_locations`, `debug_ranges`, and source-backed runtime diagnostics remain
-the next independent M5 boundary.
+The explicit `!cd.sources` foundation and the follow-on `DILocation` mapping
+slice are complete. Source records and sparse `debug_locations` are validated
+and emitted through both direct and machine artifact paths, and the Rust VM
+accepts the resulting artifacts. `debug_ranges`, source-backed runtime
+diagnostics, and debugger behavior remain the next independent M5 boundary.
 
 ## 10. M6 — Support module products and linking
 

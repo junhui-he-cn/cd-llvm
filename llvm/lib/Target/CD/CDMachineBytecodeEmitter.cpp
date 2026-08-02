@@ -75,6 +75,7 @@ class CDMachineModuleEmitter {
   std::set<std::string> UsedStorageNames;
   unsigned AllocaSerial = 0;
   unsigned ValueSerial = 0;
+  DebugLoc CurrentDebugLoc;
 
   unsigned addName(StringRef Name) {
     auto It = NameIndexes.find(Name);
@@ -288,7 +289,7 @@ class CDMachineModuleEmitter {
     Register Left = valueRegister(Binary.getOperand(0), MRI, MBB, TII);
     Register Right = valueRegister(Binary.getOperand(1), MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Binary);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(binaryOpcode(Binary)), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(binaryOpcode(Binary)), Result)
         .addReg(Left)
         .addReg(Right);
   }
@@ -314,7 +315,7 @@ class CDMachineModuleEmitter {
 
     Register SourceRegister = valueRegister(Source, MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Binary);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NOT), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_NOT), Result)
         .addReg(SourceRegister);
   }
 
@@ -326,7 +327,7 @@ class CDMachineModuleEmitter {
 
     Register Source = valueRegister(Cast.getOperand(0), MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Cast);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MOVE), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_MOVE), Result)
         .addReg(Source);
   }
 
@@ -339,7 +340,7 @@ class CDMachineModuleEmitter {
       if (!Value)
         unsupported(Error);
       Register Result = createValueRegister(MRI, &Call);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CONSTANT), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_CONSTANT), Result)
           .addImm(addString(*Value));
       return;
     }
@@ -358,7 +359,7 @@ class CDMachineModuleEmitter {
         Arguments.push_back(
             valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
       MachineInstrBuilder NativeBuilder =
-          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NATIVE_CALL),
+          BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_NATIVE_CALL),
                   Result)
               .addImm(Name);
       for (Register Argument : Arguments)
@@ -379,7 +380,7 @@ class CDMachineModuleEmitter {
             valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
 
       MachineInstrBuilder ArrayBuilder =
-          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ARRAY), Result);
+          BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_ARRAY), Result);
       for (Register Element : Elements)
         ArrayBuilder.addReg(Element);
       return;
@@ -398,7 +399,7 @@ class CDMachineModuleEmitter {
             valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
 
       MachineInstrBuilder MapBuilder =
-          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAP), Result);
+          BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_MAP), Result);
       for (Register KeyValueOperand : KeyValueOperands)
         MapBuilder.addReg(KeyValueOperand);
       return;
@@ -424,7 +425,7 @@ class CDMachineModuleEmitter {
             valueRegister(Call.getArgOperand(Index + 1), MRI, MBB, TII));
       }
       MachineInstrBuilder StructBuilder =
-          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STRUCT), Result);
+          BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_STRUCT), Result);
       StructBuilder.addImm(TypeName);
       for (const auto &[Name, Value] : Fields) {
         StructBuilder.addImm(Name);
@@ -449,7 +450,8 @@ class CDMachineModuleEmitter {
         Payload.push_back(
             valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
       MachineInstrBuilder VariantBuilder =
-          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT), Result)
+          BuildMI(MBB, MBB.end(), CurrentDebugLoc,
+                  TII.get(CD::CD_VARIANT), Result)
               .addImm(EnumName)
               .addImm(VariantName);
       for (Register Value : Payload)
@@ -468,7 +470,7 @@ class CDMachineModuleEmitter {
           addNameOperand(Call.getArgOperand(1), "llvm.cd.variant.tag");
       const unsigned VariantName =
           addNameOperand(Call.getArgOperand(2), "llvm.cd.variant.tag");
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT_TAG), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_VARIANT_TAG), Result)
           .addReg(Value)
           .addImm(EnumName)
           .addImm(VariantName);
@@ -483,7 +485,7 @@ class CDMachineModuleEmitter {
       Register Result = createValueRegister(MRI, &Call);
       Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
       const auto *Index = cast<ConstantInt>(Call.getArgOperand(1));
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT_FIELD), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_VARIANT_FIELD), Result)
           .addReg(Value)
           .addImm(Index->getZExtValue());
       return;
@@ -498,7 +500,7 @@ class CDMachineModuleEmitter {
       Register Object = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
       const unsigned Name =
           addNameOperand(Call.getArgOperand(1), "llvm.cd.field");
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_FIELD), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_FIELD), Result)
           .addReg(Object)
           .addImm(Name);
       return;
@@ -514,7 +516,7 @@ class CDMachineModuleEmitter {
       const unsigned Name =
           addNameOperand(Call.getArgOperand(1), "llvm.cd.assign.field");
       Register Value = valueRegister(Call.getArgOperand(2), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSIGN_FIELD), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_ASSIGN_FIELD), Result)
           .addReg(Object)
           .addImm(Name)
           .addReg(Value);
@@ -530,7 +532,7 @@ class CDMachineModuleEmitter {
       Register Collection =
           valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
       Register Index = valueRegister(Call.getArgOperand(1), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_INDEX), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_INDEX), Result)
           .addReg(Collection)
           .addReg(Index);
       return;
@@ -546,7 +548,7 @@ class CDMachineModuleEmitter {
           valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
       Register Index = valueRegister(Call.getArgOperand(1), MRI, MBB, TII);
       Register Value = valueRegister(Call.getArgOperand(2), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSIGN_INDEX), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_ASSIGN_INDEX), Result)
           .addReg(Collection)
           .addReg(Index)
           .addReg(Value);
@@ -560,7 +562,7 @@ class CDMachineModuleEmitter {
 
       Register Result = createValueRegister(MRI, &Call);
       Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_LEN), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_LEN), Result)
           .addReg(Value);
       return;
     }
@@ -572,7 +574,7 @@ class CDMachineModuleEmitter {
 
       Register Result = createValueRegister(MRI, &Call);
       Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSERT_ARRAY), Result)
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_ASSERT_ARRAY), Result)
           .addReg(Value);
       return;
     }
@@ -583,7 +585,7 @@ class CDMachineModuleEmitter {
       if (!isSupportedPrintValue(Call.getArgOperand(0)))
         unsupported("a non-scalar print argument");
       Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_PRINT))
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_PRINT))
           .addReg(Value);
       return;
     }
@@ -605,7 +607,7 @@ class CDMachineModuleEmitter {
       Arguments.push_back(valueRegister(Argument.get(), MRI, MBB, TII));
 
     MachineInstrBuilder CallBuilder =
-        BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_CALL), Result)
+        BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_CALL), Result)
             .addReg(CalleeRegister);
     for (Register Argument : Arguments)
       CallBuilder.addReg(Argument);
@@ -628,7 +630,7 @@ class CDMachineModuleEmitter {
       unsupported("an unsupported load");
 
     Register Result = createValueRegister(MRI, &Load);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_LOAD_VAR), Result)
         .addImm(allocaName(Load.getPointerOperand()));
   }
 
@@ -640,7 +642,7 @@ class CDMachineModuleEmitter {
 
     Register Source =
         valueRegister(Store.getValueOperand(), MRI, MBB, TII);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STORE_VAR))
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_STORE_VAR))
         .addImm(allocaName(Store.getPointerOperand()))
         .addReg(Source);
   }
@@ -673,7 +675,7 @@ class CDMachineModuleEmitter {
       Register Source = valueRegister(
           Phi.getIncomingValue(static_cast<unsigned>(IncomingIndex)), MRI, MBB,
           TII);
-      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STORE_VAR))
+      BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_STORE_VAR))
           .addImm(PhiNames.lookup(&Phi))
           .addReg(Source);
     }
@@ -686,7 +688,7 @@ class CDMachineModuleEmitter {
                                 const TargetInstrInfo &TII) {
     const BasicBlock *Successor = Branch.getSuccessor(0);
     lowerPhiStores(Predecessor, *Successor, 0, MRI, MBB, TII);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP))
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_JUMP))
         .addMBB(machineBlock(Successor));
   }
 
@@ -697,7 +699,7 @@ class CDMachineModuleEmitter {
     MachineBasicBlock *Edge = MF.CreateMachineBasicBlock();
     MF.insert(MF.end(), Edge);
     lowerPhiStores(Predecessor, Successor, IncomingOccurrence, MRI, *Edge, TII);
-    BuildMI(*Edge, Edge->end(), DebugLoc(), TII.get(CD::CD_JUMP))
+    BuildMI(*Edge, Edge->end(), CurrentDebugLoc, TII.get(CD::CD_JUMP))
         .addMBB(machineBlock(&Successor));
     return Edge;
   }
@@ -720,10 +722,10 @@ class CDMachineModuleEmitter {
                                         FalseOccurrence, MRI, TII);
     Register Condition =
         valueRegister(Branch.getCondition(), MRI, MBB, TII);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP_IF_FALSE))
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_JUMP_IF_FALSE))
         .addReg(Condition)
         .addMBB(FalseEdge);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_JUMP))
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_JUMP))
         .addMBB(TrueEdge);
   }
 
@@ -739,7 +741,7 @@ class CDMachineModuleEmitter {
     Register TrueValue = valueRegister(Select.getTrueValue(), MRI, MBB, TII);
     Register FalseValue = valueRegister(Select.getFalseValue(), MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Select);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_SELECT), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_SELECT), Result)
         .addReg(Condition)
         .addReg(TrueValue)
         .addReg(FalseValue);
@@ -753,7 +755,7 @@ class CDMachineModuleEmitter {
     Register Source =
         valueRegister(Instruction.getOperand(0), MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Instruction);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NEGATE), Result)
+    BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(CD::CD_NEGATE), Result)
         .addReg(Source);
   }
 
@@ -802,7 +804,7 @@ class CDMachineModuleEmitter {
     Register Left = valueRegister(Compare.getOperand(0), MRI, MBB, TII);
     Register Right = valueRegister(Compare.getOperand(1), MRI, MBB, TII);
     Register Result = createValueRegister(MRI, &Compare);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(comparisonOpcode(Compare)),
+        BuildMI(MBB, MBB.end(), CurrentDebugLoc, TII.get(comparisonOpcode(Compare)),
             Result)
         .addReg(Left)
         .addReg(Right);
@@ -833,6 +835,7 @@ class CDMachineModuleEmitter {
     UsedStorageNames.clear();
     AllocaSerial = 0;
     ValueSerial = 0;
+    CurrentDebugLoc = DebugLoc();
 
     if (IsMain && F.getName() != "main")
       unsupported("a non-main function as the entry body");
@@ -885,11 +888,12 @@ class CDMachineModuleEmitter {
     for (BasicBlock &BB : F) {
       MachineBasicBlock *MBB = MachineBlocks.lookup(&BB);
       for (const PHINode &Phi : BB.phis())
-        BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_LOAD_VAR),
+        BuildMI(*MBB, MBB->end(), Phi.getDebugLoc(), TII.get(CD::CD_LOAD_VAR),
                 createValueRegister(MRI, &Phi))
             .addImm(PhiNames.lookup(&Phi));
 
       for (const Instruction &Instruction : BB) {
+        CurrentDebugLoc = Instruction.getDebugLoc();
         if (isa<DbgInfoIntrinsic>(&Instruction) ||
             isa<PHINode>(&Instruction))
           continue;
@@ -914,7 +918,7 @@ class CDMachineModuleEmitter {
           Register Result = ReturnValue
                                 ? valueRegister(ReturnValue, MRI, *MBB, TII)
                                 : materializeNil(MRI, *MBB, TII);
-          BuildMI(*MBB, MBB->end(), DebugLoc(), TII.get(CD::CD_RETURN))
+          BuildMI(*MBB, MBB->end(), CurrentDebugLoc, TII.get(CD::CD_RETURN))
               .addReg(Result);
           continue;
         }
@@ -980,6 +984,7 @@ class CDMachineModuleEmitter {
         if (MI.isDebugInstr())
           continue;
 
+        const size_t PreviousInstructionCount = Body.instructions.size();
         switch (MI.getOpcode()) {
         case CD::CD_CONSTANT:
           if (MI.getNumOperands() != 2 || !MI.getOperand(0).isReg() ||
@@ -1333,6 +1338,19 @@ class CDMachineModuleEmitter {
         default:
           unsupported("an unimplemented machine opcode in the artifact bridge");
         }
+
+        const size_t AddedInstructions =
+            Body.instructions.size() - PreviousInstructionCount;
+        if (!Artifact.debugSources.empty() && AddedInstructions != 0) {
+          std::optional<cd::CDDebugLocation> Location;
+          std::string Error;
+          if (!cd::resolveCDDebugLocation(MI.getDebugLoc(),
+                                          Artifact.debugSources, Location,
+                                          Error))
+            unsupported(std::string("debug location ") + Error);
+          Body.locations.insert(Body.locations.end(), AddedInstructions,
+                                Location);
+        }
       }
     }
     for (const BranchPatch &Patch : BranchPatches) {
@@ -1358,6 +1376,7 @@ public:
     std::string DebugError;
     if (!cd::parseCDSources(M, DebugSources, DebugError))
       unsupported(DebugError);
+    Artifact.debugSources = std::move(DebugSources);
 
     for (const GlobalVariable &Global : M.globals()) {
       if (Global.isDeclaration())
@@ -1400,8 +1419,6 @@ public:
           {F.getName().str(), static_cast<unsigned>(F.arg_size()),
            lowerFunction(F, false)});
     }
-
-    Artifact.debugSources = std::move(DebugSources);
 
     std::string Error;
     if (!cd::validateArtifact(Artifact, Error))

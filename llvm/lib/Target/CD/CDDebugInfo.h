@@ -11,6 +11,10 @@
 
 #include "CDBytecodeFormat.h"
 
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/IR/DebugLoc.h"
+
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,6 +27,14 @@ namespace cd {
 /// source table. An absent node is valid and produces an empty table.
 bool parseCDSources(const Module &M, std::vector<CDDebugSource> &Sources,
                     std::string &Error);
+
+/// Resolve an LLVM instruction debug location to an explicit CD source.
+/// Locations without a source table match or without a representable positive
+/// line/column are intentionally omitted from the additive artifact section.
+bool resolveCDDebugLocation(const DebugLoc &Location,
+                            ArrayRef<CDDebugSource> Sources,
+                            std::optional<CDDebugLocation> &Resolved,
+                            std::string &Error);
 
 } // namespace cd
 } // namespace llvm

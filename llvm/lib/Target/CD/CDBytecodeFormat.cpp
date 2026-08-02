@@ -456,6 +456,25 @@ static bool validateInstruction(const CDInstruction &Instruction,
 
 static bool validateBody(const CDArtifact &Artifact, const CDBody &Body,
                          StringRef BodyName, std::string &Error) {
+  if (!Body.locations.empty() &&
+      Body.locations.size() != Body.instructions.size())
+    return fail(Error, Twine(BodyName) + " has " +
+                         Twine(Body.locations.size()) +
+                         " debug locations for " +
+                         Twine(Body.instructions.size()) + " instructions");
+
+  for (unsigned Index = 0; Index < Body.locations.size(); ++Index) {
+    const std::optional<CDDebugLocation> &Location = Body.locations[Index];
+    if (!Location)
+      continue;
+    if (Location->source >= Artifact.debugSources.size())
+      return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                           " has a debug location source outside the source table");
+    if (Location->line == 0 || Location->column == 0)
+      return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                           " has a non-positive debug location");
+  }
+
   for (unsigned Index = 0; Index < Body.instructions.size(); ++Index)
     if (!validateInstruction(Body.instructions[Index], Artifact, Body, BodyName,
                              Index, Error))
@@ -1075,6 +1094,37 @@ void serializeArtifact(const CDArtifact &Artifact, raw_ostream &OS) {
       OS << " text=";
       writeQuoted(OS, Source.text);
       OS << '\n';
+    }
+  }
+
+  bool HasDebugLocations = false;
+  for (const std::optional<CDDebugLocation> &Location : Artifact.main.locations)
+    HasDebugLocations |= Location.has_value();
+  for (const CDFunction &Function : Artifact.functions)
+    for (const std::optional<CDDebugLocation> &Location : Function.body.locations)
+      HasDebugLocations |= Location.has_value();
+
+  if (HasDebugLocations) {
+    OS << "\ndebug_locations:\n";
+    for (unsigned Index = 0; Index < Artifact.main.locations.size(); ++Index) {
+      const std::optional<CDDebugLocation> &Location =
+          Artifact.main.locations[Index];
+      if (!Location)
+        continue;
+      OS << "  main " << Index << " = s" << Location->source << ":"
+         << Location->line << ":" << Location->column << '\n';
+    }
+    for (unsigned FunctionIndex = 0;
+         FunctionIndex < Artifact.functions.size(); ++FunctionIndex) {
+      const CDBody &Body = Artifact.functions[FunctionIndex].body;
+      for (unsigned Index = 0; Index < Body.locations.size(); ++Index) {
+        const std::optional<CDDebugLocation> &Location = Body.locations[Index];
+        if (!Location)
+          continue;
+        OS << "  function " << functionName(FunctionIndex) << " " << Index
+           << " = s" << Location->source << ":" << Location->line << ":"
+           << Location->column << '\n';
+      }
     }
   }
 }
