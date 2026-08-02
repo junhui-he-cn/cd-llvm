@@ -53,7 +53,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, and direct/machine trace/observability parity are implemented; more complete interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
-| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only and explicit VM integration boundaries are verified; CI and the broader release matrix remain |
+| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only and explicit VM integration boundaries plus focused CI jobs are verified; the broader release matrix remains |
 
 ## 4. M0 — Revalidate the existing target
 
@@ -670,6 +670,8 @@ The recommended input boundary is named metadata for module identity, entry orde
 **Files:**
 
 - Modify: `llvm/lib/Target/CD/README.md`.
+- Create: `.github/workflows/cd-bytecode.yml` with separate LLVM-only and VM
+  integration jobs.
 - Create: `llvm/test/CodeGen/CD/cdbc-vm-integration.py` when the external VM path is configured.
 - Create: `llvm/test/CodeGen/CD/lit.local.cfg` for the opt-in `cd-vm` feature.
 - Modify: LLVM CMake/test registration only as needed for the focused CD target suite.
@@ -677,7 +679,7 @@ The recommended input boundary is named metadata for module identity, entry orde
 
 - [x] Keep LLVM-only tests runnable with `llvm-lit` and no sibling checkout.
 - [x] Make VM integration opt-in through an explicit `CD_COMPILER_ROOT` path; never discover or mutate the untracked nested checkout implicitly.
-- [ ] Add a focused CI job that builds `CD`, `llc`, `FileCheck`, and the CD lit suite, then a separate job that installs Rust and runs VM integration.
+- [x] Add a focused CI job that builds `CD`, `llc`, `FileCheck`, and the CD lit suite, then a separate job that installs Rust and runs VM integration.
 - [x] Record exact LLVM and Rust toolchain versions, artifact format version, and verification commands.
 - [ ] Test `llc -mtriple=cd-unknown-unknown`, `-O0`, `-O2`, `-g`, metadata-free output, object-output rejection, invalid IR, and invalid CD ABI operations.
 - [ ] Run `git diff --check`, focused lit tests, VM dump/run/link tests, and the repository's normal LLVM checks before claiming a milestone complete.
@@ -687,6 +689,12 @@ the direct/machine parity manifest. The `-g` subcase remains open because the
 LLVM 24 `llc` driver rejects `-g` before target selection; CD debug output
 therefore continues to use explicit `!dbg` and `!cd.sources` metadata. This is
 an upstream tool-boundary decision, not a CD-target-local flag to emulate.
+
+The focused workflow is now defined in `.github/workflows/cd-bytecode.yml`.
+Its LLVM-only job runs without a VM checkout, while its separate integration
+job pins the sibling VM checkout and sets `CD_COMPILER_ROOT` explicitly. The
+workflow definition and its two-job structure were validated locally; hosted
+CI execution and the broader release matrix remain separate work.
 
 The following remain explicit non-goals unless a separate design request changes scope: compiling `.cd` source through Clang, adding a Clang CD language frontend, native object files, assembler/disassembler syntax, JIT support, binary `.cdbc` encoding, garbage-collector layout, and a new artifact version.
 

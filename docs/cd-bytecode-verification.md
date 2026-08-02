@@ -52,6 +52,21 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link.py --llc build-cd/bin/llc --vm "$PWD/cd-compiler/vm-rs"
 ~~~
 
+## CI Jobs
+
+`.github/workflows/cd-bytecode.yml` keeps the two dependency boundaries
+explicit:
+
+- `llvm-only` builds `llc`, `FileCheck`, and `llvm-lit`, then runs the CD lit
+  directory with `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
+- `vm-integration` checks out `junhui-he-cn/cd-compiler` at the recorded
+  commit `0295380ce3e29763949c09a815bda96cbed28ee2`, installs Rust 1.94.1,
+  runs the VM Cargo tests, and runs the linked module integration harness.
+
+The workflow is triggered for CD target, fixture, utility, documentation, or
+workflow changes on pull requests and pushes to `main`. The VM job is the only
+job that sets `CD_COMPILER_ROOT`.
+
 ## LLVM Build And Checks
 
 Build the target tools before running the gates:
