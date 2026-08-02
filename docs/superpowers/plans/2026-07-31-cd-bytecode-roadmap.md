@@ -51,7 +51,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
+| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, instruction locations, and nested divide-by-zero diagnostics are implemented |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
 
@@ -586,7 +586,7 @@ nested checkout remained clean.
 - Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` and `CDBytecodeEmitter.cpp`.
 - Create: `llvm/test/CodeGen/CD/cdbc-debug-sources.ll`,
   `llvm/test/CodeGen/CD/cdbc-debug-locations.ll`, and
-  `llvm/test/CodeGen/CD/cdbc-debug-source-errors.ll`.
+  `llvm/test/CodeGen/CD/cdbc-debug-runtime.ll`.
 - Modify: `llvm/lib/Target/CD/README.md` and `docs/cd-bytecode-llvm-abi.md`.
 - Synchronize, in the independent checkout: `cd-compiler/vm-rs/src/format.rs`, `cd-compiler/vm-rs/src/vm.rs`, and debug/trace tests.
 
@@ -597,18 +597,23 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
   patching, resolving explicit source paths through both direct and machine
   artifact paths.
 - [ ] Emit optional half-open byte ranges only when the source metadata supplies exact byte offsets.
-- [ ] Verify divide-by-zero, invalid index, failed native call, and nested-function errors through the Rust VM's location and call-stack reporting.
+- [x] Verify a nested-function divide-by-zero error through the Rust VM's
+  source location, caret, and call-stack reporting on both artifact paths.
+- [ ] Verify invalid-index and failed-native-call errors through the Rust VM's
+  location and call-stack reporting.
 - [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
 
-### Narrow M5 slices: explicit source tables and locations (2026-08-02)
+### Narrow M5 slices: explicit source tables, locations, and runtime diagnostics (2026-08-02)
 
 The explicit `!cd.sources` foundation and the follow-on `DILocation` mapping
 slice are complete. Source records and sparse `debug_locations` are validated
 and emitted through both direct and machine artifact paths, and the Rust VM
-accepts the resulting artifacts. `debug_ranges`, source-backed runtime
-diagnostics, and debugger behavior remain the next independent M5 boundary.
+accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
+source-backed runtime diagnostics and call-stack parity. `debug_ranges`,
+invalid-index and failed-native-call diagnostics, and debugger behavior remain
+the next independent M5 boundaries.
 
 ## 10. M6 — Support module products and linking
 

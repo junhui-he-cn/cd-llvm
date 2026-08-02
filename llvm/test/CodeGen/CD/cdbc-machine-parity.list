@@ -38,3 +38,4 @@ artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # The location fixture has identical debug tables, while direct and machine
 # constant scheduling gives the main add different operand/register order.
 behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "Runtime error at runtime.cd:1:22: division by zero"

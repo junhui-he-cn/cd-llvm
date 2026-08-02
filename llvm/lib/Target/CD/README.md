@@ -137,7 +137,10 @@ the optional `debug_sources` section in both artifact paths. When a source
 table is present, matching non-zero `DILocation` metadata is emitted as sparse
 `debug_locations` entries through both paths; `-g` and ordinary `llvm.dbg.*`
 metadata still do not supply source bytes. Unmatched locations are omitted,
-ambiguous source-path matches are rejected, and `debug_ranges` remains deferred.
+ambiguous source-path matches are rejected. The Rust VM parity fixture covers
+the resulting source line, caret, and nested call stack for divide-by-zero;
+`debug_ranges`, invalid-index diagnostics, and failed-native-call diagnostics
+remain deferred.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.

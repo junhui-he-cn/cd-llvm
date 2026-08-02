@@ -2,8 +2,8 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
-implemented; M5 explicit debug-source-table and instruction-location slices
-implemented,
+implemented; M5 explicit debug-source-table, instruction-location, and
+source-backed runtime-diagnostic slices implemented,
 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
@@ -649,5 +649,8 @@ no matching explicit source, no file scope, or a zero line/column are omitted;
 ambiguous path matches are target errors. Direct and machine lowering preserve
 the same source, line, and one-based column values after branch patching, while
 synthetic constants and instructions without a source location remain sparse.
-This slice deliberately emits no `debug_ranges`; source-local byte ranges and
-source-backed runtime diagnostics remain later M5 gates.
+The Rust VM can therefore render source lines, carets, and nested call stacks
+for these locations; the LLVM parity fixture covers a nested divide-by-zero
+failure through both direct and machine artifacts. This slice deliberately
+emits no `debug_ranges`; source-local byte ranges, invalid-index diagnostics,
+and failed-native-call diagnostics remain later M5 gates.
