@@ -9,6 +9,7 @@ tablegen(LLVM CDGenSubtargetInfo.inc -gen-subtarget)
 add_public_tablegen_target(CDCommonTableGen)
 
 add_llvm_target(CDCodeGen
+  CDDebugInfo.cpp
   CDBytecodeFormat.cpp
   CDBytecodeEmitter.cpp
   CDMachineBytecodeEmitter.cpp

@@ -8,6 +8,7 @@
 
 #include "CDMachineBytecodeEmitter.h"
 #include "CDBytecodeFormat.h"
+#include "CDDebugInfo.h"
 #include "CDInstrInfo.h"
 #include "CDValueABI.h"
 #include "llvm/ADT/APFloat.h"
@@ -1353,6 +1354,11 @@ public:
     if (!Main || Main->isDeclaration())
       unsupported("a module without a defined @main entry function");
 
+    std::vector<cd::CDDebugSource> DebugSources;
+    std::string DebugError;
+    if (!cd::parseCDSources(M, DebugSources, DebugError))
+      unsupported(DebugError);
+
     for (const GlobalVariable &Global : M.globals()) {
       if (Global.isDeclaration())
         continue;
@@ -1394,6 +1400,8 @@ public:
           {F.getName().str(), static_cast<unsigned>(F.arg_size()),
            lowerFunction(F, false)});
     }
+
+    Artifact.debugSources = std::move(DebugSources);
 
     std::string Error;
     if (!cd::validateArtifact(Artifact, Error))

@@ -590,13 +590,21 @@ nested checkout remained clean.
 
 Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LLVM debug metadata does not contain the original source bytes, emit `debug_sources` only when a defined `!cd.sources` named-metadata record supplies the display path, canonical module identity, and exact source text. Without that record, the target may emit no debug sections while retaining correct program execution.
 
-- [ ] Define the `!cd.sources` record and reject malformed source indexes, duplicate entries, and invalid UTF-8/byte ranges.
+- [x] Define the `!cd.sources` record and reject malformed records, duplicate source identities, empty paths/module identities, and invalid UTF-8. The source-table foundation intentionally defers instruction indexes and byte ranges.
 - [ ] Map main/function instruction locations deterministically after branch patching.
 - [ ] Emit optional half-open byte ranges only when the source metadata supplies exact byte offsets.
 - [ ] Verify divide-by-zero, invalid index, failed native call, and nested-function errors through the Rust VM's location and call-stack reporting.
 - [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
+
+### Narrow M5 slice: explicit debug source tables (2026-08-02)
+
+The first M5 slice is complete: explicit `!cd.sources` metadata is validated
+and emitted as `debug_sources` through both direct and machine artifact paths.
+The Rust VM accepts the source table, while `DILocation` mapping,
+`debug_locations`, `debug_ranges`, and source-backed runtime diagnostics remain
+the next independent M5 boundary.
 
 ## 10. M6 — Support module products and linking
 
@@ -643,18 +651,18 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Record the native-call allowlist, name-table identity, and typed
-   argument/result capability matrix against the VM contract.
-2. Keep ordinary LLVM aggregates and pointers rejected; do not infer variant
-   construction, access, or native calls from `alloca`, globals, stores, or
-   aggregate instructions.
-3. Implement only the explicit native-call ABI after positive, malformed, Rust
-   `dump`/`run`, runtime-error, and direct/machine parity tests agree with the
-   VM contract.
+1. Map `DILocation` records for main/function instructions after branch
+   patching, and emit deterministic `debug_locations` entries through both
+   direct and machine artifact paths.
+2. Keep `debug_ranges` deferred until the LLVM metadata supplies exact
+   source-local byte offsets; do not infer ranges from line/column locations.
+3. Verify source-backed runtime diagnostics and `dump`/`trace`/`debug`/
+   `profile` behavior only after location references are accepted by the Rust
+   VM, while preserving metadata-free artifact output.
 
-Do not begin native-call lowering until the CD value ABI document has been
-reviewed, because an unbounded external-call bridge would bypass the Rust VM
-allowlist and make later artifact/linking work incompatible.
+Do not infer source text from ordinary LLVM debug metadata: `DIFile` and
+`DILocation` identify locations, but only explicit `!cd.sources` records provide
+the source bytes and stable source indexes.
 
 ## 13. Completion gates
 

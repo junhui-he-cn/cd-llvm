@@ -10,6 +10,7 @@
 #define LLVM_LIB_TARGET_CD_CDBYTECODEFORMAT_H
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -137,11 +138,18 @@ struct CDFunction {
   CDBody body;
 };
 
+struct CDDebugSource {
+  std::optional<std::string> module;
+  std::string path;
+  std::string text;
+};
+
 struct CDArtifact {
   std::vector<CDConstant> constants;
   std::vector<std::string> names;
   CDBody main;
   std::vector<CDFunction> functions;
+  std::vector<CDDebugSource> debugSources;
 };
 
 /// Validate all references and structural invariants before serialization.

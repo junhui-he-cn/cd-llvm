@@ -8,6 +8,7 @@
 
 #include "CDBytecodeEmitter.h"
 #include "CDBytecodeFormat.h"
+#include "CDDebugInfo.h"
 #include "CDValueABI.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
@@ -578,6 +579,11 @@ void CDModuleEmitter::emit(Module &M) {
   if (Main->arg_size() != 0)
     report_fatal_error("CD target @main must not have parameters");
 
+  std::vector<cd::CDDebugSource> DebugSources;
+  std::string DebugError;
+  if (!cd::parseCDSources(M, DebugSources, DebugError))
+    unsupportedOperation(DebugError);
+
   for (const GlobalVariable &Global : M.globals()) {
     if (Global.isDeclaration())
       continue;
@@ -621,6 +627,7 @@ void CDModuleEmitter::emit(Module &M) {
   Artifact.constants = std::move(Constants);
   Artifact.names = std::move(Names);
   Artifact.main = std::move(MainBody);
+  Artifact.debugSources = std::move(DebugSources);
   for (unsigned Index = 0; Index < FunctionBodies.size(); ++Index) {
     const Function &F = *FunctionBodies[Index].first;
     const CDBody &Body = FunctionBodies[Index].second;

@@ -130,6 +130,13 @@ name has an exact scalar/CD-value argument and result signature recorded in
 `native_call` artifact bridge and parity coverage. Callback helpers, unsupported
 names, and ordinary pointer arguments remain rejected.
 
+The M5A debug-source-table foundation accepts an explicit `!cd.sources` named
+metadata node with `path,text` or `module,path,text` string records. It validates
+UTF-8, non-empty identities, and duplicate `(module,path)` entries, then emits
+the optional `debug_sources` section in both artifact paths. `-g` and ordinary
+`llvm.dbg.*` metadata do not supply source bytes; instruction `DILocation`
+mapping and `debug_ranges` remain deferred.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -138,5 +145,6 @@ must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or arbitrary
 native-call output. `-filetype=obj` is rejected. Native calls beyond the
-bounded group, non-string globals, and debug source sections remain deferred
-until separate LLVM-to-CD representations and parity gates are defined.
+bounded group, non-string globals, instruction locations, and debug ranges
+remain deferred until separate LLVM-to-CD representations and parity gates are
+defined.

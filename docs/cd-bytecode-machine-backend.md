@@ -3,7 +3,8 @@
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
 enum-variant, and bounded native-call slices share the machine artifact bridge;
-broader native-call capabilities remain deferred, 2026-08-02.
+the M5 explicit debug-source-table foundation also shares that bridge; broader
+native-call capabilities and instruction locations remain deferred, 2026-08-02.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -108,6 +109,11 @@ while arguments and the result remain in the `CDValue` virtual register class.
 The `CD_NATIVE_CALL` bridge emits the existing `native_call` artifact operation
 after shared name-specific validation; callback natives, unsupported names,
 and ordinary pointer arguments remain outside this boundary.
+
+The M5A source-table foundation parses the same explicit `!cd.sources` named
+metadata as the direct path and moves the validated entries into the shared
+artifact model. It does not inspect machine instruction debug locations yet;
+`debug_locations` and `debug_ranges` remain a later parity gate.
 
 ## Direct/machine parity gate
 

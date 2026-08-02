@@ -2,7 +2,8 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
-implemented, 2026-08-02.
+implemented; M5 explicit debug-source-table foundation implemented,
+2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -621,3 +622,23 @@ The sibling `cd-compiler` checkout already defines the string, collection,
 record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and
 VM. These M4 slices therefore change the LLVM artifact model and lowering only;
 they do not add a new Rust opcode or alter the artifact version.
+
+## Debug source tables: M5A foundation
+
+The target accepts source bytes only through an explicit `!cd.sources` named
+metadata node. Ordinary `-g`/`llvm.dbg.*` metadata is not treated as a source
+text provider. Each record has one of these exact shapes:
+
+```llvm
+!cd.sources = !{!0, !1}
+!0 = !{!"demo.cd", !"print 1;\0A"}
+!1 = !{!"/workspace/lib.cd", !"lib.cd", !"fun fail() { return 1 / 0; }\0A"}
+```
+
+A two-string record is `path,text`; a three-string record is
+`module,path,text`. Paths are non-empty, module identities are non-empty when
+present, all strings must be valid UTF-8, and `(module,path)` identities must
+be unique. Valid records are emitted as the optional `debug_sources` section
+in source order through both direct and machine artifact paths. This first
+slice deliberately emits no `debug_locations` or `debug_ranges`; instruction
+location mapping from `DILocation` and byte ranges remain the next M5 gate.

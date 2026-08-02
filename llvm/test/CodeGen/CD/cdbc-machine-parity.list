@@ -34,3 +34,4 @@ runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime-nonvariant.ll "can only 
 artifact llvm/test/CodeGen/CD/cdbc-native.ll
 artifact llvm/test/CodeGen/CD/cdbc-native-values.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-runtime.ll "sqrt expects non-negative number"
+artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll

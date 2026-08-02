@@ -15,6 +15,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cmath>
+#include <set>
 #include <utility>
 
 using namespace llvm;
@@ -497,6 +498,32 @@ static bool validateConstants(const CDArtifact &Artifact, std::string &Error) {
   return true;
 }
 
+static bool validateDebugSources(const CDArtifact &Artifact,
+                                 std::string &Error) {
+  std::set<std::string> Identities;
+  for (unsigned Index = 0; Index < Artifact.debugSources.size(); ++Index) {
+    const CDDebugSource &Source = Artifact.debugSources[Index];
+    if (Source.module && Source.module->empty())
+      return fail(Error, Twine("debug source s") + Twine(Index) +
+                           " has an empty module identity");
+    if (Source.path.empty())
+      return fail(Error, Twine("debug source s") + Twine(Index) +
+                           " has an empty path");
+    if (!json::isUTF8(Source.path) || !json::isUTF8(Source.text) ||
+        (Source.module && !json::isUTF8(*Source.module)))
+      return fail(Error, Twine("debug source s") + Twine(Index) +
+                           " is not valid UTF-8");
+
+    std::string Identity = Source.module.value_or("");
+    Identity.push_back('\0');
+    Identity += Source.path;
+    if (!Identities.insert(Identity).second)
+      return fail(Error, Twine("debug source s") + Twine(Index) +
+                           " duplicates source identity");
+  }
+  return true;
+}
+
 static void writeOperands(raw_ostream &OS, ArrayRef<unsigned> Operands) {
   for (unsigned Index = 0; Index < Operands.size(); ++Index) {
     if (Index != 0)
@@ -953,6 +980,8 @@ const char *opcodeName(CDOpcode Opcode) {
 bool validateArtifact(const CDArtifact &Artifact, std::string &Error) {
   if (!validateConstants(Artifact, Error))
     return false;
+  if (!validateDebugSources(Artifact, Error))
+    return false;
 
   for (unsigned Index = 0; Index < Artifact.names.size(); ++Index)
     if (Artifact.names[Index].empty())
@@ -1029,6 +1058,24 @@ void serializeArtifact(const CDArtifact &Artifact, raw_ostream &OS) {
     }
     for (const CDInstruction &Instruction : Function.body.instructions)
       writeInstruction(OS, Instruction);
+  }
+
+  if (!Artifact.debugSources.empty()) {
+    OS << "\ndebug_sources:\n";
+    for (unsigned Index = 0; Index < Artifact.debugSources.size(); ++Index) {
+      const CDDebugSource &Source = Artifact.debugSources[Index];
+      OS << "  s" << Index << " ";
+      if (Source.module) {
+        OS << "module=";
+        writeQuoted(OS, *Source.module);
+        OS << " ";
+      }
+      OS << "path=";
+      writeQuoted(OS, Source.path);
+      OS << " text=";
+      writeQuoted(OS, Source.text);
+      OS << '\n';
+    }
   }
 }
 
