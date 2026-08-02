@@ -69,9 +69,29 @@ build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD/cdbc-modules.ll llvm/test/CodeGen
 ~~~
 
 The wider release matrix remains separate from this opt-in gate. In
-particular, -O0, -O2, -g, metadata-free output, object-output rejection,
-invalid IR, and invalid CD ABI operation checks must be included before M7 is
-called complete.
+particular, the supported O0/O2, metadata-free, object-output rejection,
+invalid IR, and invalid CD ABI operation checks are covered by the existing
+CD lit fixtures and the direct/machine parity manifest. The remaining -g
+subcase is an upstream tool boundary: LLVM 24 llc rejects -g as an unknown
+command-line argument before CD target selection, so CD debug coverage uses
+explicit !dbg and !cd.sources metadata instead.
+
+## Coverage Matrix
+
+| Area | Evidence | Current result |
+| --- | --- | --- |
+| O0 and O2 | cdbc-optimization.ll | Passed in the CD lit suite |
+| Source-backed debug locations and ranges | cdbc-debug-*.ll and the parity manifest | Direct/machine parity passed |
+| Metadata-free output | The metadata-free observability entry for cdbc-machine.ll | No debug sections and unknown runtime locations passed |
+| Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
+| Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
+| llc -g | build-cd/bin/llc -mtriple=cd-unknown-unknown -g ... | Not accepted by the upstream llc driver; remains open |
+
+The parity evidence can be rerun with an explicitly built VM binary:
+
+~~~sh
+PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity.py --llc build-cd/bin/llc --vm cd-compiler/vm-rs/target/debug/compiler-design-vm --manifest llvm/test/CodeGen/CD/cdbc-machine-parity.list --root .
+~~~
 
 ## Boundary Rules
 

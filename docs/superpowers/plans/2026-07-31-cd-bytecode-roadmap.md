@@ -682,6 +682,12 @@ The recommended input boundary is named metadata for module identity, entry orde
 - [ ] Test `llc -mtriple=cd-unknown-unknown`, `-O0`, `-O2`, `-g`, metadata-free output, object-output rejection, invalid IR, and invalid CD ABI operations.
 - [ ] Run `git diff --check`, focused lit tests, VM dump/run/link tests, and the repository's normal LLVM checks before claiming a milestone complete.
 
+The supported M7 matrix entries are covered by the existing CD fixtures and
+the direct/machine parity manifest. The `-g` subcase remains open because the
+LLVM 24 `llc` driver rejects `-g` before target selection; CD debug output
+therefore continues to use explicit `!dbg` and `!cd.sources` metadata. This is
+an upstream tool-boundary decision, not a CD-target-local flag to emulate.
+
 The following remain explicit non-goals unless a separate design request changes scope: compiling `.cd` source through Clang, adding a Clang CD language frontend, native object files, assembler/disassembler syntax, JIT support, binary `.cdbc` encoding, garbage-collector layout, and a new artifact version.
 
 ## 12. Recommended next execution order
