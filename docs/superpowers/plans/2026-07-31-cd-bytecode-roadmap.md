@@ -53,7 +53,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next, and line-breakpoint deletion parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
-| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only and explicit VM integration boundaries plus focused CI jobs are verified; the broader release matrix remains |
+| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only, explicit VM integration, focused CI, and direct/machine parity boundaries are verified; the broader release matrix remains |
 
 ## 4. M0 — Revalidate the existing target
 
@@ -704,8 +704,10 @@ an upstream tool-boundary decision, not a CD-target-local flag to emulate.
 The focused workflow is now defined in `.github/workflows/cd-bytecode.yml`.
 Its LLVM-only job runs without a VM checkout, while its separate integration
 job pins the sibling VM checkout and sets `CD_COMPILER_ROOT` explicitly. The
-workflow definition and its two-job structure were validated locally; hosted
-CI execution and the broader release matrix remain separate work.
+workflow definition and its two-job structure were validated locally. The VM
+job also builds the pinned binary and runs the complete direct/machine parity
+manifest, including the opt-in observability cases. Hosted CI execution and
+the broader release matrix remain separate work.
 
 The following remain explicit non-goals unless a separate design request changes scope: compiling `.cd` source through Clang, adding a Clang CD language frontend, native object files, assembler/disassembler syntax, JIT support, binary `.cdbc` encoding, garbage-collector layout, and a new artifact version.
 

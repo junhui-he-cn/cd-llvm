@@ -90,10 +90,16 @@ jobs:
             -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=CD
           ninja -C build-cd llc FileCheck llvm-lit
 
-      - name: Run Rust VM and linked integration
+      - name: Run Rust VM, parity, and linked integration
         env:
           CD_COMPILER_ROOT: ${{ github.workspace }}/cd-compiler
         run: |
           cargo test --manifest-path "$CD_COMPILER_ROOT/vm-rs/Cargo.toml"
+          cargo build --manifest-path "$CD_COMPILER_ROOT/vm-rs/Cargo.toml" --quiet
+          PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity.py \
+            --llc build-cd/bin/llc \
+            --vm "$CD_COMPILER_ROOT/vm-rs/target/debug/compiler-design-vm" \
+            --manifest llvm/test/CodeGen/CD/cdbc-machine-parity.list \
+            --root .
           build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD/cdbc-vm-integration.py
           PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py

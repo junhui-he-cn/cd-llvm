@@ -61,7 +61,8 @@ explicit:
   directory with `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
 - `vm-integration` checks out `junhui-he-cn/cd-compiler` at the recorded
   commit `0295380ce3e29763949c09a815bda96cbed28ee2`, installs Rust 1.94.1,
-  runs the VM Cargo tests, and runs the linked module integration harness.
+  runs the VM Cargo tests, builds the VM binary for direct/machine parity,
+  runs the parity manifest, and runs the linked module integration harness.
 
 The workflow is triggered for CD target, fixture, utility, documentation, or
 workflow changes on pull requests and pushes to `main`. The VM job is the only
