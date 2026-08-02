@@ -319,6 +319,22 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isNativeIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateNativeCall(Call, Error))
+        unsupportedOperation(Error);
+
+      const unsigned Name =
+          nameRegister(Call.getArgOperand(0), "llvm.cd.native");
+      std::vector<unsigned> Arguments;
+      Arguments.reserve(Call.arg_size() - 1);
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        Arguments.push_back(valueRegister(Call.getArgOperand(Index)));
+      appendInstruction(CDInstruction::nativeCall(
+          resultRegister(Call), Name, std::move(Arguments)));
+      return;
+    }
+
     if (cd::isArrayIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateArrayCall(Call, Error))
@@ -579,6 +595,9 @@ void CDModuleEmitter::emit(Module &M) {
       std::string Error;
       if (IsStringUse) {
         if (!cd::getStringConstant(*Call, Error))
+          unsupportedOperation(Error);
+      } else if (cd::isNativeIntrinsic(*Call)) {
+        if (!cd::validateNativeCall(*Call, Error))
           unsupportedOperation(Error);
       } else if (!cd::getNameConstant(Global, Error)) {
         unsupportedOperation(Error);

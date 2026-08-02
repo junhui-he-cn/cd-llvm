@@ -343,6 +343,28 @@ class CDMachineModuleEmitter {
       return;
     }
 
+    if (Callee && cd::isNativeIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateNativeCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      const unsigned Name =
+          addNameOperand(Call.getArgOperand(0), "llvm.cd.native");
+      std::vector<Register> Arguments;
+      Arguments.reserve(Call.arg_size() - 1);
+      for (unsigned Index = 1; Index < Call.arg_size(); ++Index)
+        Arguments.push_back(
+            valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
+      MachineInstrBuilder NativeBuilder =
+          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_NATIVE_CALL),
+                  Result)
+              .addImm(Name);
+      for (Register Argument : Arguments)
+        NativeBuilder.addReg(Argument);
+      return;
+    }
+
     if (Callee && cd::isArrayIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateArrayCall(Call, Error))
@@ -1230,6 +1252,25 @@ class CDMachineModuleEmitter {
               std::move(Arguments)));
           break;
         }
+        case CD::CD_NATIVE_CALL: {
+          if (MI.getNumOperands() < 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isImm())
+            unsupported("an invalid CD_NATIVE_CALL machine instruction");
+          const int64_t Name = MI.getOperand(1).getImm();
+          if (Name < 0)
+            unsupported("an invalid CD_NATIVE_CALL name operand");
+          std::vector<unsigned> Arguments;
+          for (unsigned Index = 2; Index < MI.getNumOperands(); ++Index) {
+            if (!MI.getOperand(Index).isReg())
+              unsupported("an invalid CD_NATIVE_CALL argument operand");
+            Arguments.push_back(artifactRegister(
+                MI.getOperand(Index).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::nativeCall(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              static_cast<unsigned>(Name), std::move(Arguments)));
+          break;
+        }
         case CD::CD_PRINT:
           if (MI.getNumOperands() != 1 || !MI.getOperand(0).isReg())
             unsupported("an invalid CD_PRINT machine instruction");
@@ -1328,6 +1369,9 @@ public:
         std::string Error;
         if (IsStringUse) {
           if (!cd::getStringConstant(*Call, Error))
+            unsupported(Error);
+        } else if (cd::isNativeIntrinsic(*Call)) {
+          if (!cd::validateNativeCall(*Call, Error))
             unsupported(Error);
         } else if (!cd::getNameConstant(Global, Error)) {
           unsupported(Error);

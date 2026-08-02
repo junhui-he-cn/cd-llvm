@@ -86,6 +86,10 @@ def CD_STORE_VAR : CDPseudo<(outs), (ins cdindex:$name, CDValue:$source)>;
 def CD_CALL : CDPseudo<(outs CDValue:$dst),
                        (ins CDValue:$callee, variable_ops)>;
 
+// CD_NATIVE_CALL -> CDOpcode::NativeCall. The first variable operand is the
+// immediate native-name table index, followed by CD value argument registers.
+def CD_NATIVE_CALL : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
+
 // CD_PRINT -> CDOpcode::Print.
 def CD_PRINT : CDPseudo<(outs), (ins CDValue:$value)>;
 

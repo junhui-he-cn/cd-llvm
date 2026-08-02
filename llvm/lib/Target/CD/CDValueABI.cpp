@@ -64,6 +64,12 @@ bool isVariantFieldIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_variant_field;
 }
 
+bool isNativeIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_native;
+}
+
 bool isFieldIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
@@ -121,6 +127,8 @@ bool isCDValue(const Value &Value) {
                   isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
                   (isAssignIndexIntrinsic(*Call) &&
                    Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
+                  (isNativeIntrinsic(*Call) && Call->getType()->isPointerTy() &&
                    cast<PointerType>(Call->getType())->getAddressSpace() == 0));
 }
 
@@ -137,6 +145,9 @@ bool isNameOperand(const CallBase &Call, const Value &Value) {
     return true;
   if (isVariantTagIntrinsic(Call) && Call.arg_size() > 2 &&
       (Call.getArgOperand(1) == &Value || Call.getArgOperand(2) == &Value))
+    return true;
+  if (isNativeIntrinsic(Call) && Call.arg_size() > 0 &&
+      Call.getArgOperand(0) == &Value)
     return true;
   if ((isFieldIntrinsic(Call) || isAssignFieldIntrinsic(Call)) &&
       Call.arg_size() > 1 && Call.getArgOperand(1) == &Value)
@@ -443,6 +454,85 @@ bool validateVariantFieldCall(const CallBase &Call, std::string &Error) {
     return false;
   }
   return true;
+}
+
+bool validateNativeCall(const CallBase &Call, std::string &Error) {
+  if (!isNativeIntrinsic(Call)) {
+    Error = "not an llvm.cd.native call";
+    return false;
+  }
+  if (Call.arg_size() == 0) {
+    Error = "llvm.cd.native requires a native name operand";
+    return false;
+  }
+
+  std::string NameError;
+  std::optional<StringRef> Name =
+      getNameConstant(*Call.getArgOperand(0), NameError);
+  if (!Name) {
+    Error = "llvm.cd.native requires a private non-empty string global native name";
+    return false;
+  }
+
+  const StringRef NativeName = *Name;
+  const bool HasDoubleResult = Call.getType()->isDoubleTy();
+  const bool HasCDPointerResult =
+      Call.getType()->isPointerTy() &&
+      cast<PointerType>(Call.getType())->getAddressSpace() == 0;
+
+  if (NativeName == "floor" || NativeName == "ceil" ||
+      NativeName == "sqrt") {
+    if (Call.arg_size() != 2 ||
+        !Call.getArgOperand(1)->getType()->isDoubleTy() ||
+        !HasDoubleResult) {
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires one double argument and a double result");
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "str" || NativeName == "typeOf") {
+    if (Call.arg_size() != 2 || !isArrayElement(*Call.getArgOperand(1)) ||
+        !HasCDPointerResult) {
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires one scalar or CD dynamic-value argument and a ptr result");
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "hash") {
+    if (Call.arg_size() != 2 || !isArrayElement(*Call.getArgOperand(1)) ||
+        !HasDoubleResult) {
+      Error = "llvm.cd.native hash requires one scalar or CD dynamic-value "
+              "argument and a double result";
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "range") {
+    if (Call.arg_size() < 2 || Call.arg_size() > 4 ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native range requires one to three double arguments "
+              "and a ptr result";
+      return false;
+    }
+    for (unsigned Index = 1; Index < Call.arg_size(); ++Index) {
+      if (!Call.getArgOperand(Index)->getType()->isDoubleTy()) {
+        Error = "llvm.cd.native range requires one to three double arguments "
+                "and a ptr result";
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Error = ("llvm.cd.native native name is not supported by the bounded CD "
+           "ABI: " +
+           NativeName.str());
+  return false;
 }
 
 static bool validateFieldResult(const CallBase &Call, StringRef Operation,

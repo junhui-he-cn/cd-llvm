@@ -31,3 +31,6 @@ artifact llvm/test/CodeGen/CD/cdbc-variant.ll
 behavior llvm/test/CodeGen/CD/cdbc-variant-dynamic.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime.ll "enum variant field index out of bounds"
 runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime-nonvariant.ll "can only access fields on enum variants"
+artifact llvm/test/CodeGen/CD/cdbc-native.ll
+artifact llvm/test/CodeGen/CD/cdbc-native-values.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-runtime.ll "sqrt expects non-negative number"

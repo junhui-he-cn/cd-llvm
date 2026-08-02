@@ -1,8 +1,8 @@
 # LLVM CD value ABI
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
-map-constructor, record-value, and enum-variant slices implemented,
-2026-08-02.
+map-constructor, record-value, enum-variant, and bounded native-call slices
+implemented, 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -138,6 +138,19 @@ returns `i1` after checking the value against the two name-table identities.
 same scalar-or-address-space-zero CD-value result restriction as record field
 access. Names are metadata, not CD string values.
 
+The bounded native-call group uses this signature:
+
+```tablegen
+def int_cd_native : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_vararg_ty]>;
+```
+
+Its first operand is a private, constant, non-empty UTF-8 name global. The
+remaining operands and result are checked against the name-specific capability
+matrix in the native-call section below. This intrinsic is the only LLVM
+boundary that can emit a `native_call`; ordinary external declarations remain
+unsupported.
+
 Each operation must use its registered intrinsic declaration and declared
 signature. A manually declared function with a similar name is not a CD ABI
 operation and remains an ordinary unsupported declaration.
@@ -212,17 +225,18 @@ restricts string tokens to local materialization and printing.
 
 ## Future ABI groups
 
-The array/map and record groups are specified above and below. The following
-signatures remain reserved conceptually and are not enabled by this document:
+The array/map and record groups are specified above and below. The bounded
+native-call group is implemented below; broader native capabilities remain
+reserved for separate ABI decisions:
 
 | Group | Required operation shape | Wire operations | Design dependency |
 | --- | --- | --- | --- |
-| Native calls | allowlisted name-table identity and typed capability matrix | `native_call` | Rust VM allowlist and argument/result validation |
+| Broader native calls | allowlisted name-table identity and typed capability matrix | `native_call` | separate Rust VM capability and argument/result validation |
 
-Each group requires its own intrinsic signatures, malformed-input fixtures,
-Rust parser/validator coverage, and direct/machine parity before it can be
-implemented.  Existing `cdbc 0.1` opcodes are not permission to map arbitrary
-LLVM IR instructions to those operations.
+Each future group requires its own intrinsic signatures, malformed-input
+fixtures, Rust parser/validator coverage, and direct/machine parity before it
+can be implemented. Existing `cdbc 0.1` opcodes are not permission to map
+arbitrary LLVM IR instructions to those operations.
 
 ## Array constructor: first collection ABI group
 
@@ -486,6 +500,64 @@ payloads of another explicit constructor, or passed to another explicit
 variant/collection/field intrinsic. They may not cross ordinary function
 parameters/returns, PHI/select, allocas, pointer operations, or external calls.
 
+## Native calls: bounded stdlib ABI
+
+The bounded allowlist below is implemented through the shared ABI validator,
+the typed artifact model, and both direct and opt-in machine emitters. The
+Rust VM remains the runtime oracle; this section does not authorize arbitrary
+external or callback calls.
+
+### Accepted source shape
+
+`llvm.cd.native` uses a private name global followed by a variadic argument
+list:
+
+```llvm
+@sqrt_name = private unnamed_addr constant [5 x i8] c"sqrt\00"
+
+declare double @llvm.cd.native(ptr, ...)
+
+%root = call double (ptr, ...) @llvm.cd.native(ptr @sqrt_name, double 9.0)
+```
+
+The name must be a direct private, constant, address-space-zero byte global
+containing one non-empty valid UTF-8 name. The LLVM result type is overloaded
+by the intrinsic declaration, but target lowering accepts only the exact type
+for the selected native name. The first bounded capability matrix is:
+
+| Native name | Arguments | Result | Runtime role |
+| --- | --- | --- | --- |
+| `floor`, `ceil`, `sqrt` | exactly one `double` | `double` | numeric operation |
+| `str` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | string conversion |
+| `typeOf` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | runtime type name |
+| `hash` | exactly one scalar or CD dynamic value | `double` | runtime hash number |
+| `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
+
+The `str`, `typeOf`, and `hash` operands may be scalar, CD nil, or a value
+produced by an explicit CD intrinsic. The `range` result is a CD dynamic-value
+token and may be consumed by the existing `len`, `index`, and `assert_array`
+intrinsics. Name-table metadata is not a CD string value, and arbitrary
+ordinary pointers are rejected.
+
+Unknown names and callback/collection helpers such as `map`, `filter`,
+`flatMap`, `any`, `all`, `count`, `find`, `findIndex`, and `reduce` remain
+compile-time target errors. `substr`, `charAt`, and collection mutation
+helpers are also deferred until their string/aliasing capability matrices are
+defined. This restriction prevents a native call from becoming an unbounded
+external-call escape hatch.
+
+The wire operation is:
+
+```text
+rD = native_call nName [rArg0, rArg1, ...]
+```
+
+The Rust VM owns native arity, runtime type, resource-budget, cancellation,
+and failure behavior. For example, `sqrt` preserves the runtime error
+`sqrt expects non-negative number` for a negative input. Native calls do not
+cross ordinary LLVM function boundaries in this first slice; their values may
+only flow through already-supported local explicit CD consumers.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -538,6 +610,12 @@ payload capability, and overloaded result contracts, emit `variant`,
 `variant_tag`, and `variant_field` through both backends, reject ordinary
 pointer substitutes, pass Rust `dump`/`run`, and cover direct/machine artifact,
 dynamic-value, non-variant, and out-of-bounds runtime parity.
+
+The bounded native-call group is complete only when `llvm.cd.native` enforces
+the name-specific matrix above, emits `native_call` through both backends,
+rejects unknown/callback names and ordinary pointer substitutes, passes Rust
+`dump`/`run`, and covers direct/machine artifact parity plus a shared runtime
+failure.
 
 The sibling `cd-compiler` checkout already defines the string, collection,
 record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and

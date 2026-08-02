@@ -42,6 +42,11 @@ def int_cd_variant_field : DefaultAttrsIntrinsic<
     [llvm_any_ty], [llvm_ptr_ty, llvm_i32_ty],
     [ImmArg<ArgIndex<1>>]>;
 
+// A bounded native call carries an allowlisted name-table identity followed
+// by operands whose types are validated by CDValueABI.
+def int_cd_native : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_vararg_ty]>;
+
 def int_cd_field : DefaultAttrsIntrinsic<[llvm_any_ty],
                                          [llvm_ptr_ty, llvm_ptr_ty]>;
 

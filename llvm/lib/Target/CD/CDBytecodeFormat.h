@@ -53,6 +53,7 @@ enum class CDOpcode {
   LoadVar,
   StoreVar,
   Call,
+  NativeCall,
   Print,
   Return,
   Negate,
@@ -116,6 +117,8 @@ struct CDInstruction {
   static CDInstruction storeVar(unsigned name, unsigned value);
   static CDInstruction call(unsigned destination, unsigned callee,
                             std::vector<unsigned> arguments);
+  static CDInstruction nativeCall(unsigned destination, unsigned name,
+                                  std::vector<unsigned> arguments);
   static CDInstruction print(unsigned value);
   static CDInstruction returnValue(unsigned value);
   static CDInstruction jump(unsigned target);

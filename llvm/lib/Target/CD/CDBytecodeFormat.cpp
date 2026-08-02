@@ -84,6 +84,12 @@ static bool fail(std::string &Error, Twine Message) {
   return false;
 }
 
+static bool isSupportedNativeName(StringRef Name) {
+  return Name == "floor" || Name == "ceil" || Name == "sqrt" ||
+         Name == "str" || Name == "typeOf" || Name == "hash" ||
+         Name == "range";
+}
+
 static bool validateRegister(const CDBody &Body, unsigned Register,
                              StringRef BodyName, unsigned InstructionIndex,
                              StringRef Role, std::string &Error) {
@@ -376,6 +382,20 @@ static bool validateInstruction(const CDInstruction &Instruction,
         !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
       return false;
     return true;
+  case CDOpcode::NativeCall:
+    if (!validateUnusedFields(Instruction, true, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "native name", BodyName, InstructionIndex, Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex,
+                          Error))
+      return false;
+    if (!isSupportedNativeName(Artifact.names[Instruction.reference]))
+      return fail(Error, Twine(BodyName) + " instruction " +
+                           Twine(InstructionIndex) +
+                           " has an unsupported native name");
+    return true;
   case CDOpcode::Print:
   case CDOpcode::Return:
     if (!validateUnusedFields(Instruction, false, false, false, BodyName,
@@ -575,6 +595,11 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     break;
   case CDOpcode::Call:
     OS << "call " << registerName(Instruction.callee) << " [";
+    writeOperands(OS, Instruction.operands);
+    OS << "]";
+    break;
+  case CDOpcode::NativeCall:
+    OS << "native_call " << nameName(Instruction.reference) << " [";
     writeOperands(OS, Instruction.operands);
     OS << "]";
     break;
@@ -808,6 +833,16 @@ CDInstruction CDInstruction::call(unsigned Destination, unsigned Callee,
   return Instruction;
 }
 
+CDInstruction CDInstruction::nativeCall(unsigned Destination, unsigned Name,
+                                         std::vector<unsigned> Arguments) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::NativeCall;
+  Instruction.result = Destination;
+  Instruction.reference = Name;
+  Instruction.operands = std::move(Arguments);
+  return Instruction;
+}
+
 CDInstruction CDInstruction::print(unsigned Value) {
   CDInstruction Instruction;
   Instruction.opcode = CDOpcode::Print;
@@ -875,6 +910,8 @@ const char *opcodeName(CDOpcode Opcode) {
     return "store_var";
   case CDOpcode::Call:
     return "call";
+  case CDOpcode::NativeCall:
+    return "native_call";
   case CDOpcode::Print:
     return "print";
   case CDOpcode::Return:

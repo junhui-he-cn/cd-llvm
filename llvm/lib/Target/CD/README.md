@@ -122,13 +122,21 @@ preserve its non-variant and out-of-bounds runtime diagnostics. Names remain
 name-table metadata, ordinary pointers and aggregates remain unsupported, and
 variant values stay local to explicit CD intrinsic consumers in this slice.
 
+The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
+the allowlisted non-callback names `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
+`hash`, and `range`. The name must be a private constant UTF-8 global; each
+name has an exact scalar/CD-value argument and result signature recorded in
+`docs/cd-bytecode-llvm-abi.md`. Direct and opt-in machine lowering share the
+`native_call` artifact bridge and parity coverage. Callback helpers, unsupported
+names, and ordinary pointer arguments remain rejected.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
 elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
 must remain canonical and observable-equivalent to the `-O0` artifact.
 
-This target deliberately has no object-file, assembler, JIT, or native-call
-output.  `-filetype=obj` is rejected.  Non-string globals, native calls, and
-debug source sections remain deferred until an explicit LLVM-to-CD
-representation is defined.
+This target deliberately has no object-file, assembler, JIT, or arbitrary
+native-call output. `-filetype=obj` is rejected. Native calls beyond the
+bounded group, non-string globals, and debug source sections remain deferred
+until separate LLVM-to-CD representations and parity gates are defined.

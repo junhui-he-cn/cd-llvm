@@ -38,7 +38,7 @@ The outer repository already contains an experimental target in:
 - `llvm/test/CodeGen/CD/cdbc-basic.ll`: arithmetic, comparison, call, print, branch, PHI, and object-output rejection coverage.
 - `llvm/test/CodeGen/CD/cdbc-parameters.ll`: function parameter metadata and unnamed-parameter naming coverage.
 
-The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, and enum-variant groups. The target README correctly leaves general globals, native calls, and source-backed debug sections outside the current boundary.
+The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, enum-variant, and bounded native-call groups. The target README correctly leaves general globals, broader native calls, and source-backed debug sections outside the current boundary.
 
 This baseline is source-present but must be freshly verified in the current checkout before the next implementation slice is selected.
 
@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array, map, record-value, and enum-variant slices implemented; native calls remain |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -536,6 +536,45 @@ payload registers before inserting `CD_VARIANT`. Positive, nested dynamic,
 malformed, non-variant, and out-of-bounds fixtures pass direct/machine parity
 against the existing Rust VM contract. The nested Rust VM checkout and the
 `cdbc 0.1` version remain unchanged.
+
+### Narrow M4 slice: bounded native calls (2026-08-02)
+
+**Goal:** Lower only the non-callback native stdlib operations whose LLVM
+argument and result types have an explicit capability matrix:
+`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, and `range`.
+
+**ABI gate:** `llvm.cd.native(ptr name, ...)` requires a direct private,
+constant, non-empty UTF-8 name global. `floor`, `ceil`, and `sqrt` take one
+`double` and return `double`; `str` and `typeOf` take one scalar or CD value
+and return an address-space-zero CD string pointer; `hash` takes one scalar or
+CD value and returns `double`; `range` takes one to three `double` values and
+returns an address-space-zero CD range pointer. The wire form is
+`rD = native_call nName [rArg0, ...]`. Callback helpers, collection mutation,
+`substr`, `charAt`, unknown names, and ordinary pointers remain rejected.
+
+**Files:** modify the CD intrinsic/ABI/artifact/direct/machine layers and the
+three target ABI documents; create positive, malformed, and runtime native
+fixtures; extend the direct/machine parity manifest. The nested Rust VM
+checkout is read-only because its existing native allowlist and executor
+already implement these names.
+
+- [x] Record the name-table identity, exact scalar/CD-value capability matrix,
+  callback boundary, and runtime failure behavior in the ABI documents.
+- [x] Run the old target against the positive fixtures and record its red
+  baseline: native name globals are rejected as unused CD string/name globals
+  before native lowering begins.
+- [x] Add `llvm.cd.native`, shared name-specific validation, the
+  `NativeCall` artifact shape, and both direct/machine lowering paths.
+- [x] Reject unknown/callback names, wrong arity/result types, ordinary
+  pointers, and invalid name globals with target diagnostics.
+- [x] Add artifact/behavior parity and runtime-error entries for the positive
+  and `sqrt` failure fixtures.
+- [x] Run focused/full CD lit, Rust `dump`/`run`, cargo tests, direct/machine
+  parity, and `git diff --check` without modifying the nested checkout.
+
+Verification on 2026-08-02: focused native lit `4/4`, complete CD lit `55/55`,
+direct/machine parity `33/33`, Rust VM cargo tests `73 + 3 + 8`, and the
+nested checkout remained clean.
 
 ## 9. M5 — Add source-backed debug metadata
 

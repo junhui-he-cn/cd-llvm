@@ -2,7 +2,8 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-and enum-variant slices share the machine artifact bridge, 2026-08-02.
+enum-variant, and bounded native-call slices share the machine artifact bridge;
+broader native-call capabilities remain deferred, 2026-08-02.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -101,6 +102,13 @@ registers are materialized before `CD_VARIANT` is inserted, so nested explicit
 CD constructors retain definition-before-use ordering. Ordinary pointers and
 aggregates remain rejected by the shared ABI validator.
 
+The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
+`hash`, and `range`. Their name-table index is an immediate machine operand,
+while arguments and the result remain in the `CDValue` virtual register class.
+The `CD_NATIVE_CALL` bridge emits the existing `native_call` artifact operation
+after shared name-specific validation; callback natives, unsupported names,
+and ordinary pointer arguments remain outside this boundary.
+
 ## Direct/machine parity gate
 
 Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
@@ -148,6 +156,7 @@ representations.
 | `CD_LOAD_VAR` | `LoadVar` | destination value, module name index |
 | `CD_STORE_VAR` | `StoreVar` | module name index, source value |
 | `CD_CALL` | `Call` | destination value, callee value, variadic arguments |
+| `CD_NATIVE_CALL` | `NativeCall` | destination value, native-name index, variadic arguments |
 | `CD_PRINT` | `Print` | source value |
 | `CD_RETURN` | `Return` | source value |
 | `CD_NEGATE` | `Negate` | destination value, source value |
@@ -176,14 +185,15 @@ The following are outside this foundation slice and must not be smuggled into
 the pseudo-instruction model:
 
 - arbitrary pointers and aggregate values;
-- native calls, globals, exception edges, and source/debug sections;
+- unbounded/callback native calls beyond the bounded allowlist, globals, exception edges, and source/debug sections;
 - object files, assembly encodings, MC emitters, and JIT execution;
 - physical register allocation, spills, and a claim that `R0`--`R31` model a
   host ABI;
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The current M4 map, record, and enum-variant slices retain the direct path,
-keep the machine path opt-in, and define collection/value construction
-separately from aggregate or ordinary-pointer lowering. Native calls still
-require their own capability matrix.
+The current M4 map, record, enum-variant, and bounded native-call slices retain
+the direct path, keep the machine path opt-in, and define collection/value
+construction separately from aggregate or ordinary-pointer lowering. Native
+calls beyond the allowlist above still require a separate name-specific
+capability matrix before new pseudos are implemented.
