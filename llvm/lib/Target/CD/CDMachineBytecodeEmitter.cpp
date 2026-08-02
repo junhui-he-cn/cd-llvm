@@ -76,6 +76,7 @@ class CDMachineModuleEmitter {
   unsigned AllocaSerial = 0;
   unsigned ValueSerial = 0;
   DebugLoc CurrentDebugLoc;
+  std::vector<cd::CDDebugRangeMetadata> DebugRanges;
 
   unsigned addName(StringRef Name) {
     auto It = NameIndexes.find(Name);
@@ -1345,8 +1346,8 @@ class CDMachineModuleEmitter {
           std::optional<cd::CDDebugLocation> Location;
           std::string Error;
           if (!cd::resolveCDDebugLocation(MI.getDebugLoc(),
-                                          Artifact.debugSources, Location,
-                                          Error))
+                                          Artifact.debugSources, DebugRanges,
+                                          Location, Error))
             unsupported(std::string("debug location ") + Error);
           Body.locations.insert(Body.locations.end(), AddedInstructions,
                                 Location);
@@ -1377,6 +1378,9 @@ public:
     if (!cd::parseCDSources(M, DebugSources, DebugError))
       unsupported(DebugError);
     Artifact.debugSources = std::move(DebugSources);
+    if (!cd::parseCDDebugRanges(M, Artifact.debugSources, DebugRanges,
+                                DebugError))
+      unsupported(DebugError);
 
     for (const GlobalVariable &Global : M.globals()) {
       if (Global.isDeclaration())

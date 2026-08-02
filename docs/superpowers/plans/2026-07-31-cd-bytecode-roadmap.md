@@ -596,7 +596,9 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
 - [x] Map main/function instruction locations deterministically after branch
   patching, resolving explicit source paths through both direct and machine
   artifact paths.
-- [ ] Emit optional half-open byte ranges only when the source metadata supplies exact byte offsets.
+- [x] Emit optional half-open byte ranges only when the explicit `!cd.ranges`
+  metadata supplies exact source-local byte offsets; never infer them from
+  line/column locations.
 - [x] Verify a nested-function divide-by-zero error through the Rust VM's
   source location, caret, and call-stack reporting on both artifact paths.
 - [x] Verify a failed `sqrt(-1)` native call through the Rust VM's source
@@ -609,14 +611,14 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
 
 ### Narrow M5 slices: explicit source tables, locations, and runtime diagnostics (2026-08-02)
 
-The explicit `!cd.sources` foundation and the follow-on `DILocation` mapping
-slice are complete. Source records and sparse `debug_locations` are validated
-and emitted through both direct and machine artifact paths, and the Rust VM
+The explicit `!cd.sources` foundation, the follow-on `DILocation` mapping
+slice, and the explicit `!cd.ranges` byte-range slice are complete. Source
+records, sparse `debug_locations`, and sparse `debug_ranges` are validated and
+emitted through both direct and machine artifact paths, and the Rust VM
 accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
 source-backed runtime diagnostics and call-stack parity for divide-by-zero,
-failed native calls, and invalid indexes. `debug_ranges` and debugger behavior
-remain
-the next independent M5 boundaries.
+failed native calls, and invalid indexes. Debugger behavior remains the next
+independent M5 boundary.
 
 ## 10. M6 — Support module products and linking
 
@@ -663,14 +665,11 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Map `DILocation` records for main/function instructions after branch
-   patching, and emit deterministic `debug_locations` entries through both
-   direct and machine artifact paths.
-2. Keep `debug_ranges` deferred until the LLVM metadata supplies exact
-   source-local byte offsets; do not infer ranges from line/column locations.
-3. Verify source-backed runtime diagnostics and `dump`/`trace`/`debug`/
-   `profile` behavior only after location references are accepted by the Rust
-   VM, while preserving metadata-free artifact output.
+1. Keep `DILocation` records and explicit `!cd.ranges` byte offsets mapped for
+   main/function instructions after branch patching through both artifact
+   paths; do not infer ranges from line/column locations.
+2. Verify source-backed runtime diagnostics and metadata-free artifact output
+   while expanding `dump`/`trace`/`debug`/`profile` coverage.
 
 Do not infer source text from ordinary LLVM debug metadata: `DIFile` and
 `DILocation` identify locations, but only explicit `!cd.sources` records provide

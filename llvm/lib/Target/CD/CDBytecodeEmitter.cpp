@@ -72,6 +72,7 @@ class CDModuleEmitter {
   StringMap<unsigned> ConstantIndexes;
   DenseMap<const Function *, unsigned> FunctionIndexes;
   std::vector<cd::CDDebugSource> DebugSources;
+  std::vector<cd::CDDebugRangeMetadata> DebugRanges;
 
 public:
   explicit CDModuleEmitter(raw_ostream &OS) : OS(OS) {}
@@ -115,8 +116,8 @@ public:
 
     std::optional<cd::CDDebugLocation> Location;
     std::string Error;
-    if (!cd::resolveCDDebugLocation(I->getDebugLoc(), DebugSources, Location,
-                                    Error))
+    if (!cd::resolveCDDebugLocation(I->getDebugLoc(), DebugSources,
+                                    DebugRanges, Location, Error))
       unsupportedOperation(std::string("debug location ") + Error);
     return Location;
   }
@@ -609,6 +610,8 @@ void CDModuleEmitter::emit(Module &M) {
   if (!cd::parseCDSources(M, ParsedDebugSources, DebugError))
     unsupportedOperation(DebugError);
   DebugSources = std::move(ParsedDebugSources);
+  if (!cd::parseCDDebugRanges(M, DebugSources, DebugRanges, DebugError))
+    unsupportedOperation(DebugError);
 
   for (const GlobalVariable &Global : M.globals()) {
     if (Global.isDeclaration())

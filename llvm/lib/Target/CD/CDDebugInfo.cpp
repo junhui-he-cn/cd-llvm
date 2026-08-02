@@ -10,6 +10,7 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
@@ -132,6 +133,92 @@ bool resolveCDDebugLocation(const DebugLoc &Location,
                             ArrayRef<CDDebugSource> Sources,
                             std::optional<CDDebugLocation> &Resolved,
                             std::string &Error) {
+  return resolveCDDebugLocation(Location, Sources, {}, Resolved, Error);
+}
+
+static bool parseCDRangeOffset(const Metadata *Operand, unsigned RecordIndex,
+                               unsigned OperandIndex, uint64_t &Offset,
+                               std::string &Error) {
+  const auto *Constant = dyn_cast_or_null<ConstantAsMetadata>(Operand);
+  const auto *Integer =
+      Constant ? dyn_cast<ConstantInt>(Constant->getValue()) : nullptr;
+  if (!Integer || Integer->getValue().isNegative() ||
+      Integer->getValue().getActiveBits() > 64)
+    return fail(Error, Twine("llvm.cd.ranges record ") + Twine(RecordIndex) +
+                         " operand " + Twine(OperandIndex) +
+                         " must be a non-negative 64-bit integer byte offset");
+  Offset = Integer->getZExtValue();
+  return true;
+}
+
+bool parseCDDebugRanges(const Module &M, ArrayRef<CDDebugSource> Sources,
+                        std::vector<CDDebugRangeMetadata> &Ranges,
+                        std::string &Error) {
+  Ranges.clear();
+  const NamedMDNode *Named = M.getNamedMetadata("cd.ranges");
+  if (!Named)
+    return true;
+
+  std::set<const DILocation *> Locations;
+  for (unsigned RecordIndex = 0; RecordIndex < Named->getNumOperands();
+       ++RecordIndex) {
+    const MDNode *Record = Named->getOperand(RecordIndex);
+    if (!Record)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) + " is null");
+    if (Record->getNumOperands() != 3)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) +
+                           " must contain a DILocation and two byte offsets");
+
+    const auto *Location =
+        dyn_cast_or_null<DILocation>(Record->getOperand(0));
+    if (!Location)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) +
+                           " operand 0 must be a DILocation");
+
+    uint64_t Start = 0;
+    uint64_t End = 0;
+    if (!parseCDRangeOffset(Record->getOperand(1), RecordIndex, 1, Start,
+                            Error) ||
+        !parseCDRangeOffset(Record->getOperand(2), RecordIndex, 2, End,
+                            Error))
+      return false;
+    if (Start > End)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) + " has a reversed byte range");
+    if (!Locations.insert(Location).second)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) +
+                           " duplicates a DILocation range");
+
+    std::optional<CDDebugLocation> Resolved;
+    if (!resolveCDDebugLocation(DebugLoc(const_cast<DILocation *>(Location)),
+                                Sources, Resolved, Error))
+      return false;
+    if (!Resolved)
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) +
+                           " does not resolve to an explicit source-backed location");
+    if (End > Sources[Resolved->source].text.size())
+      return fail(Error, Twine("llvm.cd.ranges record ") +
+                           Twine(RecordIndex) +
+                           " exceeds the source text length");
+
+    CDDebugRangeMetadata Metadata;
+    Metadata.location = Location;
+    Metadata.range = {Resolved->source, Start, End};
+    Ranges.push_back(Metadata);
+  }
+  return true;
+}
+
+bool resolveCDDebugLocation(const DebugLoc &Location,
+                            ArrayRef<CDDebugSource> Sources,
+                            ArrayRef<CDDebugRangeMetadata> Ranges,
+                            std::optional<CDDebugLocation> &Resolved,
+                            std::string &Error) {
   Resolved.reset();
   if (!Location || Sources.empty())
     return true;
@@ -153,7 +240,15 @@ bool resolveCDDebugLocation(const DebugLoc &Location,
     return true;
 
   Resolved = CDDebugLocation{SourceIndex, DILocationValue->getLine(),
-                             DILocationValue->getColumn()};
+                             DILocationValue->getColumn(), std::nullopt};
+  for (const CDDebugRangeMetadata &Metadata : Ranges) {
+    if (Metadata.location != DILocationValue)
+      continue;
+    if (Metadata.range.source != SourceIndex)
+      return fail(Error, "debug range source does not match debug location");
+    Resolved->range = Metadata.range;
+    break;
+  }
   return true;
 }
 

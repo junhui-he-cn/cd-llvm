@@ -9,6 +9,7 @@
 #ifndef LLVM_LIB_TARGET_CD_CDBYTECODEFORMAT_H
 #define LLVM_LIB_TARGET_CD_CDBYTECODEFORMAT_H
 
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
@@ -132,10 +133,17 @@ struct CDDebugSource {
   std::string text;
 };
 
+struct CDDebugRange {
+  unsigned source = InvalidIndex;
+  uint64_t start = 0;
+  uint64_t end = 0;
+};
+
 struct CDDebugLocation {
   unsigned source = InvalidIndex;
   unsigned line = 0;
   unsigned column = 0;
+  std::optional<CDDebugRange> range;
 };
 
 struct CDBody {

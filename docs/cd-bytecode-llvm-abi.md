@@ -2,8 +2,8 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
-implemented; M5 explicit debug-source-table, instruction-location, and
-source-backed runtime-diagnostic slices implemented,
+implemented; M5 explicit debug-source-table, instruction-location,
+source-backed runtime-diagnostic, and debug-range slices implemented,
 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
@@ -651,7 +651,22 @@ the same source, line, and one-based column values after branch patching, while
 synthetic constants and instructions without a source location remain sparse.
 The Rust VM can therefore render source lines, carets, and nested call stacks
 for these locations; the LLVM parity fixture covers a nested divide-by-zero
-failure through both direct and machine artifacts. This slice deliberately
-emits no `debug_ranges`; the parity fixtures also cover a failed `sqrt(-1)`
-native call and an out-of-range array index with source-backed diagnostics.
-Source-local byte ranges and debugger behavior remain later M5 gates.
+failure through both direct and machine artifacts. The optional `!cd.ranges`
+named metadata supplies exact source-local byte offsets without changing the
+line/column mapping:
+
+```llvm
+!cd.ranges = !{!40}
+!40 = !{!10, i64 6, i64 11}
+!10 = !DILocation(line: 1, column: 7, scope: !5)
+```
+
+Each record is keyed by one `DILocation` node and contains a half-open
+`[start,end)` byte interval. The target rejects malformed records, negative or
+reversed offsets, duplicate location records, ranges without a matching
+source-backed location, and ranges beyond the UTF-8 source bytes. It never
+infers a range from line/column values. Direct and machine paths emit identical
+sparse `debug_ranges` entries; synthetic instructions remain range-free. The
+parity fixtures also cover a failed `sqrt(-1)` native call and an out-of-range
+array index with source-backed diagnostics. Debugger behavior remains a later
+M5 gate.

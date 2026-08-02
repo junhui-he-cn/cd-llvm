@@ -473,6 +473,21 @@ static bool validateBody(const CDArtifact &Artifact, const CDBody &Body,
     if (Location->line == 0 || Location->column == 0)
       return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
                            " has a non-positive debug location");
+    if (Location->range) {
+      const CDDebugRange &Range = *Location->range;
+      if (Range.source >= Artifact.debugSources.size())
+        return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                             " has a debug range source outside the source table");
+      if (Range.source != Location->source)
+        return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                             " debug range source does not match its location");
+      if (Range.start > Range.end)
+        return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                             " has a reversed debug range");
+      if (Range.end > Artifact.debugSources[Range.source].text.size())
+        return fail(Error, Twine(BodyName) + " instruction " + Twine(Index) +
+                             " debug range exceeds source length");
+    }
   }
 
   for (unsigned Index = 0; Index < Body.instructions.size(); ++Index)
@@ -1124,6 +1139,39 @@ void serializeArtifact(const CDArtifact &Artifact, raw_ostream &OS) {
         OS << "  function " << functionName(FunctionIndex) << " " << Index
            << " = s" << Location->source << ":" << Location->line << ":"
            << Location->column << '\n';
+      }
+    }
+  }
+
+  bool HasDebugRanges = false;
+  for (const std::optional<CDDebugLocation> &Location : Artifact.main.locations)
+    HasDebugRanges |= Location && Location->range.has_value();
+  for (const CDFunction &Function : Artifact.functions)
+    for (const std::optional<CDDebugLocation> &Location : Function.body.locations)
+      HasDebugRanges |= Location && Location->range.has_value();
+
+  if (HasDebugRanges) {
+    OS << "\ndebug_ranges:\n";
+    for (unsigned Index = 0; Index < Artifact.main.locations.size(); ++Index) {
+      const std::optional<CDDebugLocation> &Location =
+          Artifact.main.locations[Index];
+      if (!Location || !Location->range)
+        continue;
+      const CDDebugRange &Range = *Location->range;
+      OS << "  main " << Index << " = s" << Range.source << ":"
+         << Range.start << ":" << Range.end << '\n';
+    }
+    for (unsigned FunctionIndex = 0;
+         FunctionIndex < Artifact.functions.size(); ++FunctionIndex) {
+      const CDBody &Body = Artifact.functions[FunctionIndex].body;
+      for (unsigned Index = 0; Index < Body.locations.size(); ++Index) {
+        const std::optional<CDDebugLocation> &Location = Body.locations[Index];
+        if (!Location || !Location->range)
+          continue;
+        const CDDebugRange &Range = *Location->range;
+        OS << "  function " << functionName(FunctionIndex) << " " << Index
+           << " = s" << Range.source << ":" << Range.start << ":"
+           << Range.end << '\n';
       }
     }
   }

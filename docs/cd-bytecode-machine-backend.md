@@ -3,9 +3,9 @@
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
 enum-variant, and bounded native-call slices share the machine artifact bridge;
-the M5 explicit debug-source-table, instruction-location, and source-backed
-runtime-diagnostic slices also share that bridge; broader native-call
-capabilities and debug ranges remain deferred, 2026-08-02.
+the M5 explicit debug-source-table, instruction-location, source-backed
+runtime-diagnostic, and debug-range slices also share that bridge; broader
+native-call capabilities and debugger behavior remain deferred, 2026-08-02.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -116,7 +116,9 @@ as the direct path and moves the validated entries into the shared artifact
 model. The follow-on location slice propagates each source instruction's
 `DILocation` into the generated CD pseudo and resolves it at the artifact
 bridge, so direct and machine paths emit identical sparse `debug_locations`
-entries. `debug_ranges` remains a later parity gate.
+entries. The explicit `!cd.ranges` table is resolved by the same
+`DILocation` identity at the artifact bridge, so both paths emit identical
+sparse `debug_ranges` entries after validating source-local byte bounds.
 The runtime-error parity gate also confirms that a nested divide-by-zero keeps
 the same source line, caret, and call stack through both artifact paths. It also
 covers the bounded `sqrt(-1)` native failure with the same source-backed main

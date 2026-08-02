@@ -141,7 +141,11 @@ ambiguous source-path matches are rejected. The Rust VM parity fixture covers
 the resulting source line, caret, and nested call stack for divide-by-zero;
 the bounded `sqrt(-1)` native failure has the same source-backed main call
 stack, and an out-of-range array index has the same source-backed main call
-stack. `debug_ranges` and debugger behavior remain deferred.
+stack. An explicit `!cd.ranges` named metadata table can add validated
+source-local half-open byte ranges keyed by `DILocation`; ranges are never
+inferred from line/column metadata. The direct and machine paths share the
+same `debug_ranges` serializer and parity coverage. Debugger behavior remains
+deferred.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
@@ -151,5 +155,5 @@ must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or arbitrary
 native-call output. `-filetype=obj` is rejected. Native calls beyond the
-bounded group, non-string globals, and debug ranges remain deferred until
-separate LLVM-to-CD representations and parity gates are defined.
+bounded group and non-string globals remain deferred until separate LLVM-to-CD
+representations and parity gates are defined.
