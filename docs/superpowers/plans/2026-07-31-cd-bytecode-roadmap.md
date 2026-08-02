@@ -53,7 +53,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, and direct/machine trace/observability parity are implemented; more complete interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
-| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
+| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only and explicit VM integration boundaries are verified; CI and the broader release matrix remain |
 
 ## 4. M0 — Revalidate the existing target
 
@@ -671,13 +671,14 @@ The recommended input boundary is named metadata for module identity, entry orde
 
 - Modify: `llvm/lib/Target/CD/README.md`.
 - Create: `llvm/test/CodeGen/CD/cdbc-vm-integration.py` when the external VM path is configured.
+- Create: `llvm/test/CodeGen/CD/lit.local.cfg` for the opt-in `cd-vm` feature.
 - Modify: LLVM CMake/test registration only as needed for the focused CD target suite.
 - Create: `docs/cd-bytecode-verification.md`.
 
-- [ ] Keep LLVM-only tests runnable with `llvm-lit` and no sibling checkout.
-- [ ] Make VM integration opt-in through an explicit `CD_COMPILER_ROOT` path; never discover or mutate the untracked nested checkout implicitly.
+- [x] Keep LLVM-only tests runnable with `llvm-lit` and no sibling checkout.
+- [x] Make VM integration opt-in through an explicit `CD_COMPILER_ROOT` path; never discover or mutate the untracked nested checkout implicitly.
 - [ ] Add a focused CI job that builds `CD`, `llc`, `FileCheck`, and the CD lit suite, then a separate job that installs Rust and runs VM integration.
-- [ ] Record exact LLVM and Rust toolchain versions, artifact format version, and verification commands.
+- [x] Record exact LLVM and Rust toolchain versions, artifact format version, and verification commands.
 - [ ] Test `llc -mtriple=cd-unknown-unknown`, `-O0`, `-O2`, `-g`, metadata-free output, object-output rejection, invalid IR, and invalid CD ABI operations.
 - [ ] Run `git diff --check`, focused lit tests, VM dump/run/link tests, and the repository's normal LLVM checks before claiming a milestone complete.
 

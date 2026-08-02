@@ -81,6 +81,18 @@ python3 llvm/utils/cd_module_link.py --llc build-cd/bin/llc \
   --vm /path/to/cd-compiler/vm-rs
 ```
 
+The VM integration test is opt-in and requires an explicit checkout root:
+
+```text
+CD_COMPILER_ROOT="$PWD/cd-compiler" \
+  build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD/cdbc-vm-integration.py
+```
+
+Without CD_COMPILER_ROOT, the integration test is unsupported and the
+LLVM-only CD suite does not inspect or mutate a sibling checkout. The
+reproducible verification matrix is recorded in
+docs/cd-bytecode-verification.md.
+
 Integer constants are accepted only when their signed value is exactly
 representable as an IEEE-754 double; otherwise the target reports a diagnostic
 instead of silently changing the value. Number constants are serialized with a
