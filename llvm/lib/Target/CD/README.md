@@ -65,8 +65,18 @@ instead of silently dropping them.
 `llvm-link` does not combine module products: because it concatenates named
 metadata, the target rejects a linked IR module with multiple `!cd.module`
 records. The Rust VM's module-aware `link` command remains responsible for
-resolving dependency identities and expanding products; missing dependencies,
-cycles, entry-order graphs, and linked execution are the next M6 boundary.
+resolving dependency identities and expanding products. Non-entry module
+products have a fall-through `main` body; the LLVM terminal return is omitted
+in module mode so dependency expansion can continue into the importing body.
+The opt-in `llvm/utils/cd_module_link.py` harness covers valid direct/machine
+products, linked execution, unlinked-run rejection, and missing-dependency,
+cycle, duplicate-identity, entry-order, and insertion-offset failures.
+Run it explicitly with the LLVM build and sibling VM paths, for example:
+
+```text
+python3 llvm/utils/cd_module_link.py --llc build-cd/bin/llc \
+  --vm /path/to/cd-compiler/vm-rs
+```
 
 Integer constants are accepted only when their signed value is exactly
 representable as an IEEE-754 double; otherwise the target reports a diagnostic

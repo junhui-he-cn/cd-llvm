@@ -915,6 +915,9 @@ class CDMachineModuleEmitter {
         }
 
         if (const auto *Return = dyn_cast<ReturnInst>(&Instruction)) {
+          // The Rust linker splices non-entry module bodies into an importer.
+          if (IsMain && Artifact.module && !Artifact.module->isEntry)
+            continue;
           const Value *ReturnValue = Return->getReturnValue();
           if (ReturnValue && !isSupportedValue(ReturnValue))
             unsupported("a non-scalar function return");

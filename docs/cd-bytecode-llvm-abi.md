@@ -3,8 +3,8 @@
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
 implemented; M5 explicit debug-source-table, instruction-location,
-source-backed runtime-diagnostic, and debug-range slices implemented,
-M6 module-envelope foundation implemented, 2026-08-02.
+source-backed runtime-diagnostic, and debug-range slices implemented;
+M6 module-envelope and opt-in linker integration implemented, 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -657,12 +657,21 @@ requested source path:
 
 Offsets are serialized as the existing `dN target=... kind=... at=...
 requested=...` records and must be nondecreasing and no greater than the
-lowered main instruction count. If `llvm-link` combines input modules, LLVM
-concatenates their named-metadata records; the resulting multiple
-`!cd.module` records are rejected rather than synthesized into one module
-product. Module products are linked by the Rust VM's module-aware linker in a
-later M6 slice. Supplying module metadata without `-cd-artifact=module` is also
-an error, so the default program path cannot silently discard it.
+lowered main instruction count. A non-entry module is a fall-through product:
+module mode omits the LLVM terminal return from its `main` body so the Rust
+linker can insert that body at a dependency offset. Entry modules retain their
+terminal return. If `llvm-link` combines input modules, LLVM concatenates their
+named-metadata records; the resulting multiple `!cd.module` records are
+rejected rather than synthesized into one module product. Module products are
+linked by the Rust VM's module-aware linker. Supplying module metadata without
+`-cd-artifact=module` is also an error, so the default program path cannot
+silently discard it.
+
+The opt-in `llvm/utils/cd_module_link.py` harness emits entry and dependency
+products through both LLVM paths, then checks Rust `dump`, unlinked `run`
+rejection, `link`, linked `dump`, and linked `run`. It also checks missing
+dependencies, dependency cycles, duplicate identities, non-contiguous entry
+orders, and invalid insertion offsets without changing the nested VM checkout.
 
 ## Debug source tables: M5A foundation
 

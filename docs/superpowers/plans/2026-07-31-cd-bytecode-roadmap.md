@@ -640,6 +640,8 @@ any surface. M6 and M7 remain planned.
 - Modify: `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}`, `CDModuleInfo.{h,cpp}`, and both bytecode emitters.
 - Create: `llvm/test/CodeGen/CD/cdbc-modules.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-module-errors.ll`.
+- Create: `llvm/test/CodeGen/CD/cdbc-module-fallthrough.ll` and the opt-in
+  `llvm/utils/cd_module_link.py` harness with its unit test and fixtures.
 - Modify: `docs/cd-bytecode-llvm-abi.md` and `llvm/lib/Target/CD/README.md`.
 - Synchronize, in the independent checkout: module parsing/linking tests under `cd-compiler/tests/` and the existing Rust linker implementation.
 
@@ -650,9 +652,11 @@ The recommended input boundary is named metadata for module identity, entry orde
   module records produced by `llvm-link` are rejected rather than merged.
 - [x] Preserve deterministic function, constant, name, debug-source, and
   dependency ordering through the shared module serializer.
-- [ ] Add tests for duplicate identities, missing dependencies, cycles, invalid insertion offsets, and non-contiguous entry order.
-- [ ] Produce module products, run the Rust `link` command, then execute the linked output with `run`.
-- [ ] Confirm a module product is rejected by direct VM `run` until linking.
+- [x] Add tests for duplicate identities, missing dependencies, cycles, invalid insertion offsets, and non-contiguous entry order through the opt-in Rust linker harness.
+- [x] Produce direct and machine module products, run the Rust `link` command, then execute the linked output with `run`.
+- [x] Confirm each LLVM module product is rejected by direct VM `run` until linking.
+- [x] Emit non-entry module `main` bodies as fall-through fragments so
+  dependency expansion reaches the importing module's remaining instructions.
 
 **Exit criteria:** Program and module artifacts are unambiguous, the Rust linker accepts valid LLVM-produced module products, invalid dependency metadata fails before execution, and linked runtime diagnostics retain source/module identity.
 
@@ -681,10 +685,9 @@ The next development session should execute only this narrow sequence:
 1. Keep the M5 direct/machine observability parity gate opt-in and extend it
    only with explicit contracts for more complete interactive debugger behavior
    and other observability capabilities not covered by the completed slices.
-2. Continue M6 from the completed LLVM module-envelope foundation by producing
-   multiple module products, exercising the existing Rust linker, and covering
-   missing dependencies, cycles, entry ordering, and linked diagnostics without
-   changing the `cdbc 0.1` version.
+2. Finish the remaining M6 diagnostic boundary by linking source-backed LLVM
+   module products and checking that linked runtime diagnostics retain source
+   and module identity without changing the `cdbc 0.1` version.
 3. Keep M7 as an independent planned CI and release-quality boundary, including
    opt-in VM integration and reproducible verification rather than a default
    parity gate.

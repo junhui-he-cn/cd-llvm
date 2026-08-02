@@ -137,6 +137,7 @@ class CDFunctionEmitter {
   CDModuleEmitter &Module;
   Function &F;
   bool IsMain;
+  bool OmitMainReturn;
   DenseMap<const Value *, unsigned> ValueRegisters;
   DenseMap<const AllocaInst *, unsigned> AllocaNames;
   DenseMap<const PHINode *, unsigned> PhiNames;
@@ -595,8 +596,9 @@ class CDFunctionEmitter {
   void patchBranches();
 
 public:
-  CDFunctionEmitter(CDModuleEmitter &Module, Function &F, bool IsMain)
-      : Module(Module), F(F), IsMain(IsMain) {}
+  CDFunctionEmitter(CDModuleEmitter &Module, Function &F, bool IsMain,
+                    bool OmitMainReturn = false)
+      : Module(Module), F(F), IsMain(IsMain), OmitMainReturn(OmitMainReturn) {}
 
   CDBody emit();
 };
@@ -658,7 +660,10 @@ void CDModuleEmitter::emit(Module &M) {
     if (&F != Main && !F.isDeclaration() && !F.isIntrinsic())
       FunctionIndexes[&F] = FunctionIndex++;
 
-  CDBody MainBody = CDFunctionEmitter(*this, *Main, true).emit();
+  const bool OmitMainReturn =
+      ModuleMetadata && !ModuleMetadata->isEntry;
+  CDBody MainBody =
+      CDFunctionEmitter(*this, *Main, true, OmitMainReturn).emit();
   std::vector<std::pair<Function *, CDBody>> FunctionBodies;
   for (Function &F : M)
     if (functionIndex(&F))
@@ -932,6 +937,9 @@ void CDFunctionEmitter::emitTerminator(const BasicBlock &BB,
                                        const Instruction &Terminator) {
   DebugInstruction = &Terminator;
   if (const auto *Return = dyn_cast<ReturnInst>(&Terminator)) {
+    // The Rust linker splices non-entry module bodies into an importer.
+    if (IsMain && OmitMainReturn)
+      return;
     const unsigned Register = Return->getReturnValue()
                                   ? valueRegister(Return->getReturnValue())
                                   : materializeNil();
