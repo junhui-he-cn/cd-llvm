@@ -133,11 +133,10 @@ static bool validateOperandCount(const CDInstruction &Instruction,
   return true;
 }
 
-static bool validateUnusedFields(const CDInstruction &Instruction,
-                                 bool HasReference, bool HasCallee,
-                                 bool HasTarget, StringRef BodyName,
-                                 unsigned InstructionIndex,
-                                 std::string &Error) {
+static bool validateUnusedFieldsWithVariantFields(
+    const CDInstruction &Instruction, bool HasReference, bool HasCallee,
+    bool HasTarget, bool HasSecondaryReference, bool HasIndex,
+    StringRef BodyName, unsigned InstructionIndex, std::string &Error) {
   if (!HasReference && Instruction.reference != InvalidIndex)
     return fail(Error, Twine(BodyName) + " instruction " +
                          Twine(InstructionIndex) +
@@ -150,7 +149,25 @@ static bool validateUnusedFields(const CDInstruction &Instruction,
     return fail(Error, Twine(BodyName) + " instruction " +
                          Twine(InstructionIndex) +
                          " has an unexpected jump target");
+  if (!HasSecondaryReference && Instruction.secondaryReference != InvalidIndex)
+    return fail(Error, Twine(BodyName) + " instruction " +
+                         Twine(InstructionIndex) +
+                         " has an unexpected secondary table reference");
+  if (!HasIndex && Instruction.payloadIndex != InvalidIndex)
+    return fail(Error, Twine(BodyName) + " instruction " +
+                         Twine(InstructionIndex) + " has an unexpected index");
   return true;
+}
+
+static bool validateUnusedFields(const CDInstruction &Instruction,
+                                 bool HasReference, bool HasCallee,
+                                 bool HasTarget, StringRef BodyName,
+                                 unsigned InstructionIndex,
+                                 std::string &Error) {
+  return validateUnusedFieldsWithVariantFields(
+      Instruction, HasReference, HasCallee, HasTarget,
+      /*HasSecondaryReference=*/false, /*HasIndex=*/false, BodyName,
+      InstructionIndex, Error);
 }
 
 static bool validateOperands(const CDInstruction &Instruction,
@@ -229,6 +246,52 @@ static bool validateInstruction(const CDInstruction &Instruction,
                             InstructionIndex, "struct field value", Error))
         return false;
     }
+    return true;
+  case CDOpcode::Variant:
+    if (!validateUnusedFieldsWithVariantFields(
+            Instruction, true, false, false,
+            /*HasSecondaryReference=*/true, /*HasIndex=*/false, BodyName,
+            InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "variant enum name", BodyName, InstructionIndex,
+                           Error) ||
+        !validateReference(Instruction.secondaryReference,
+                           Artifact.names.size(), "variant name", BodyName,
+                           InstructionIndex, Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex,
+                          Error))
+      return false;
+    return true;
+  case CDOpcode::VariantTag:
+    if (!validateUnusedFieldsWithVariantFields(
+            Instruction, true, false, false,
+            /*HasSecondaryReference=*/true, /*HasIndex=*/false, BodyName,
+            InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "variant enum name", BodyName, InstructionIndex,
+                           Error) ||
+        !validateReference(Instruction.secondaryReference,
+                           Artifact.names.size(), "variant name", BodyName,
+                           InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 1, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex,
+                          Error))
+      return false;
+    return true;
+  case CDOpcode::VariantField:
+    if (!validateUnusedFieldsWithVariantFields(
+            Instruction, false, false, false,
+            /*HasSecondaryReference=*/false, /*HasIndex=*/true, BodyName,
+            InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 1, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex,
+                          Error))
+      return false;
     return true;
   case CDOpcode::Field:
     if (!validateUnusedFields(Instruction, true, false, false, BodyName,
@@ -462,6 +525,21 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     }
     OS << "}";
     break;
+  case CDOpcode::Variant:
+    OS << "variant " << nameName(Instruction.reference) << "."
+       << nameName(Instruction.secondaryReference) << " [";
+    writeOperands(OS, Instruction.operands);
+    OS << "]";
+    break;
+  case CDOpcode::VariantTag:
+    OS << "variant_tag " << registerName(Instruction.operands[0]) << " "
+       << nameName(Instruction.reference) << "."
+       << nameName(Instruction.secondaryReference);
+    break;
+  case CDOpcode::VariantField:
+    OS << "variant_field " << registerName(Instruction.operands[0]) << " "
+       << Instruction.payloadIndex;
+    break;
   case CDOpcode::Field:
     OS << "field " << registerName(Instruction.operands[0]) << ", "
        << nameName(Instruction.reference);
@@ -601,6 +679,40 @@ CDInstruction CDInstruction::structValue(
   return Instruction;
 }
 
+CDInstruction CDInstruction::variant(unsigned Destination, unsigned EnumName,
+                                     unsigned VariantName,
+                                     std::vector<unsigned> Payload) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Variant;
+  Instruction.result = Destination;
+  Instruction.reference = EnumName;
+  Instruction.secondaryReference = VariantName;
+  Instruction.operands = std::move(Payload);
+  return Instruction;
+}
+
+CDInstruction CDInstruction::variantTag(unsigned Destination, unsigned Value,
+                                         unsigned EnumName,
+                                         unsigned VariantName) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::VariantTag;
+  Instruction.result = Destination;
+  Instruction.reference = EnumName;
+  Instruction.secondaryReference = VariantName;
+  Instruction.operands = {Value};
+  return Instruction;
+}
+
+CDInstruction CDInstruction::variantField(unsigned Destination, unsigned Value,
+                                           unsigned Index) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::VariantField;
+  Instruction.result = Destination;
+  Instruction.payloadIndex = Index;
+  Instruction.operands = {Value};
+  return Instruction;
+}
+
 CDInstruction CDInstruction::field(unsigned Destination, unsigned Object,
                                    unsigned Name) {
   CDInstruction Instruction;
@@ -737,6 +849,12 @@ const char *opcodeName(CDOpcode Opcode) {
     return "map";
   case CDOpcode::Struct:
     return "struct";
+  case CDOpcode::Variant:
+    return "variant";
+  case CDOpcode::VariantTag:
+    return "variant_tag";
+  case CDOpcode::VariantField:
+    return "variant_field";
   case CDOpcode::Field:
     return "field";
   case CDOpcode::AssignField:

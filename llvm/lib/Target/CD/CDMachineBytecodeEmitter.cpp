@@ -410,6 +410,62 @@ class CDMachineModuleEmitter {
       return;
     }
 
+    if (Callee && cd::isVariantIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      const unsigned EnumName =
+          addNameOperand(Call.getArgOperand(0), "llvm.cd.variant");
+      const unsigned VariantName =
+          addNameOperand(Call.getArgOperand(1), "llvm.cd.variant");
+      std::vector<Register> Payload;
+      Payload.reserve(Call.arg_size() - 3);
+      for (unsigned Index = 3; Index < Call.arg_size(); ++Index)
+        Payload.push_back(
+            valueRegister(Call.getArgOperand(Index), MRI, MBB, TII));
+      MachineInstrBuilder VariantBuilder =
+          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT), Result)
+              .addImm(EnumName)
+              .addImm(VariantName);
+      for (Register Value : Payload)
+        VariantBuilder.addReg(Value);
+      return;
+    }
+
+    if (Callee && cd::isVariantTagIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantTagCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      const unsigned EnumName =
+          addNameOperand(Call.getArgOperand(1), "llvm.cd.variant.tag");
+      const unsigned VariantName =
+          addNameOperand(Call.getArgOperand(2), "llvm.cd.variant.tag");
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT_TAG), Result)
+          .addReg(Value)
+          .addImm(EnumName)
+          .addImm(VariantName);
+      return;
+    }
+
+    if (Callee && cd::isVariantFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantFieldCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Value = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      const auto *Index = cast<ConstantInt>(Call.getArgOperand(1));
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_VARIANT_FIELD), Result)
+          .addReg(Value)
+          .addImm(Index->getZExtValue());
+      return;
+    }
+
     if (Callee && cd::isFieldIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateFieldCall(Call, Error))
@@ -975,6 +1031,52 @@ class CDMachineModuleEmitter {
               std::move(FieldNameValueOperands)));
           break;
         }
+        case CD::CD_VARIANT: {
+          if (MI.getNumOperands() < 3 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isImm() || !MI.getOperand(2).isImm())
+            unsupported("an invalid CD_VARIANT machine instruction");
+          const int64_t EnumName = MI.getOperand(1).getImm();
+          const int64_t VariantName = MI.getOperand(2).getImm();
+          if (EnumName < 0 || VariantName < 0)
+            unsupported("an invalid CD_VARIANT name operand");
+          std::vector<unsigned> Payload;
+          for (unsigned Index = 3; Index < MI.getNumOperands(); ++Index) {
+            if (!MI.getOperand(Index).isReg())
+              unsupported("an invalid CD_VARIANT payload operand");
+            Payload.push_back(artifactRegister(
+                MI.getOperand(Index).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::variant(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              static_cast<unsigned>(EnumName),
+              static_cast<unsigned>(VariantName), std::move(Payload)));
+          break;
+        }
+        case CD::CD_VARIANT_TAG:
+          if (MI.getNumOperands() != 4 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm() ||
+              !MI.getOperand(3).isImm())
+            unsupported("an invalid CD_VARIANT_TAG machine instruction");
+          if (MI.getOperand(2).getImm() < 0 ||
+              MI.getOperand(3).getImm() < 0)
+            unsupported("an invalid CD_VARIANT_TAG name operand");
+          Body.instructions.push_back(CDInstruction::variantTag(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              static_cast<unsigned>(MI.getOperand(2).getImm()),
+              static_cast<unsigned>(MI.getOperand(3).getImm())));
+          break;
+        case CD::CD_VARIANT_FIELD:
+          if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm())
+            unsupported("an invalid CD_VARIANT_FIELD machine instruction");
+          if (MI.getOperand(2).getImm() < 0)
+            unsupported("an invalid CD_VARIANT_FIELD index operand");
+          Body.instructions.push_back(CDInstruction::variantField(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              static_cast<unsigned>(MI.getOperand(2).getImm())));
+          break;
         case CD::CD_FIELD:
           if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
               !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm())

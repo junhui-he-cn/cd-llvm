@@ -1,7 +1,8 @@
 # LLVM CD value ABI
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
-map-constructor, and record-value slices implemented, 2026-08-02.
+map-constructor, record-value, and enum-variant slices implemented,
+2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -116,6 +117,27 @@ the assigned value. Their overloaded LLVM results are restricted during target
 lowering to scalar values or address-space-zero CD value pointers; assignment
 results must have exactly the assigned value type.
 
+The enum-variant group uses these signatures:
+
+```tablegen
+def int_cd_variant : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<2>>]>;
+def int_cd_variant_tag : DefaultAttrsIntrinsic<
+    [llvm_i1_ty], [llvm_ptr_ty, llvm_ptr_ty, llvm_ptr_ty]>;
+def int_cd_variant_field : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>]>;
+```
+
+`llvm.cd.variant` takes private, constant, non-empty UTF-8 enum and variant
+name globals, an immediate `i32` payload count, and exactly one scalar, CD
+nil, or explicit CD-value operand per payload field. `llvm.cd.variant.tag`
+returns `i1` after checking the value against the two name-table identities.
+`llvm.cd.variant.field` takes an immediate `i32` payload index and has the
+same scalar-or-address-space-zero CD-value result restriction as record field
+access. Names are metadata, not CD string values.
+
 Each operation must use its registered intrinsic declaration and declared
 signature. A manually declared function with a similar name is not a CD ABI
 operation and remains an ordinary unsupported declaration.
@@ -195,7 +217,6 @@ signatures remain reserved conceptually and are not enabled by this document:
 
 | Group | Required operation shape | Wire operations | Design dependency |
 | --- | --- | --- | --- |
-| Variants | explicit enum/variant names and ordered payload operands | `variant`, `variant_tag`, `variant_field` | payload layout and invalid-tag behavior |
 | Native calls | allowlisted name-table identity and typed capability matrix | `native_call` | Rust VM allowlist and argument/result validation |
 
 Each group requires its own intrinsic signatures, malformed-input fixtures,
@@ -419,6 +440,52 @@ dynamic-value operand. They may not cross ordinary function parameters/returns,
 PHI/select, allocas, pointer operations, or external calls. An arbitrary LLVM
 pointer is never treated as a struct object.
 
+## Enum variant values: explicit variant ABI
+
+### Accepted source shape
+
+`llvm.cd.variant` uses the following textual shape:
+
+```llvm
+@result = private unnamed_addr constant [7 x i8] c"Result\00"
+@ok = private unnamed_addr constant [3 x i8] c"Ok\00"
+
+declare ptr @llvm.cd.variant(ptr, ptr, i32, ...)
+
+%value = call ptr (ptr, ptr, i32, ...) @llvm.cd.variant(
+    ptr @result, ptr @ok, i32 1, i64 42)
+```
+
+Both name operands must be direct private, constant, address-space-zero byte
+globals containing non-empty valid UTF-8 strings. The immediate `i32` count
+must equal the number of payload operands. Payloads use the existing scalar,
+CD nil, and explicit CD dynamic-value capability matrix. Ordinary pointers,
+aggregates, vectors, poison, undef, and pointer operations remain rejected
+during lowering.
+
+The access operations use these shapes:
+
+```llvm
+declare i1 @llvm.cd.variant.tag(ptr, ptr, ptr)
+declare ptr @llvm.cd.variant.field(ptr, i32)
+
+%matches = call i1 @llvm.cd.variant.tag(ptr %value, ptr @result, ptr @ok)
+%payload = call ptr @llvm.cd.variant.field(ptr %value, i32 0)
+```
+
+`variant` emits an owned fresh VM value with the enum name, variant name, and
+payload values in source order. `variant_tag` compares both names and returns
+`false` for a non-matching value, including a value that is not an enum
+variant. `variant_field` reads a positional payload without mutating the
+variant. The Rust VM remains authoritative for runtime failures: accessing a
+non-variant produces `can only access fields on enum variants`, and an invalid
+payload index produces `enum variant field index out of bounds`.
+
+Variant values are local CD values in this slice. They may be printed, used as
+payloads of another explicit constructor, or passed to another explicit
+variant/collection/field intrinsic. They may not cross ordinary function
+parameters/returns, PHI/select, allocas, pointer operations, or external calls.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -465,7 +532,14 @@ both backends, reject ordinary pointer substitutes, pass Rust `dump`/`run`,
 and cover direct/machine artifact, dynamic-value, and missing-field runtime
 parity.
 
-The sibling `cd-compiler` checkout already defines `string` constants in the
-`cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the
-LLVM artifact model and lowering only; it does not add a new Rust opcode or
-alter the artifact version.
+The enum-variant group is complete only when `llvm.cd.variant`,
+`llvm.cd.variant.tag`, and `llvm.cd.variant.field` enforce the name/count,
+payload capability, and overloaded result contracts, emit `variant`,
+`variant_tag`, and `variant_field` through both backends, reject ordinary
+pointer substitutes, pass Rust `dump`/`run`, and cover direct/machine artifact,
+dynamic-value, non-variant, and out-of-bounds runtime parity.
+
+The sibling `cd-compiler` checkout already defines the string, collection,
+record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and
+VM. These M4 slices therefore change the LLVM artifact model and lowering only;
+they do not add a new Rust opcode or alter the artifact version.

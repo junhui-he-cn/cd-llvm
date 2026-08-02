@@ -28,6 +28,12 @@ bool isMapIntrinsic(const CallBase &Call);
 
 bool isStructIntrinsic(const CallBase &Call);
 
+bool isVariantIntrinsic(const CallBase &Call);
+
+bool isVariantTagIntrinsic(const CallBase &Call);
+
+bool isVariantFieldIntrinsic(const CallBase &Call);
+
 bool isFieldIntrinsic(const CallBase &Call);
 
 bool isAssignFieldIntrinsic(const CallBase &Call);
@@ -56,6 +62,12 @@ bool validateArrayCall(const CallBase &Call, std::string &Error);
 bool validateMapCall(const CallBase &Call, std::string &Error);
 
 bool validateStructCall(const CallBase &Call, std::string &Error);
+
+bool validateVariantCall(const CallBase &Call, std::string &Error);
+
+bool validateVariantTagCall(const CallBase &Call, std::string &Error);
+
+bool validateVariantFieldCall(const CallBase &Call, std::string &Error);
 
 bool validateFieldCall(const CallBase &Call, std::string &Error);
 

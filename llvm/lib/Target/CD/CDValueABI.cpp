@@ -46,6 +46,24 @@ bool isStructIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_struct;
 }
 
+bool isVariantIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_variant;
+}
+
+bool isVariantTagIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_variant_tag;
+}
+
+bool isVariantFieldIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_variant_field;
+}
+
 bool isFieldIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
@@ -90,6 +108,11 @@ bool isCDValue(const Value &Value) {
   return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
                   isMapIntrinsic(*Call) ||
                   isStructIntrinsic(*Call) ||
+                  (isVariantIntrinsic(*Call) && Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
+                  (isVariantFieldIntrinsic(*Call) &&
+                   Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
                   (isFieldIntrinsic(*Call) && Call->getType()->isPointerTy() &&
                    cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
                   (isAssignFieldIntrinsic(*Call) &&
@@ -109,6 +132,12 @@ bool isNameOperand(const CallBase &Call, const Value &Value) {
       if (Call.getArgOperand(Index) == &Value)
         return true;
   }
+  if (isVariantIntrinsic(Call) && Call.arg_size() > 1 &&
+      (Call.getArgOperand(0) == &Value || Call.getArgOperand(1) == &Value))
+    return true;
+  if (isVariantTagIntrinsic(Call) && Call.arg_size() > 2 &&
+      (Call.getArgOperand(1) == &Value || Call.getArgOperand(2) == &Value))
+    return true;
   if ((isFieldIntrinsic(Call) || isAssignFieldIntrinsic(Call)) &&
       Call.arg_size() > 1 && Call.getArgOperand(1) == &Value)
     return true;
@@ -266,6 +295,9 @@ static bool validateCDValueOperand(const CallBase &Call, unsigned Index,
                                    StringRef Operation, StringRef Role,
                                    std::string &Error);
 
+static bool validateFieldResult(const CallBase &Call, StringRef Operation,
+                                std::string &Error);
+
 bool validateStructCall(const CallBase &Call, std::string &Error) {
   if (!isStructIntrinsic(Call)) {
     Error = "not an llvm.cd.struct call";
@@ -317,6 +349,98 @@ bool validateStructCall(const CallBase &Call, std::string &Error) {
               "field operands";
       return false;
     }
+  }
+  return true;
+}
+
+bool validateVariantCall(const CallBase &Call, std::string &Error) {
+  if (!isVariantIntrinsic(Call)) {
+    Error = "not an llvm.cd.variant call";
+    return false;
+  }
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.variant requires a ptr result";
+    return false;
+  }
+  if (Call.arg_size() < 3) {
+    Error = "llvm.cd.variant requires enum name, variant name, and field-count operands";
+    return false;
+  }
+  if (!validateNameOperand(*Call.getArgOperand(0), "llvm.cd.variant",
+                           "enum name", Error)) {
+    Error = "llvm.cd.variant requires private non-empty string global enum and variant names";
+    return false;
+  }
+  if (!validateNameOperand(*Call.getArgOperand(1), "llvm.cd.variant",
+                           "variant name", Error)) {
+    Error = "llvm.cd.variant requires private non-empty string global enum and variant names";
+    return false;
+  }
+
+  const auto *Count = dyn_cast<ConstantInt>(Call.getArgOperand(2));
+  if (!Count || !Count->getType()->isIntegerTy(32)) {
+    Error = "llvm.cd.variant requires an i32 field-count immediate";
+    return false;
+  }
+  const uint64_t FieldCount = Count->getZExtValue();
+  if (FieldCount != Call.arg_size() - 3) {
+    Error = "llvm.cd.variant field-count does not match the payload operand list";
+    return false;
+  }
+  for (unsigned Index = 3; Index < Call.arg_size(); ++Index) {
+    if (!isArrayElement(*Call.getArgOperand(Index))) {
+      Error = "llvm.cd.variant requires scalar, nil, or CD dynamic-value payload operands";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool validateVariantTagCall(const CallBase &Call, std::string &Error) {
+  if (!isVariantTagIntrinsic(Call)) {
+    Error = "not an llvm.cd.variant.tag call";
+    return false;
+  }
+  if (!Call.getType()->isIntegerTy(1)) {
+    Error = "llvm.cd.variant.tag requires an i1 result";
+    return false;
+  }
+  if (Call.arg_size() != 3) {
+    Error = "llvm.cd.variant.tag requires a value, enum name, and variant name operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.variant.tag", "value",
+                              Error))
+    return false;
+  if (!validateNameOperand(*Call.getArgOperand(1), "llvm.cd.variant.tag",
+                           "enum name", Error) ||
+      !validateNameOperand(*Call.getArgOperand(2), "llvm.cd.variant.tag",
+                           "variant name", Error)) {
+    Error = "llvm.cd.variant.tag requires private non-empty string global enum and variant names";
+    return false;
+  }
+  return true;
+}
+
+bool validateVariantFieldCall(const CallBase &Call, std::string &Error) {
+  if (!isVariantFieldIntrinsic(Call)) {
+    Error = "not an llvm.cd.variant.field call";
+    return false;
+  }
+  if (!validateFieldResult(Call, "llvm.cd.variant.field", Error))
+    return false;
+  if (Call.arg_size() != 2) {
+    Error = "llvm.cd.variant.field requires a value and field-index operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.variant.field", "value",
+                              Error))
+    return false;
+  const auto *Index = dyn_cast<ConstantInt>(Call.getArgOperand(1));
+  if (!Index || !Index->getType()->isIntegerTy(32)) {
+    Error = "llvm.cd.variant.field requires an i32 field-index immediate";
+    return false;
   }
   return true;
 }

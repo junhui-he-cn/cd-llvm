@@ -38,7 +38,7 @@ The outer repository already contains an experimental target in:
 - `llvm/test/CodeGen/CD/cdbc-basic.ll`: arithmetic, comparison, call, print, branch, PHI, and object-output rejection coverage.
 - `llvm/test/CodeGen/CD/cdbc-parameters.ll`: function parameter metadata and unnamed-parameter naming coverage.
 
-The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, and record-value groups. The target README correctly leaves variants, general globals, native calls, and source-backed debug sections outside the current boundary.
+The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, and enum-variant groups. The target README correctly leaves general globals, native calls, and source-backed debug sections outside the current boundary.
 
 This baseline is source-present but must be freshly verified in the current checkout before the next implementation slice is selected.
 
@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array, map, and first record-value slices implemented |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array, map, record-value, and enum-variant slices implemented; native calls remain |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -492,8 +492,50 @@ runtime already implement the three artifact operations.
 The record-value slice is now implemented. The machine path materializes field
 value registers before inserting `CD_STRUCT`, preserving definition-before-use
 ordering for nested arrays and other dynamic values. The Rust VM checkout and
-the `cdbc 0.1` version remain unchanged. Variants, native calls, and dynamic
-values crossing ordinary function boundaries remain future M4 decisions.
+the `cdbc 0.1` version remain unchanged. Native calls and dynamic values
+crossing ordinary function boundaries remain future M4 decisions.
+
+### Narrow M4 slice: enum variant values (2026-08-02)
+
+**Goal:** Lower the explicit enum-variant value ABI through the existing
+`cdbc 0.1` `variant`, `variant_tag`, and `variant_field` operations in the
+direct and opt-in machine paths.
+
+**ABI gate:** `llvm.cd.variant(ptr enumName, ptr variantName, i32 fieldCount,
+...) -> ptr` requires private, constant, non-empty UTF-8 name globals, an
+immediate payload count, and exactly one scalar, CD nil, or explicit CD-value
+payload per field. `llvm.cd.variant.tag(ptr value, ptr enumName, ptr
+variantName) -> i1` checks an explicit CD value against the two names.
+`llvm.cd.variant.field(ptr value, i32 index)` is overloaded for scalar or
+address-space-zero CD-value results and requires an immediate index. Name
+operands are name-table metadata; ordinary pointers and LLVM aggregates are
+never inferred to be variants.
+
+**Files:** modify the CD intrinsic/ABI/artifact/direct/machine layers and the
+three ABI documents; create positive, dynamic-value, malformed, and runtime
+variant fixtures; extend the direct/machine parity manifest. The nested Rust
+VM checkout is read-only because its parser, verifier, and runtime already
+implement the three artifact operations.
+
+- [x] Add positive and dynamic fixtures first, then run the old target to
+  record the missing-intrinsic/lowering red baseline.
+- [x] Add `llvm.cd.variant*`, shared ABI validation, `Variant`/`VariantTag`/
+  `VariantField` artifact shapes, and both direct/machine lowering paths.
+- [x] Reject count mismatches, ordinary-pointer payload/value operands,
+  non-name globals, non-immediate field indexes, and invalid result types with
+  target diagnostics.
+- [x] Add artifact/behavior parity entries and runtime-error entries for
+  non-variant access and out-of-bounds payload access.
+- [x] Run focused lit, Rust VM `dump`/`run`, direct/machine parity, the full CD
+  lit suite, `git diff --check`, and the relevant Rust VM tests without
+  modifying the nested checkout.
+
+The enum-variant slice is now implemented. Both lowering paths share the
+variant ABI validator and artifact bridge, and the machine path materializes
+payload registers before inserting `CD_VARIANT`. Positive, nested dynamic,
+malformed, non-variant, and out-of-bounds fixtures pass direct/machine parity
+against the existing Rust VM contract. The nested Rust VM checkout and the
+`cdbc 0.1` version remain unchanged.
 
 ## 9. M5 — Add source-backed debug metadata
 
@@ -562,16 +604,18 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Record the map-constructor ABI gate: key/value capability, insertion order,
-   aliasing, resource-budget behavior, and the name-table contract.
-2. Keep ordinary LLVM aggregates and pointers rejected; do not infer map
-   construction or mutation from `alloca`, globals, stores, or aggregate
-   instructions.
-3. Implement only the explicit map constructor after positive, malformed, Rust
+1. Record the native-call allowlist, name-table identity, and typed
+   argument/result capability matrix against the VM contract.
+2. Keep ordinary LLVM aggregates and pointers rejected; do not infer variant
+   construction, access, or native calls from `alloca`, globals, stores, or
+   aggregate instructions.
+3. Implement only the explicit native-call ABI after positive, malformed, Rust
    `dump`/`run`, runtime-error, and direct/machine parity tests agree with the
    VM contract.
 
-Do not begin M4 collection lowering until the CD value ABI document has been reviewed, because choosing an implicit pointer/aggregate representation would make later Rust VM and module-linking work incompatible.
+Do not begin native-call lowering until the CD value ABI document has been
+reviewed, because an unbounded external-call bridge would bypass the Rust VM
+allowlist and make later artifact/linking work incompatible.
 
 ## 13. Completion gates
 

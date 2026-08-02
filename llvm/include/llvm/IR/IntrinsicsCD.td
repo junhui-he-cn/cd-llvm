@@ -29,6 +29,19 @@ def int_cd_struct : DefaultAttrsIntrinsic<
     [llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_vararg_ty],
     [ImmArg<ArgIndex<1>>]>;
 
+// An enum variant carries explicit enum/variant name metadata followed by an
+// ordered payload.  The names are not CD string values.
+def int_cd_variant : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_ptr_ty, llvm_ptr_ty, llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<2>>]>;
+
+def int_cd_variant_tag : DefaultAttrsIntrinsic<
+    [llvm_i1_ty], [llvm_ptr_ty, llvm_ptr_ty, llvm_ptr_ty]>;
+
+def int_cd_variant_field : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_i32_ty],
+    [ImmArg<ArgIndex<1>>]>;
+
 def int_cd_field : DefaultAttrsIntrinsic<[llvm_any_ty],
                                          [llvm_ptr_ty, llvm_ptr_ty]>;
 

@@ -369,6 +369,46 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isVariantIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantCall(Call, Error))
+        unsupportedOperation(Error);
+
+      const unsigned EnumName =
+          nameRegister(Call.getArgOperand(0), "llvm.cd.variant");
+      const unsigned VariantName =
+          nameRegister(Call.getArgOperand(1), "llvm.cd.variant");
+      std::vector<unsigned> Payload;
+      Payload.reserve(Call.arg_size() - 3);
+      for (unsigned Index = 3; Index < Call.arg_size(); ++Index)
+        Payload.push_back(valueRegister(Call.getArgOperand(Index)));
+      appendInstruction(CDInstruction::variant(
+          resultRegister(Call), EnumName, VariantName, std::move(Payload)));
+      return;
+    }
+
+    if (cd::isVariantTagIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantTagCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::variantTag(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          nameRegister(Call.getArgOperand(1), "llvm.cd.variant.tag"),
+          nameRegister(Call.getArgOperand(2), "llvm.cd.variant.tag")));
+      return;
+    }
+
+    if (cd::isVariantFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateVariantFieldCall(Call, Error))
+        unsupportedOperation(Error);
+      const auto *Index = cast<ConstantInt>(Call.getArgOperand(1));
+      appendInstruction(CDInstruction::variantField(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          static_cast<unsigned>(Index->getZExtValue())));
+      return;
+    }
+
     if (cd::isFieldIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateFieldCall(Call, Error))

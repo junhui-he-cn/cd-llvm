@@ -40,6 +40,9 @@ enum class CDOpcode {
   Array,
   Map,
   Struct,
+  Variant,
+  VariantTag,
+  VariantField,
   Field,
   AssignField,
   Index,
@@ -73,6 +76,8 @@ struct CDInstruction {
   CDOpcode opcode = CDOpcode::Return;
   unsigned result = InvalidIndex;
   unsigned reference = InvalidIndex;
+  unsigned secondaryReference = InvalidIndex;
+  unsigned payloadIndex = InvalidIndex;
   unsigned callee = InvalidIndex;
   std::vector<unsigned> operands;
   unsigned target = InvalidIndex;
@@ -85,6 +90,13 @@ struct CDInstruction {
                            std::vector<unsigned> keyValueOperands);
   static CDInstruction structValue(unsigned destination, unsigned typeName,
                                    std::vector<unsigned> fieldNameValueOperands);
+  static CDInstruction variant(unsigned destination, unsigned enumName,
+                               unsigned variantName,
+                               std::vector<unsigned> payload);
+  static CDInstruction variantTag(unsigned destination, unsigned value,
+                                  unsigned enumName, unsigned variantName);
+  static CDInstruction variantField(unsigned destination, unsigned value,
+                                    unsigned index);
   static CDInstruction field(unsigned destination, unsigned object,
                              unsigned name);
   static CDInstruction assignField(unsigned destination, unsigned object,

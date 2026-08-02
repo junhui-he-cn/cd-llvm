@@ -36,6 +36,19 @@ def CD_MAP : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 // followed by alternating field-name indices and value registers.
 def CD_STRUCT : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 
+// CD_VARIANT -> CDOpcode::Variant. Operands are enum-name and variant-name
+// indexes followed by ordered payload value registers.
+def CD_VARIANT : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
+
+// CD_VARIANT_TAG -> CDOpcode::VariantTag.
+def CD_VARIANT_TAG : CDPseudo<(outs CDValue:$dst),
+                              (ins CDValue:$value, cdindex:$enum_name,
+                                   cdindex:$variant_name)>;
+
+// CD_VARIANT_FIELD -> CDOpcode::VariantField.
+def CD_VARIANT_FIELD : CDPseudo<(outs CDValue:$dst),
+                                (ins CDValue:$value, cdindex:$index)>;
+
 // CD_FIELD -> CDOpcode::Field.
 def CD_FIELD : CDPseudo<(outs CDValue:$dst),
                         (ins CDValue:$object, cdindex:$name)>;

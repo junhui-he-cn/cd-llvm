@@ -1,8 +1,8 @@
 # CD bytecode machine-backend design gate
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
-array-constructor, array-access, array-mutation, map-constructor, and
-record-value slices share the machine artifact bridge, 2026-08-02.
+array-constructor, array-access, array-mutation, map-constructor, record-value,
+and enum-variant slices share the machine artifact bridge, 2026-08-02.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -91,6 +91,16 @@ instruction executes. The bridge preserves anonymous versus nominal type names,
 field order, and the existing `struct`, `field`, and `assign_field` artifact
 operations. Ordinary pointers remain rejected by the shared ABI validator.
 
+The enum-variant slice adds `CD_VARIANT`, `CD_VARIANT_TAG`, and
+`CD_VARIANT_FIELD`. Enum and variant names are module name-table indexes;
+payload, value, and result operands remain `CDValue` virtual registers, while
+the payload index is an immediate. The bridge emits the existing `variant`,
+`variant_tag`, and `variant_field` artifact operations, preserving payload
+order and the Rust VM's false/non-variant and bounds-error behavior. Payload
+registers are materialized before `CD_VARIANT` is inserted, so nested explicit
+CD constructors retain definition-before-use ordering. Ordinary pointers and
+aggregates remain rejected by the shared ABI validator.
+
 ## Direct/machine parity gate
 
 Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
@@ -125,6 +135,9 @@ representations.
 | `CD_ARRAY` | `Array` | destination value, variadic element values |
 | `CD_MAP` | `Map` | destination value, variadic key/value values |
 | `CD_STRUCT` | `Struct` | destination value, optional type-name index, variadic field name/value operands |
+| `CD_VARIANT` | `Variant` | destination value, enum-name index, variant-name index, variadic payload values |
+| `CD_VARIANT_TAG` | `VariantTag` | destination value, value, enum-name index, variant-name index |
+| `CD_VARIANT_FIELD` | `VariantField` | destination value, value, immediate payload index |
 | `CD_FIELD` | `Field` | destination value, object value, field-name index |
 | `CD_ASSIGN_FIELD` | `AssignField` | destination value, object value, field-name index, assigned value |
 | `CD_INDEX` | `Index` | destination value, collection value, index value |
@@ -162,7 +175,7 @@ path and artifact-bridge test.
 The following are outside this foundation slice and must not be smuggled into
 the pseudo-instruction model:
 
-- variants, arbitrary pointers, and aggregate values;
+- arbitrary pointers and aggregate values;
 - native calls, globals, exception edges, and source/debug sections;
 - object files, assembly encodings, MC emitters, and JIT execution;
 - physical register allocation, spills, and a claim that `R0`--`R31` model a
@@ -170,7 +183,7 @@ the pseudo-instruction model:
 - module-table ownership changes or serialization that bypasses
   `CDBytecodeFormat` validation.
 
-The current M4 map and record slices retain the direct path, keep the machine
-path opt-in, and define collection/record construction separately from
-aggregate or ordinary-pointer lowering. Variants and native calls still
-require their own capability matrices.
+The current M4 map, record, and enum-variant slices retain the direct path,
+keep the machine path opt-in, and define collection/value construction
+separately from aggregate or ordinary-pointer lowering. Native calls still
+require their own capability matrix.

@@ -111,6 +111,17 @@ pointers, aggregates, and name globals used outside this explicit ABI remain
 unsupported, and the direct/machine paths share the same validator and artifact
 bridge.
 
+The enum-variant boundary is the `llvm.cd.variant` /
+`llvm.cd.variant.tag` / `llvm.cd.variant.field` intrinsic group. `variant`
+takes private, constant, non-empty UTF-8 enum and variant name globals, an
+immediate payload count, and scalar, nil, or explicit CD-value payloads. It
+lowers to `variant nEnum.nVariant [rPayload0, ...]`; `variant_tag` compares
+the two names and returns a boolean, while `variant_field` reads an immediate
+positional payload index. These map to the existing Rust VM operations and
+preserve its non-variant and out-of-bounds runtime diagnostics. Names remain
+name-table metadata, ordinary pointers and aggregates remain unsupported, and
+variant values stay local to explicit CD intrinsic consumers in this slice.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -118,6 +129,6 @@ elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
 must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
-output.  `-filetype=obj` is rejected.  Variants, non-string globals, native
-calls, and debug source sections remain deferred until an explicit LLVM-to-CD
+output.  `-filetype=obj` is rejected.  Non-string globals, native calls, and
+debug source sections remain deferred until an explicit LLVM-to-CD
 representation is defined.
