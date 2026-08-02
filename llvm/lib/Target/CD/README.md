@@ -71,6 +71,9 @@ in module mode so dependency expansion can continue into the importing body.
 The opt-in `llvm/utils/cd_module_link.py` harness covers valid direct/machine
 products, linked execution, unlinked-run rejection, and missing-dependency,
 cycle, duplicate-identity, entry-order, and insertion-offset failures.
+With explicit source metadata, the same harness compares linked divide-by-zero
+diagnostics and confirms the debugger error pause retains the dependency's
+module identity.
 Run it explicitly with the LLVM build and sibling VM paths, for example:
 
 ```text

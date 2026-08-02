@@ -2,6 +2,7 @@
 """Unit tests for the opt-in CD module-link harness."""
 
 import pathlib
+import subprocess
 import sys
 import unittest
 
@@ -83,6 +84,24 @@ constants:
                 "-o",
                 "output.cdbc",
             ],
+        )
+
+    def test_validates_expected_failure_output(self):
+        result = subprocess.CompletedProcess(
+            ["vm", "run", "linked.cdbc"],
+            1,
+            stdout="1\n",
+            stderr="Runtime error at dependency.cd:1:1: division by zero",
+        )
+
+        self.assertEqual(
+            cd_module_link.validate_expected_failure(
+                result,
+                "linked runtime error",
+                "Runtime error at dependency.cd:1:1: division by zero",
+                expected_stdout="1\n",
+            ),
+            result.stderr,
         )
 
 

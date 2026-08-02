@@ -21,7 +21,10 @@ paths, then delegates dump, link, run, and rejection behavior to the Rust VM.
 - [x] Cover missing dependencies, dependency cycles, duplicate identities,
   non-contiguous entry order, and invalid insertion offsets through the Rust
   link boundary.
+- [x] Add source-backed entry/dependency diagnostics and compare direct/machine
+  linked `run` stderr plus `debug` error-pause module identity.
 - [x] Document the fall-through rule and the opt-in integration command.
 
-The remaining M6 boundary is source-backed linked runtime diagnostics; this
-slice does not change the `cdbc 0.1` format or the nested VM checkout.
+The M6 module-product/link boundary is complete for the current `cdbc 0.1`
+contract. CI/release integration remains M7, and this slice does not change
+the artifact format or the nested VM checkout.

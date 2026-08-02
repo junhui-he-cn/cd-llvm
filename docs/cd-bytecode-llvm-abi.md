@@ -672,6 +672,9 @@ products through both LLVM paths, then checks Rust `dump`, unlinked `run`
 rejection, `link`, linked `dump`, and linked `run`. It also checks missing
 dependencies, dependency cycles, duplicate identities, non-contiguous entry
 orders, and invalid insertion offsets without changing the nested VM checkout.
+Its source-backed diagnostic pair additionally compares direct and machine
+`run` stderr, source caret/call-stack rendering, and the `debug` error pause's
+module identity after linking.
 
 ## Debug source tables: M5A foundation
 

@@ -52,7 +52,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, and direct/machine trace/observability parity are implemented; more complete interactive debugger behavior and other uncovered capabilities remain deferred |
-| M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | In progress; LLVM module envelope and metadata foundation implemented; VM graph linking remains |
+| M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
 
 ## 4. M0 — Revalidate the existing target
@@ -627,8 +627,9 @@ profile, and scripted debug output for an artifact with explicit range
 metadata and for a metadata-free artifact. The ranges contract uses
 `ranges.cd`, debug range `s0:6:11`, and source-range output across trace,
 profile, and debug; the metadata-free contract verifies no debug tail,
-`<unknown>` trace/debug locations, and no `range=` or `source_range` field on
-any surface. M6 and M7 remain planned.
+  `<unknown>` trace/debug locations, and no `range=` or `source_range` field on
+  any surface. M6 module product/link integration is complete; M7 remains
+  planned.
 
 ## 10. M6 — Support module products and linking
 
@@ -642,6 +643,8 @@ any surface. M6 and M7 remain planned.
 - Create: `llvm/test/CodeGen/CD/cdbc-module-errors.ll`.
 - Create: `llvm/test/CodeGen/CD/cdbc-module-fallthrough.ll` and the opt-in
   `llvm/utils/cd_module_link.py` harness with its unit test and fixtures.
+- Create: `llvm/test/CodeGen/CD/cdbc-module-link-diagnostic-entry.ll` and
+  `cdbc-module-link-diagnostic-dependency.ll`.
 - Modify: `docs/cd-bytecode-llvm-abi.md` and `llvm/lib/Target/CD/README.md`.
 - Synchronize, in the independent checkout: module parsing/linking tests under `cd-compiler/tests/` and the existing Rust linker implementation.
 
@@ -657,6 +660,8 @@ The recommended input boundary is named metadata for module identity, entry orde
 - [x] Confirm each LLVM module product is rejected by direct VM `run` until linking.
 - [x] Emit non-entry module `main` bodies as fall-through fragments so
   dependency expansion reaches the importing module's remaining instructions.
+- [x] Preserve source-backed linked runtime diagnostics and dependency module
+  identity through direct and machine products.
 
 **Exit criteria:** Program and module artifacts are unambiguous, the Rust linker accepts valid LLVM-produced module products, invalid dependency metadata fails before execution, and linked runtime diagnostics retain source/module identity.
 
@@ -685,10 +690,7 @@ The next development session should execute only this narrow sequence:
 1. Keep the M5 direct/machine observability parity gate opt-in and extend it
    only with explicit contracts for more complete interactive debugger behavior
    and other observability capabilities not covered by the completed slices.
-2. Finish the remaining M6 diagnostic boundary by linking source-backed LLVM
-   module products and checking that linked runtime diagnostics retain source
-   and module identity without changing the `cdbc 0.1` version.
-3. Keep M7 as an independent planned CI and release-quality boundary, including
+2. Keep M7 as an independent planned CI and release-quality boundary, including
    opt-in VM integration and reproducible verification rather than a default
    parity gate.
 

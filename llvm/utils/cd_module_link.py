@@ -16,7 +16,13 @@ from pathlib import Path
 DEFAULT_INPUT_ROOT = (
     Path(__file__).resolve().parent / "testdata" / "cd-module-link"
 )
+DEFAULT_DIAGNOSTIC_ROOT = (
+    Path(__file__).resolve().parents[1] / "test" / "CodeGen" / "CD"
+)
 EXPECTED_OUTPUT = "1\n2\n3\n"
+EXPECTED_RUNTIME_ERROR = (
+    "Runtime error at dependency-runtime.cd:1:1: division by zero"
+)
 
 
 def llc_arguments(llc, source, output, backend):
@@ -94,6 +100,11 @@ def expect_failure(command, description, expected):
         stderr=subprocess.PIPE,
         check=False,
     )
+    validate_expected_failure(result, description, expected)
+    return result
+
+
+def validate_expected_failure(result, description, expected, expected_stdout=None):
     if result.returncode == 0:
         raise RuntimeError(f"{description} unexpectedly succeeded")
     diagnostic = result.stderr.strip() or result.stdout.strip()
@@ -101,7 +112,12 @@ def expect_failure(command, description, expected):
         raise RuntimeError(
             f"{description} diagnostic does not contain {expected!r}: {diagnostic!r}"
         )
-    return result
+    if expected_stdout is not None and result.stdout != expected_stdout:
+        raise RuntimeError(
+            f"{description} stdout mismatch: "
+            f"expected {expected_stdout!r}, got {result.stdout!r}"
+        )
+    return result.stderr
 
 
 def compile_module(llc, source, output, backend):
@@ -234,12 +250,71 @@ def run_backend(llc, vm, entry_source, dependency_source, backend, temporary):
     )
 
 
+def run_diagnostic_backend(
+    llc, vm, entry_source, dependency_source, backend, temporary
+):
+    directory = temporary / f"{backend}-diagnostic"
+    directory.mkdir()
+    entry_artifact = directory / "module-entry.cdbc"
+    dependency_artifact = directory / "module-dependency.cdbc"
+    compile_module(llc, entry_source, entry_artifact, backend)
+    compile_module(llc, dependency_source, dependency_artifact, backend)
+
+    linked = directory.parent / f"{backend}-diagnostic-linked.cdbc"
+    link_modules(vm, directory, linked)
+    vm_dump(vm, linked)
+
+    runtime = subprocess.run(
+        vm_command(vm, ["run", linked]),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    validate_expected_failure(
+        runtime,
+        f"linked runtime error for {backend}",
+        EXPECTED_RUNTIME_ERROR,
+        expected_stdout="",
+    )
+    if "  1 / 0;\n  ^\nCall stack:\n  at main (dependency-runtime.cd:1:1)" not in runtime.stderr:
+        raise RuntimeError("linked runtime error lost the dependency source context")
+
+    debug = subprocess.run(
+        vm_command(vm, ["debug", linked]),
+        input="continue\nquit\n",
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if debug.returncode != 0 or debug.stderr:
+        raise RuntimeError(
+            f"linked debug session for {backend} failed: "
+            f"exit={debug.returncode} stderr={debug.stderr!r}"
+        )
+    expected_pause = (
+        "pause reason=error function=main instruction=4 "
+        "module=/workspace/cd-llvm-dependency.cd "
+        "location=dependency-runtime.cd:1:1 "
+        "stack=main@dependency-runtime.cd:1:1"
+    )
+    if expected_pause not in debug.stdout:
+        raise RuntimeError(
+            f"linked debug session for {backend} lost module identity: "
+            f"{debug.stdout!r}"
+        )
+    return runtime.stderr, debug.stdout
+
+
 def parser():
     argument_parser = argparse.ArgumentParser(description=__doc__)
     argument_parser.add_argument("--llc", required=True, type=Path)
     argument_parser.add_argument("--vm", required=True, type=Path)
     argument_parser.add_argument("--entry", type=Path)
     argument_parser.add_argument("--dependency", type=Path)
+    argument_parser.add_argument("--diagnostic-entry", type=Path)
+    argument_parser.add_argument("--diagnostic-dependency", type=Path)
     argument_parser.add_argument(
         "--backend",
         choices=("direct", "machine", "both"),
@@ -254,7 +329,20 @@ def main(argv=None):
     dependency_source = (
         args.dependency or DEFAULT_INPUT_ROOT / "dependency.ll"
     ).resolve()
-    if not entry_source.is_file() or not dependency_source.is_file():
+    diagnostic_entry_source = (
+        args.diagnostic_entry
+        or DEFAULT_DIAGNOSTIC_ROOT / "cdbc-module-link-diagnostic-entry.ll"
+    ).resolve()
+    diagnostic_dependency_source = (
+        args.diagnostic_dependency
+        or DEFAULT_DIAGNOSTIC_ROOT / "cdbc-module-link-diagnostic-dependency.ll"
+    ).resolve()
+    if (
+        not entry_source.is_file()
+        or not dependency_source.is_file()
+        or not diagnostic_entry_source.is_file()
+        or not diagnostic_dependency_source.is_file()
+    ):
         print("error: module-link input fixture is missing", file=sys.stderr)
         return 1
 
@@ -262,6 +350,7 @@ def main(argv=None):
     try:
         with tempfile.TemporaryDirectory(prefix="cd-module-link-") as temporary:
             temporary_path = Path(temporary)
+            diagnostic_outputs = []
             for backend in backends:
                 run_backend(
                     args.llc,
@@ -271,7 +360,19 @@ def main(argv=None):
                     backend,
                     temporary_path,
                 )
+                diagnostic_outputs.append(
+                    run_diagnostic_backend(
+                        args.llc,
+                        args.vm,
+                        diagnostic_entry_source,
+                        diagnostic_dependency_source,
+                        backend,
+                        temporary_path,
+                    )
+                )
                 print(f"{backend} module-link integration: valid and rejected graphs")
+            if len(diagnostic_outputs) == 2 and diagnostic_outputs[0] != diagnostic_outputs[1]:
+                raise RuntimeError("direct/machine linked runtime diagnostics differ")
     except (OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
