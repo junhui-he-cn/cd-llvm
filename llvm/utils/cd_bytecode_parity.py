@@ -10,7 +10,8 @@ unexpected scalar instruction change behind a broad text normalization.
 Runtime-error cases require both paths to fail with the same VM diagnostic.
 Observability cases additionally compare debug sections, trace, profile, and
 scripted interactive-debugger output for metadata-backed and metadata-free
-artifacts.
+artifacts. The step-next contract also checks the debugger's distinct resume
+and pause reasons.
 """
 
 import argparse
@@ -160,7 +161,7 @@ def parse_manifest(lines):
             len(fields) == 4
             and fields[0] == "observability"
             and fields[2]
-            and fields[3] in {"ranges", "metadata-free"}
+            and fields[3] in {"ranges", "metadata-free", "step-next"}
         ):
             entries.append((fields[0], fields[1], fields[2], fields[3]))
             continue
@@ -169,7 +170,7 @@ def parse_manifest(lines):
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>', "
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
-                "<ranges|metadata-free>'"
+                "<ranges|metadata-free|step-next>'"
             )
     return entries
 
@@ -305,6 +306,20 @@ def _check_observability(
                 f"metadata-free observability output contains source range for "
                 f"{input_path}"
             )
+    elif contract == "step-next":
+        required = {
+            "entry pause": "pause reason=entry",
+            "step command": "debug resumed command=step",
+            "step pause": "pause reason=step",
+            "next command": "debug resumed command=next",
+            "next pause": "pause reason=next",
+            "quit command": "debug quit",
+        }
+        for label, expected in required.items():
+            if expected not in debug_output:
+                raise RuntimeError(
+                    f"{label} missing for {input_path}: expected {expected!r}"
+                )
     else:
         raise RuntimeError(f"unknown observability contract {contract!r}")
 

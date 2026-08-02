@@ -146,10 +146,10 @@ discarding those instruction-shape differences. `runtime-error` entries
 require both artifacts to pass `dump`, both `run` commands to fail, and both
 diagnostics to contain the declared expected substring and match each other.
 
-The parity manifest also accepts an opt-in observability case:
+The parity manifest also accepts opt-in observability cases:
 
 ```text
-observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free>
+observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free|step-next>
 ```
 
 Run this gate with the same explicitly built sibling VM executable and the
@@ -161,6 +161,9 @@ uses `ranges.cd`, verifies debug range `s0:6:11`, and checks the trace, profile,
 and debug source-range surfaces.  The `metadata-free` contract verifies no
 debug tail, `<unknown>` in trace and debug output, and no `range=` or
 `source_range` field on any surface.
+The `step-next` contract uses the range-backed fixture with `step` followed by
+`next` and requires distinct `reason=step` and `reason=next` pauses, along with
+the corresponding resume commands and a clean debugger quit.
 
 ## TableGen pseudo-instruction mapping
 

@@ -95,6 +95,7 @@ runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects 
         manifest = """\
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;continue;quit" ranges
 observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;step;next;quit" step-next
 """
 
         self.assertEqual(
@@ -111,6 +112,12 @@ observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
                     "llvm/test/CodeGen/CD/cdbc-machine.ll",
                     "continue",
                     "metadata-free",
+                ),
+                (
+                    "observability",
+                    "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
+                    "break-range ranges.cd:6-11;step;next;quit",
+                    "step-next",
                 ),
             ],
         )
@@ -206,6 +213,35 @@ debug_ranges:
                     "continue",
                     "metadata-free",
                 )
+
+    def test_step_next_requires_distinct_debug_pause_reasons(self):
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "trace status=ok\n",
+                "profile": "profile status=ok\n",
+                "debug": (
+                    "pause reason=entry\n"
+                    "debug resumed command=step\n"
+                    "pause reason=step\n"
+                    "debug resumed command=next\n"
+                    "pause reason=next\n"
+                    "debug quit\n"
+                ),
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            cd_bytecode_parity._check_observability(
+                pathlib.Path("vm"),
+                "fixture.ll",
+                pathlib.Path("direct.cdbc"),
+                pathlib.Path("machine.cdbc"),
+                "cdbc 0.1\n",
+                "cdbc 0.1\n",
+                "run\n",
+                "run\n",
+                "break-range ranges.cd:6-11;step;next;quit",
+                "step-next",
+            )
 
 
 if __name__ == "__main__":
