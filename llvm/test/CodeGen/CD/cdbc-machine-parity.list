@@ -39,6 +39,8 @@ artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # order differs, so FileCheck asserts identical ranges and parity checks VM
 # behavior rather than applying the index-only artifact projection.
 behavior llvm/test/CodeGen/CD/cdbc-debug-ranges.ll
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;continue;quit" ranges
+observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
 # The location fixture has identical debug tables, while direct and machine
 # constant scheduling gives the main add different operand/register order.
 behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll

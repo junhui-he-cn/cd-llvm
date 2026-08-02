@@ -4,6 +4,7 @@
 import pathlib
 import sys
 import unittest
+from unittest import mock
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
@@ -89,6 +90,122 @@ runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects 
                 ),
             ],
         )
+
+    def test_reads_observability_manifest_contracts(self):
+        manifest = """\
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;continue;quit" ranges
+observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
+"""
+
+        self.assertEqual(
+            cd_bytecode_parity.parse_manifest(manifest.splitlines()),
+            [
+                (
+                    "observability",
+                    "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
+                    "break-range ranges.cd:6-11;continue;quit",
+                    "ranges",
+                ),
+                (
+                    "observability",
+                    "llvm/test/CodeGen/CD/cdbc-machine.ll",
+                    "continue",
+                    "metadata-free",
+                ),
+            ],
+        )
+
+    def test_rejects_invalid_observability_manifest_contracts(self):
+        invalid_lines = (
+            'observability input.ll "continue"',
+            'observability input.ll "continue" invalid',
+            'observability input.ll "continue" ranges extra',
+        )
+
+        for line in invalid_lines:
+            with self.subTest(line=line):
+                with self.assertRaisesRegex(ValueError, "manifest line 1: expected"):
+                    cd_bytecode_parity.parse_manifest([line])
+
+    def test_ranges_requires_dump_source_evidence(self):
+        dump = """\
+debug_ranges:
+  main 2 = s0:6:11
+"""
+
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "location=ranges.cd:1:7 range=s0:6:11\n",
+                "profile": (
+                    'profile source_range source=s0 path="ranges.cd" '
+                    "start=6 end=11 hits=1\n"
+                ),
+                "debug": (
+                    "pause reason=breakpoint location=ranges.cd:1:7 "
+                    "range=s0:6:11\n"
+                ),
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            with self.assertRaisesRegex(RuntimeError, "debug source"):
+                cd_bytecode_parity._check_observability(
+                    pathlib.Path("vm"),
+                    "fixture.ll",
+                    pathlib.Path("direct.cdbc"),
+                    pathlib.Path("machine.cdbc"),
+                    dump,
+                    dump,
+                    "run\n",
+                    "run\n",
+                    "continue",
+                    "ranges",
+                )
+
+    def test_metadata_free_rejects_dump_source_ranges(self):
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "location=<unknown>\n",
+                "profile": "profile status=ok\n",
+                "debug": "location=<unknown>\n",
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            with self.assertRaisesRegex(RuntimeError, "source range"):
+                cd_bytecode_parity._check_observability(
+                    pathlib.Path("vm"),
+                    "fixture.ll",
+                    pathlib.Path("direct.cdbc"),
+                    pathlib.Path("machine.cdbc"),
+                    "cdbc 0.1\nrange=forbidden\n",
+                    "cdbc 0.1\nsource_range forbidden\n",
+                    "run\n",
+                    "run\n",
+                    "continue",
+                    "metadata-free",
+                )
+
+    def test_metadata_free_rejects_run_source_ranges(self):
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "location=<unknown>\n",
+                "profile": "profile status=ok\n",
+                "debug": "location=<unknown>\n",
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            with self.assertRaisesRegex(RuntimeError, "source range"):
+                cd_bytecode_parity._check_observability(
+                    pathlib.Path("vm"),
+                    "fixture.ll",
+                    pathlib.Path("direct.cdbc"),
+                    pathlib.Path("machine.cdbc"),
+                    "cdbc 0.1\n",
+                    "cdbc 0.1\n",
+                    "run range=forbidden\n",
+                    "run source_range forbidden\n",
+                    "continue",
+                    "metadata-free",
+                )
 
 
 if __name__ == "__main__":

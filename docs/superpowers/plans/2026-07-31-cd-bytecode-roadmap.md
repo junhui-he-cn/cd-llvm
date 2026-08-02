@@ -38,7 +38,7 @@ The outer repository already contains an experimental target in:
 - `llvm/test/CodeGen/CD/cdbc-basic.ll`: arithmetic, comparison, call, print, branch, PHI, and object-output rejection coverage.
 - `llvm/test/CodeGen/CD/cdbc-parameters.ll`: function parameter metadata and unnamed-parameter naming coverage.
 
-The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, enum-variant, and bounded native-call groups. The target README correctly leaves general globals, broader native calls, and source-backed debug sections outside the current boundary.
+The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, enum-variant, and bounded native-call groups. The current boundary remains conservative around general globals, broader native calls, and broader source/debug capabilities not covered by the M5 slices.
 
 This baseline is source-present but must be freshly verified in the current checkout before the next implementation slice is selected.
 
@@ -51,7 +51,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, instruction locations, and nested divide-by-zero diagnostics are implemented |
+| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, and direct/machine trace/observability parity are implemented; more complete interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
 
@@ -605,7 +605,7 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
   location, caret, and main call-stack reporting on both artifact paths.
 - [x] Verify invalid-index errors through the Rust VM's location and call-stack
   reporting on both artifact paths.
-- [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
+- [x] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
 
@@ -617,8 +617,18 @@ records, sparse `debug_locations`, and sparse `debug_ranges` are validated and
 emitted through both direct and machine artifact paths, and the Rust VM
 accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
 source-backed runtime diagnostics and call-stack parity for divide-by-zero,
-failed native calls, and invalid indexes. Debugger behavior remains the next
-independent M5 boundary.
+failed native calls, and invalid indexes. Scripted debug parity is complete;
+more complete interactive debugger behavior and other uncovered observability
+capabilities remain deferred as later M5 work.
+
+The direct/machine observability parity slice is now covered by the opt-in
+manifest `observability` case. It compares dump debug sections, run, trace,
+profile, and scripted debug output for an artifact with explicit range
+metadata and for a metadata-free artifact. The ranges contract uses
+`ranges.cd`, debug range `s0:6:11`, and source-range output across trace,
+profile, and debug; the metadata-free contract verifies no debug tail,
+`<unknown>` trace/debug locations, and no `range=` or `source_range` field on
+any surface. M6 and M7 remain planned.
 
 ## 10. M6 — Support module products and linking
 
@@ -665,11 +675,14 @@ The following remain explicit non-goals unless a separate design request changes
 
 The next development session should execute only this narrow sequence:
 
-1. Keep `DILocation` records and explicit `!cd.ranges` byte offsets mapped for
-   main/function instructions after branch patching through both artifact
-   paths; do not infer ranges from line/column locations.
-2. Verify source-backed runtime diagnostics and metadata-free artifact output
-   while expanding `dump`/`trace`/`debug`/`profile` coverage.
+1. Keep the M5 direct/machine observability parity gate opt-in and extend it
+   only with explicit contracts for more complete interactive debugger behavior
+   and other observability capabilities not covered by the completed slices.
+2. Enter M6 by defining program/module products, dependency metadata, and the
+   Rust VM linking boundary without changing the `cdbc 0.1` version.
+3. Keep M7 as an independent planned CI and release-quality boundary, including
+   opt-in VM integration and reproducible verification rather than a default
+   parity gate.
 
 Do not infer source text from ordinary LLVM debug metadata: `DIFile` and
 `DILocation` identify locations, but only explicit `!cd.sources` records provide

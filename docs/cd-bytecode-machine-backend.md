@@ -5,7 +5,7 @@ array-constructor, array-access, array-mutation, map-constructor, record-value,
 enum-variant, and bounded native-call slices share the machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, and debug-range slices also share that bridge; broader
-native-call capabilities and debugger behavior remain deferred, 2026-08-02.
+native-call capabilities and broader interactive debugger behavior remain deferred, 2026-08-02.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -127,7 +127,7 @@ line, caret, and main call stack.
 
 ## Direct/machine parity gate
 
-Build the sibling VM explicitly, then run the manifest from the LLVM checkout:
+From the repository root, build the sibling VM explicitly and run the manifest:
 
 ```sh
 cargo build --manifest-path cd-compiler/vm-rs/Cargo.toml --quiet
@@ -145,6 +145,22 @@ control-flow/select expansion and require the same dump/run behavior without
 discarding those instruction-shape differences. `runtime-error` entries
 require both artifacts to pass `dump`, both `run` commands to fail, and both
 diagnostics to contain the declared expected substring and match each other.
+
+The parity manifest also accepts an opt-in observability case:
+
+```text
+observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free>
+```
+
+Run this gate with the same explicitly built sibling VM executable and the
+`cargo build` plus `python3 llvm/utils/cd_bytecode_parity.py` commands above;
+the gate requires that sibling VM executable and is not an LLVM default or CI
+gate.  An observability case compares direct and machine `dump` debug sections,
+`run`, `trace`, `profile`, and scripted `debug` output.  The `ranges` contract
+uses `ranges.cd`, verifies debug range `s0:6:11`, and checks the trace, profile,
+and debug source-range surfaces.  The `metadata-free` contract verifies no
+debug tail, `<unknown>` in trace and debug output, and no `range=` or
+`source_range` field on any surface.
 
 ## TableGen pseudo-instruction mapping
 
@@ -201,7 +217,9 @@ The following are outside this foundation slice and must not be smuggled into
 the pseudo-instruction model:
 
 - arbitrary pointers and aggregate values;
-- unbounded/callback native calls beyond the bounded allowlist, globals, exception edges, and source/debug sections;
+- unbounded/callback native calls beyond the bounded allowlist;
+- globals and exception edges;
+- broader source/debug sections not covered by the M5 slices;
 - object files, assembly encodings, MC emitters, and JIT execution;
 - physical register allocation, spills, and a claim that `R0`--`R31` model a
   host ABI;
