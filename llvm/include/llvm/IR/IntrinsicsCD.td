@@ -23,6 +23,18 @@ def int_cd_map : DefaultAttrsIntrinsic<
     [llvm_ptr_ty], [llvm_i32_ty, llvm_vararg_ty],
     [ImmArg<ArgIndex<0>>]>;
 
+// A struct carries an optional type-name global followed by field-name/value
+// pairs.  The names are ABI metadata, not CD string values.
+def int_cd_struct : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<1>>]>;
+
+def int_cd_field : DefaultAttrsIntrinsic<[llvm_any_ty],
+                                         [llvm_ptr_ty, llvm_ptr_ty]>;
+
+def int_cd_assign_field : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_ptr_ty, LLVMMatchType<0>]>;
+
 def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
                                          [llvm_ptr_ty, llvm_double_ty]>;
 

@@ -40,6 +40,24 @@ bool isMapIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_map;
 }
 
+bool isStructIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_struct;
+}
+
+bool isFieldIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_field;
+}
+
+bool isAssignFieldIntrinsic(const CallBase &Call) {
+  const Function *Callee = Call.getCalledFunction();
+  return Callee && Callee->isIntrinsic() &&
+         Callee->getIntrinsicID() == Intrinsic::cd_assign_field;
+}
+
 bool isIndexIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
   return Callee && Callee->isIntrinsic() &&
@@ -71,10 +89,30 @@ bool isCDValue(const Value &Value) {
   const auto *Call = dyn_cast<CallBase>(&Value);
   return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
                   isMapIntrinsic(*Call) ||
+                  isStructIntrinsic(*Call) ||
+                  (isFieldIntrinsic(*Call) && Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
+                  (isAssignFieldIntrinsic(*Call) &&
+                   Call->getType()->isPointerTy() &&
+                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
                   isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
                   (isAssignIndexIntrinsic(*Call) &&
                    Call->getType()->isPointerTy() &&
                    cast<PointerType>(Call->getType())->getAddressSpace() == 0));
+}
+
+bool isNameOperand(const CallBase &Call, const Value &Value) {
+  if (isStructIntrinsic(Call)) {
+    if (Call.arg_size() > 0 && Call.getArgOperand(0) == &Value)
+      return true;
+    for (unsigned Index = 2; Index < Call.arg_size(); Index += 2)
+      if (Call.getArgOperand(Index) == &Value)
+        return true;
+  }
+  if ((isFieldIntrinsic(Call) || isAssignFieldIntrinsic(Call)) &&
+      Call.arg_size() > 1 && Call.getArgOperand(1) == &Value)
+    return true;
+  return false;
 }
 
 bool isArrayElement(const Value &Value) {
@@ -182,6 +220,166 @@ bool validateMapCall(const CallBase &Call, std::string &Error) {
       return false;
     }
   }
+  return true;
+}
+
+std::optional<StringRef> getNameConstant(const Value &Value,
+                                          std::string &Error) {
+  const auto *Global = dyn_cast<GlobalVariable>(&Value);
+  if (!Global || Global->getAddressSpace() != 0 || !Global->isConstant() ||
+      !Global->hasPrivateLinkage() || !Global->hasInitializer()) {
+    Error = "requires a private non-empty string global name";
+    return std::nullopt;
+  }
+
+  const Constant *Initializer = Global->getInitializer();
+  const auto *Array = dyn_cast<ConstantDataArray>(Initializer);
+  if (!Array || !Array->isString(8) || !Array->isCString()) {
+    Error = "requires a private non-empty string global name";
+    return std::nullopt;
+  }
+
+  StringRef Name = Array->getAsCString();
+  if (Name.empty() || !json::isUTF8(Name)) {
+    Error = "requires a private non-empty string global name";
+    return std::nullopt;
+  }
+  return Name;
+}
+
+static bool validateNameOperand(const Value &Value, StringRef Operation,
+                                StringRef Role, std::string &Error) {
+  std::string NameError;
+  if (getNameConstant(Value, NameError))
+    return true;
+  Error = (Operation + " requires a private non-empty string global " + Role)
+              .str();
+  return false;
+}
+
+static bool isNullCDPointer(const Value &Value) {
+  const auto *Null = dyn_cast<ConstantPointerNull>(&Value);
+  return Null && cast<PointerType>(Null->getType())->getAddressSpace() == 0;
+}
+
+static bool validateCDValueOperand(const CallBase &Call, unsigned Index,
+                                   StringRef Operation, StringRef Role,
+                                   std::string &Error);
+
+bool validateStructCall(const CallBase &Call, std::string &Error) {
+  if (!isStructIntrinsic(Call)) {
+    Error = "not an llvm.cd.struct call";
+    return false;
+  }
+  if (!Call.getType()->isPointerTy() ||
+      cast<PointerType>(Call.getType())->getAddressSpace() != 0) {
+    Error = "llvm.cd.struct requires a ptr result";
+    return false;
+  }
+  if (Call.arg_size() < 2) {
+    Error = "llvm.cd.struct requires a type name and field-count operand";
+    return false;
+  }
+  if (!isNullCDPointer(*Call.getArgOperand(0))) {
+    if (!validateNameOperand(*Call.getArgOperand(0), "llvm.cd.struct",
+                             "type name", Error)) {
+      Error = "llvm.cd.struct requires an anonymous nil or private string "
+              "global type name";
+      return false;
+    }
+  }
+
+  const auto *Count = dyn_cast<ConstantInt>(Call.getArgOperand(1));
+  if (!Count || !Count->getType()->isIntegerTy(32)) {
+    Error = "llvm.cd.struct requires an i32 field-count immediate";
+    return false;
+  }
+  const uint64_t FieldCount = Count->getZExtValue();
+  const uint64_t PayloadCount = Call.arg_size() - 2;
+  if (FieldCount > std::numeric_limits<uint64_t>::max() / 2 ||
+      FieldCount * 2 != PayloadCount) {
+    Error = "llvm.cd.struct field-count does not match the field name/value "
+            "operand list";
+    return false;
+  }
+
+  for (uint64_t Field = 0; Field < FieldCount; ++Field) {
+    const unsigned NameIndex = 2 + static_cast<unsigned>(Field * 2);
+    const unsigned ValueIndex = NameIndex + 1;
+    if (!validateNameOperand(*Call.getArgOperand(NameIndex), "llvm.cd.struct",
+                             "field name", Error)) {
+      Error = "llvm.cd.struct requires a private non-empty string global "
+              "field name";
+      return false;
+    }
+    if (!isArrayElement(*Call.getArgOperand(ValueIndex))) {
+      Error = "llvm.cd.struct requires scalar, nil, or CD dynamic-value "
+              "field operands";
+      return false;
+    }
+  }
+  return true;
+}
+
+static bool validateFieldResult(const CallBase &Call, StringRef Operation,
+                                std::string &Error) {
+  if (Call.getType()->isIntegerTy() || Call.getType()->isFloatingPointTy())
+    return true;
+  if (Call.getType()->isPointerTy() &&
+      cast<PointerType>(Call.getType())->getAddressSpace() == 0)
+    return true;
+  Error = (Operation + " requires a scalar or address-space-zero CD value "
+                    "result")
+              .str();
+  return false;
+}
+
+bool validateFieldCall(const CallBase &Call, std::string &Error) {
+  if (!isFieldIntrinsic(Call)) {
+    Error = "not an llvm.cd.field call";
+    return false;
+  }
+  if (!validateFieldResult(Call, "llvm.cd.field", Error))
+    return false;
+  if (Call.arg_size() != 2) {
+    Error = "llvm.cd.field requires an object and field-name operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.field", "object", Error))
+    return false;
+  return validateNameOperand(*Call.getArgOperand(1), "llvm.cd.field",
+                             "field name", Error);
+}
+
+bool validateAssignFieldCall(const CallBase &Call, std::string &Error) {
+  if (!isAssignFieldIntrinsic(Call)) {
+    Error = "not an llvm.cd.assign.field call";
+    return false;
+  }
+  if (Call.arg_size() != 3) {
+    Error = "llvm.cd.assign.field requires an object, field-name, and value "
+            "operand";
+    return false;
+  }
+  if (!validateCDValueOperand(Call, 0, "llvm.cd.assign.field", "object",
+                              Error))
+    return false;
+  if (!validateNameOperand(*Call.getArgOperand(1), "llvm.cd.assign.field",
+                           "field name", Error))
+    return false;
+  const Value *Assigned = Call.getArgOperand(2);
+  if (!isArrayElement(*Assigned)) {
+    Error = "llvm.cd.assign.field requires scalar, nil, or CD dynamic-value "
+            "assigned value";
+    return false;
+  }
+  if (Call.getType() != Assigned->getType()) {
+    Error = "llvm.cd.assign.field result type must match the assigned value "
+            "type";
+    return false;
+  }
+  if (!validateFieldResult(Call, "llvm.cd.assign.field", Error))
+    return false;
   return true;
 }
 

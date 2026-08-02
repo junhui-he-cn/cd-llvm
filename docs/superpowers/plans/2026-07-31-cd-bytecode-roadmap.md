@@ -38,7 +38,7 @@ The outer repository already contains an experimental target in:
 - `llvm/test/CodeGen/CD/cdbc-basic.ll`: arithmetic, comparison, call, print, branch, PHI, and object-output rejection coverage.
 - `llvm/test/CodeGen/CD/cdbc-parameters.ll`: function parameter metadata and unnamed-parameter naming coverage.
 
-The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, and returns. The target README correctly leaves arrays, maps, structs, variants, general globals, native calls, and source-backed debug sections outside the current boundary.
+The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, and record-value groups. The target README correctly leaves variants, general globals, native calls, and source-backed debug sections outside the current boundary.
 
 This baseline is source-present but must be freshly verified in the current checkout before the next implementation slice is selected.
 
@@ -50,7 +50,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array-constructor, array-access, and array-mutation slices implemented |
+| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | In progress; string, array, map, and first record-value slices implemented |
 | M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | Planned |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Planned |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | Planned |
@@ -453,6 +453,47 @@ validator and artifact serializer, and the machine path materializes all
 constant operands before inserting `CD_MAP` so execution order remains valid.
 The direct/machine parity manifest covers the positive constructor and the
 missing-key runtime error; the nested Rust VM checkout remains unchanged.
+
+### Narrow M4 slice: record values (2026-08-02)
+
+**Goal:** Lower the first record-value ABI group through the existing
+`cdbc 0.1` `struct`, `field`, and `assign_field` operations in the direct and
+opt-in machine paths.
+
+**ABI gate:** `llvm.cd.struct(ptr typeNameOrNull, i32 fieldCount, ...) -> ptr`
+uses an anonymous address-space-zero `ptr null` or a private, constant,
+non-empty UTF-8 type-name global, followed by exactly one private field-name
+global and value operand per field. Field values are scalar, CD nil, or values
+produced by explicit CD intrinsics. `llvm.cd.field` reads a field with a scalar
+or address-space-zero CD-value result; `llvm.cd.assign.field` has an overloaded
+result that must match its assigned value and mutates the existing struct.
+Names are name-table metadata, not CD string values, and ordinary pointers are
+never inferred to be records.
+
+**Files:** modify the CD intrinsic/ABI/artifact/direct/machine layers and the
+three ABI documents; create positive named/anonymous, dynamic-value, runtime,
+and malformed record fixtures; extend the direct/machine parity manifest. The
+nested Rust VM checkout is read-only because its existing parser, verifier, and
+runtime already implement the three artifact operations.
+
+- [x] Record the record operand/result, name-table, field-order, mutation, and
+  runtime-failure behavior in the ABI and roadmap documents.
+- [x] Add `llvm.cd.struct`, `llvm.cd.field`, and `llvm.cd.assign.field`, shared
+  ABI validation, `Struct`/`Field`/`AssignField` artifact shapes, and both
+  direct/machine lowering paths.
+- [x] Add named/anonymous positive fixtures, nested dynamic field values,
+  ordinary-pointer/name/value rejection fixtures, and a missing-field runtime
+  fixture.
+- [x] Add record artifact, behavior, and runtime-error entries to the parity
+  manifest; verify the exact shared VM diagnostic.
+- [x] Run focused lit, Rust VM `dump`/`run`, direct/machine parity, and
+  `git diff --check` gates without modifying the nested checkout.
+
+The record-value slice is now implemented. The machine path materializes field
+value registers before inserting `CD_STRUCT`, preserving definition-before-use
+ordering for nested arrays and other dynamic values. The Rust VM checkout and
+the `cdbc 0.1` version remain unchanged. Variants, native calls, and dynamic
+values crossing ordinary function boundaries remain future M4 decisions.
 
 ## 9. M5 — Add source-backed debug metadata
 

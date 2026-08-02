@@ -13,8 +13,11 @@ artifact llvm/test/CodeGen/CD/cdbc-machine-void-return.ll
 artifact llvm/test/CodeGen/CD/cdbc-string.ll
 artifact llvm/test/CodeGen/CD/cdbc-array.ll
 artifact llvm/test/CodeGen/CD/cdbc-array-access.ll
+artifact llvm/test/CodeGen/CD/cdbc-struct.ll
+behavior llvm/test/CodeGen/CD/cdbc-struct-dynamic.ll
 behavior llvm/test/CodeGen/CD/cdbc-map.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-map-runtime.ll "map key not found"
+runtime-error llvm/test/CodeGen/CD/cdbc-struct-runtime.ll "undefined field `missing`"
 behavior llvm/test/CodeGen/CD/cdbc-array-assign.ll
 behavior llvm/test/CodeGen/CD/cdbc-array-assign-scalar.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"

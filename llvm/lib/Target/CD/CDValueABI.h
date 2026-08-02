@@ -26,6 +26,12 @@ bool isArrayIntrinsic(const CallBase &Call);
 
 bool isMapIntrinsic(const CallBase &Call);
 
+bool isStructIntrinsic(const CallBase &Call);
+
+bool isFieldIntrinsic(const CallBase &Call);
+
+bool isAssignFieldIntrinsic(const CallBase &Call);
+
 bool isIndexIntrinsic(const CallBase &Call);
 
 bool isAssignIndexIntrinsic(const CallBase &Call);
@@ -37,6 +43,9 @@ bool isAssertArrayIntrinsic(const CallBase &Call);
 /// Return whether a value is an opaque CD dynamic-value token.
 bool isCDValue(const Value &Value);
 
+/// Return whether a global value is used as a CD struct/field name operand.
+bool isNameOperand(const CallBase &Call, const Value &Value);
+
 /// Return whether a value is a valid operand capability for llvm.cd.array.
 bool isArrayElement(const Value &Value);
 
@@ -45,6 +54,12 @@ bool isArrayElement(const Value &Value);
 bool validateArrayCall(const CallBase &Call, std::string &Error);
 
 bool validateMapCall(const CallBase &Call, std::string &Error);
+
+bool validateStructCall(const CallBase &Call, std::string &Error);
+
+bool validateFieldCall(const CallBase &Call, std::string &Error);
+
+bool validateAssignFieldCall(const CallBase &Call, std::string &Error);
 
 bool validateIndexCall(const CallBase &Call, std::string &Error);
 
@@ -60,6 +75,10 @@ bool validateAssertArrayCall(const CallBase &Call, std::string &Error);
 /// initializer and remains valid for the duration of lowering.
 std::optional<StringRef> getStringConstant(const CallBase &Call,
                                            std::string &Error);
+
+/// Extract a non-empty UTF-8 name from a private constant byte global.
+std::optional<StringRef> getNameConstant(const Value &Value,
+                                          std::string &Error);
 
 } // namespace cd
 } // namespace llvm

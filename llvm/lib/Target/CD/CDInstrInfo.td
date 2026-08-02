@@ -32,6 +32,19 @@ def CD_ARRAY : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 // CD_MAP -> CDOpcode::Map. Operands are alternating key/value registers.
 def CD_MAP : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
 
+// CD_STRUCT -> CDOpcode::Struct. Operands are an optional type-name index
+// followed by alternating field-name indices and value registers.
+def CD_STRUCT : CDPseudo<(outs CDValue:$dst), (ins variable_ops)>;
+
+// CD_FIELD -> CDOpcode::Field.
+def CD_FIELD : CDPseudo<(outs CDValue:$dst),
+                        (ins CDValue:$object, cdindex:$name)>;
+
+// CD_ASSIGN_FIELD -> CDOpcode::AssignField.
+def CD_ASSIGN_FIELD : CDPseudo<(outs CDValue:$dst),
+                               (ins CDValue:$object, cdindex:$name,
+                                     CDValue:$value)>;
+
 // CD_INDEX -> CDOpcode::Index.
 def CD_INDEX : CDPseudo<(outs CDValue:$dst),
                         (ins CDValue:$collection, CDValue:$index)>;

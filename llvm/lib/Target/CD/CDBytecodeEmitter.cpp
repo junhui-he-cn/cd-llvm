@@ -168,6 +168,14 @@ class CDFunctionEmitter {
   unsigned materializeNil();
   unsigned valueRegister(const Value *V);
 
+  unsigned nameRegister(const Value *V, StringRef Operation) {
+    std::string Error;
+    std::optional<StringRef> Name = cd::getNameConstant(*V, Error);
+    if (!Name)
+      unsupportedOperation((Operation + " " + Error).str());
+    return Module.addName(*Name);
+  }
+
   void emitBinary(const Instruction &I, CDOpcode Opcode) {
     const auto *BO = cast<BinaryOperator>(&I);
     if (!isScalarType(BO->getType()) || BO->getType()->isIntegerTy(1) ||
@@ -339,6 +347,49 @@ class CDFunctionEmitter {
       return;
     }
 
+    if (cd::isStructIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateStructCall(Call, Error))
+        unsupportedOperation(Error);
+
+      unsigned TypeName = cd::InvalidIndex;
+      if (!isa<ConstantPointerNull>(Call.getArgOperand(0)))
+        TypeName = nameRegister(Call.getArgOperand(0), "llvm.cd.struct");
+
+      std::vector<unsigned> FieldNameValueOperands;
+      FieldNameValueOperands.reserve(Call.arg_size() - 2);
+      for (unsigned Index = 2; Index < Call.arg_size(); Index += 2) {
+        FieldNameValueOperands.push_back(
+            nameRegister(Call.getArgOperand(Index), "llvm.cd.struct"));
+        FieldNameValueOperands.push_back(
+            valueRegister(Call.getArgOperand(Index + 1)));
+      }
+      appendInstruction(CDInstruction::structValue(
+          resultRegister(Call), TypeName, std::move(FieldNameValueOperands)));
+      return;
+    }
+
+    if (cd::isFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateFieldCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::field(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          nameRegister(Call.getArgOperand(1), "llvm.cd.field")));
+      return;
+    }
+
+    if (cd::isAssignFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssignFieldCall(Call, Error))
+        unsupportedOperation(Error);
+      appendInstruction(CDInstruction::assignField(
+          resultRegister(Call), valueRegister(Call.getArgOperand(0)),
+          nameRegister(Call.getArgOperand(1), "llvm.cd.assign.field"),
+          valueRegister(Call.getArgOperand(2))));
+      return;
+    }
+
     if (cd::isIndexIntrinsic(Call)) {
       std::string Error;
       if (!cd::validateIndexCall(Call, Error))
@@ -476,15 +527,22 @@ void CDModuleEmitter::emit(Module &M) {
       continue;
     if (Global.use_empty())
       report_fatal_error("CD target does not support unused global variables");
-    for (const User *User : Global.users()) {
-      const auto *Call = dyn_cast<CallBase>(User);
-      if (!Call || !cd::isStringIntrinsic(*Call) ||
-          Call->getArgOperand(0) != &Global)
+      for (const User *User : Global.users()) {
+        const auto *Call = dyn_cast<CallBase>(User);
+      const bool IsStringUse =
+          Call && cd::isStringIntrinsic(*Call) && Call->arg_size() > 0 &&
+          Call->getArgOperand(0) == &Global;
+      const bool IsNameUse = Call && cd::isNameOperand(*Call, Global);
+      if (!IsStringUse && !IsNameUse)
         report_fatal_error(
-            "CD target only supports globals used by llvm.cd.string");
+            "CD target only supports globals used by CD string/name intrinsics");
       std::string Error;
-      if (!cd::getStringConstant(*Call, Error))
+      if (IsStringUse) {
+        if (!cd::getStringConstant(*Call, Error))
+          unsupportedOperation(Error);
+      } else if (!cd::getNameConstant(Global, Error)) {
         unsupportedOperation(Error);
+      }
     }
   }
 

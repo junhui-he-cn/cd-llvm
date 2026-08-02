@@ -1,7 +1,7 @@
 # LLVM CD value ABI
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
-and map-constructor slices implemented, 2026-08-01.
+map-constructor, and record-value slices implemented, 2026-08-02.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -93,8 +93,31 @@ not pure in the LLVM sense; their declarations intentionally retain the
 default memory/side-effect properties so an optimizer cannot erase a bounds
 or type failure or duplicate a mutable-value observation.
 
-The intrinsic must be used with the registered declaration and exact `ptr`
-signature.  A manually declared function with a similar name is not a CD ABI
+The first record-value group uses these signatures:
+
+```tablegen
+def int_cd_struct : DefaultAttrsIntrinsic<
+    [llvm_ptr_ty], [llvm_ptr_ty, llvm_i32_ty, llvm_vararg_ty],
+    [ImmArg<ArgIndex<1>>]>;
+def int_cd_field : DefaultAttrsIntrinsic<[llvm_any_ty],
+                                         [llvm_ptr_ty, llvm_ptr_ty]>;
+def int_cd_assign_field : DefaultAttrsIntrinsic<
+    [llvm_any_ty], [llvm_ptr_ty, llvm_ptr_ty, LLVMMatchType<0>]>;
+```
+
+`llvm.cd.struct` returns an address-space-zero opaque CD struct token. Its first
+operand is either `ptr null` for an anonymous record or a direct private,
+constant, non-empty UTF-8 string global for the nominal type name. The second
+operand is an immediate `i32` field count, followed by exactly one field-name
+and value pair per field. Field names use the same private string-global shape,
+but are name-table metadata rather than CD string values. `llvm.cd.field` reads
+one named field, and `llvm.cd.assign.field` mutates one named field and returns
+the assigned value. Their overloaded LLVM results are restricted during target
+lowering to scalar values or address-space-zero CD value pointers; assignment
+results must have exactly the assigned value type.
+
+Each operation must use its registered intrinsic declaration and declared
+signature. A manually declared function with a similar name is not a CD ABI
 operation and remains an ordinary unsupported declaration.
 
 ## String constants: first ABI group
@@ -167,13 +190,11 @@ restricts string tokens to local materialization and printing.
 
 ## Future ABI groups
 
-The following signatures are reserved conceptually but are not enabled by this
-document:
+The array/map and record groups are specified above and below. The following
+signatures remain reserved conceptually and are not enabled by this document:
 
 | Group | Required operation shape | Wire operations | Design dependency |
 | --- | --- | --- | --- |
-| Arrays/maps | explicit `llvm.cd.*` constructors and mutation operations | `array`, `map`, `index`, `assign_index`, `len`, `assert_array` | ownership, aliasing, mutation failure, element capability matrix |
-| Records | explicit field/type-name operands | `struct`, `field`, `assign_field` | nominal type-name encoding and field order |
 | Variants | explicit enum/variant names and ordered payload operands | `variant`, `variant_tag`, `variant_field` | payload layout and invalid-tag behavior |
 | Native calls | allowlisted name-table identity and typed capability matrix | `native_call` | Rust VM allowlist and argument/result validation |
 
@@ -349,6 +370,55 @@ in another explicit constructor. It may not cross ordinary function
 parameters/returns, PHI/select, allocas, pointer operations, or external calls.
 The intrinsic is the only proof that an LLVM `ptr` denotes a CD map.
 
+## Record values: first field ABI group
+
+### Accepted source shape
+
+`llvm.cd.struct` uses the following textual shape:
+
+```llvm
+@person = private unnamed_addr constant [7 x i8] c"Person\00"
+@field_age = private unnamed_addr constant [4 x i8] c"age\00"
+
+declare ptr @llvm.cd.struct(ptr, i32, ...)
+
+%person = call ptr (ptr, i32, ...) @llvm.cd.struct(
+    ptr @person, i32 1, ptr @field_age, i64 42)
+```
+
+The first operand may instead be `ptr null` for an anonymous struct. The
+immediate `i32` count must equal the number of following field-name/value
+pairs. Every name operand must be a direct private, constant, address-space-zero
+byte global containing a non-empty, valid UTF-8 C string. These globals are
+interned in the artifact name table; they are metadata and are not
+`llvm.cd.string` values. Every field value must be an integer or floating scalar,
+the address-space-zero `ptr null` CD nil token, or a value produced by an
+explicit CD intrinsic. Ordinary pointers, aggregates, poison, undef, and
+pointer operations remain rejected during lowering.
+
+Field names and their source order are preserved in the existing artifact
+operations:
+
+```text
+rD = struct nType {nField0: r0, nField1: r1}
+rD = struct {nField0: r0}
+rD = field rObject, nField
+rD = assign_field rObject, nField, rValue
+```
+
+The first form is nominal; the second is anonymous. Struct construction creates
+a fresh mutable VM object. Nested CD handles retain the VM's shared-handle
+semantics. `field` reads a value, while `assign_field` updates the existing
+struct in place and returns the assigned value. A non-struct object and a
+missing field remain Rust VM runtime errors; for example, the missing-field
+diagnostic is `undefined field \`missing\``.
+
+The record results are local CD values in this slice. They may be printed,
+passed to another explicit field/collection intrinsic, or used as a supported
+dynamic-value operand. They may not cross ordinary function parameters/returns,
+PHI/select, allocas, pointer operations, or external calls. An arbitrary LLVM
+pointer is never treated as a struct object.
+
 ## Verification contract
 
 The string group is complete only when all of the following are true:
@@ -387,6 +457,13 @@ entry-count/pair shape and key/value capability matrix, emits `map` through
 both backends, preserves duplicate-key ordering and shared-value behavior,
 and passes Rust `dump`/`run`, malformed-input checks, direct/machine parity,
 and runtime resource/error checks.
+
+The record-value group is complete only when `llvm.cd.struct`,
+`llvm.cd.field`, and `llvm.cd.assign.field` enforce the name/count/value and
+overloaded result contracts, emit `struct`, `field`, and `assign_field` through
+both backends, reject ordinary pointer substitutes, pass Rust `dump`/`run`,
+and cover direct/machine artifact, dynamic-value, and missing-field runtime
+parity.
 
 The sibling `cd-compiler` checkout already defines `string` constants in the
 `cdbc 0.1` parser, formatter, and VM.  This first group therefore changes the

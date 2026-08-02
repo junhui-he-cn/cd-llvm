@@ -207,6 +207,51 @@ static bool validateInstruction(const CDInstruction &Instruction,
     if (!validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
       return false;
     return true;
+  case CDOpcode::Struct:
+    if (!validateUnusedFields(Instruction, true, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    if (Instruction.operands.size() % 2 != 0)
+      return fail(Error, Twine(BodyName) + " instruction " +
+                           Twine(InstructionIndex) +
+                           " struct requires field name/value operand pairs");
+    if (Instruction.reference != InvalidIndex &&
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "struct type name", BodyName, InstructionIndex,
+                           Error))
+      return false;
+    for (unsigned Index = 0; Index < Instruction.operands.size(); Index += 2) {
+      if (!validateReference(Instruction.operands[Index], Artifact.names.size(),
+                             "struct field name", BodyName, InstructionIndex,
+                             Error) ||
+          !validateRegister(Body, Instruction.operands[Index + 1], BodyName,
+                            InstructionIndex, "struct field value", Error))
+        return false;
+    }
+    return true;
+  case CDOpcode::Field:
+    if (!validateUnusedFields(Instruction, true, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "field name", BodyName, InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 1, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
+  case CDOpcode::AssignField:
+    if (!validateUnusedFields(Instruction, true, false, false, BodyName,
+                              InstructionIndex, Error) ||
+        !validateResult(Instruction, Body, BodyName, InstructionIndex, Error) ||
+        !validateReference(Instruction.reference, Artifact.names.size(),
+                           "field name", BodyName, InstructionIndex, Error) ||
+        !validateOperandCount(Instruction, 2, BodyName, InstructionIndex,
+                              Error) ||
+        !validateOperands(Instruction, Body, BodyName, InstructionIndex, Error))
+      return false;
+    return true;
   case CDOpcode::Index:
     if (!validateUnusedFields(Instruction, false, false, false, BodyName,
                               InstructionIndex, Error) ||
@@ -404,6 +449,28 @@ static void writeInstruction(raw_ostream &OS, const CDInstruction &Instruction) 
     }
     OS << "]";
     break;
+  case CDOpcode::Struct:
+    OS << "struct ";
+    if (Instruction.reference != InvalidIndex)
+      OS << nameName(Instruction.reference) << " ";
+    OS << "{";
+    for (unsigned Index = 0; Index < Instruction.operands.size(); Index += 2) {
+      if (Index != 0)
+        OS << ", ";
+      OS << nameName(Instruction.operands[Index]) << ": "
+         << registerName(Instruction.operands[Index + 1]);
+    }
+    OS << "}";
+    break;
+  case CDOpcode::Field:
+    OS << "field " << registerName(Instruction.operands[0]) << ", "
+       << nameName(Instruction.reference);
+    break;
+  case CDOpcode::AssignField:
+    OS << "assign_field " << registerName(Instruction.operands[0]) << ", "
+       << nameName(Instruction.reference) << ", "
+       << registerName(Instruction.operands[1]);
+    break;
   case CDOpcode::Index:
     OS << "index ";
     writeOperands(OS, Instruction.operands);
@@ -523,6 +590,37 @@ CDInstruction CDInstruction::map(unsigned Destination,
   return Instruction;
 }
 
+CDInstruction CDInstruction::structValue(
+    unsigned Destination, unsigned TypeName,
+    std::vector<unsigned> FieldNameValueOperands) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Struct;
+  Instruction.result = Destination;
+  Instruction.reference = TypeName;
+  Instruction.operands = std::move(FieldNameValueOperands);
+  return Instruction;
+}
+
+CDInstruction CDInstruction::field(unsigned Destination, unsigned Object,
+                                   unsigned Name) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::Field;
+  Instruction.result = Destination;
+  Instruction.reference = Name;
+  Instruction.operands = {Object};
+  return Instruction;
+}
+
+CDInstruction CDInstruction::assignField(unsigned Destination, unsigned Object,
+                                         unsigned Name, unsigned Value) {
+  CDInstruction Instruction;
+  Instruction.opcode = CDOpcode::AssignField;
+  Instruction.result = Destination;
+  Instruction.reference = Name;
+  Instruction.operands = {Object, Value};
+  return Instruction;
+}
+
 CDInstruction CDInstruction::index(unsigned Destination, unsigned Collection,
                                     unsigned Index) {
   CDInstruction Instruction;
@@ -637,6 +735,12 @@ const char *opcodeName(CDOpcode Opcode) {
     return "array";
   case CDOpcode::Map:
     return "map";
+  case CDOpcode::Struct:
+    return "struct";
+  case CDOpcode::Field:
+    return "field";
+  case CDOpcode::AssignField:
+    return "assign_field";
   case CDOpcode::Index:
     return "index";
   case CDOpcode::AssignIndex:

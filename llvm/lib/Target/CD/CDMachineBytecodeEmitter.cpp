@@ -138,6 +138,14 @@ class CDMachineModuleEmitter {
     return Index;
   }
 
+  unsigned addNameOperand(const Value *Value, StringRef Operation) {
+    std::string Error;
+    std::optional<StringRef> Name = cd::getNameConstant(*Value, Error);
+    if (!Name)
+      unsupported((Operation + " " + Error).str());
+    return addName(*Name);
+  }
+
   Register createValueRegister(MachineRegisterInfo &MRI, const Value *Value) {
     auto It = ValueRegisters.find(Value);
     if (It != ValueRegisters.end())
@@ -370,6 +378,67 @@ class CDMachineModuleEmitter {
           BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAP), Result);
       for (Register KeyValueOperand : KeyValueOperands)
         MapBuilder.addReg(KeyValueOperand);
+      return;
+    }
+
+    if (Callee && cd::isStructIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateStructCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      int64_t TypeName = -1;
+      if (isa<ConstantPointerNull>(Call.getArgOperand(0)))
+        TypeName = -1;
+      else
+        TypeName =
+            addNameOperand(Call.getArgOperand(0), "llvm.cd.struct");
+      std::vector<std::pair<unsigned, Register>> Fields;
+      Fields.reserve((Call.arg_size() - 2) / 2);
+      for (unsigned Index = 2; Index < Call.arg_size(); Index += 2) {
+        Fields.emplace_back(
+            addNameOperand(Call.getArgOperand(Index), "llvm.cd.struct"),
+            valueRegister(Call.getArgOperand(Index + 1), MRI, MBB, TII));
+      }
+      MachineInstrBuilder StructBuilder =
+          BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_STRUCT), Result);
+      StructBuilder.addImm(TypeName);
+      for (const auto &[Name, Value] : Fields) {
+        StructBuilder.addImm(Name);
+        StructBuilder.addReg(Value);
+      }
+      return;
+    }
+
+    if (Callee && cd::isFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateFieldCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Object = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      const unsigned Name =
+          addNameOperand(Call.getArgOperand(1), "llvm.cd.field");
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_FIELD), Result)
+          .addReg(Object)
+          .addImm(Name);
+      return;
+    }
+
+    if (Callee && cd::isAssignFieldIntrinsic(Call)) {
+      std::string Error;
+      if (!cd::validateAssignFieldCall(Call, Error))
+        unsupported(Error);
+
+      Register Result = createValueRegister(MRI, &Call);
+      Register Object = valueRegister(Call.getArgOperand(0), MRI, MBB, TII);
+      const unsigned Name =
+          addNameOperand(Call.getArgOperand(1), "llvm.cd.assign.field");
+      Register Value = valueRegister(Call.getArgOperand(2), MRI, MBB, TII);
+      BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_ASSIGN_FIELD), Result)
+          .addReg(Object)
+          .addImm(Name)
+          .addReg(Value);
       return;
     }
 
@@ -880,6 +949,52 @@ class CDMachineModuleEmitter {
               std::move(KeyValueOperands)));
           break;
         }
+        case CD::CD_STRUCT: {
+          if (MI.getNumOperands() < 2 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isImm())
+            unsupported("an invalid CD_STRUCT machine instruction");
+          const int64_t TypeName = MI.getOperand(1).getImm();
+          if (TypeName < -1)
+            unsupported("an invalid CD_STRUCT type-name operand");
+          if ((MI.getNumOperands() - 2) % 2 != 0)
+            unsupported("an invalid CD_STRUCT field operand list");
+          std::vector<unsigned> FieldNameValueOperands;
+          for (unsigned Index = 2; Index < MI.getNumOperands(); Index += 2) {
+            if (!MI.getOperand(Index).isImm() ||
+                !MI.getOperand(Index + 1).isReg())
+              unsupported("an invalid CD_STRUCT field operand");
+            FieldNameValueOperands.push_back(
+                static_cast<unsigned>(MI.getOperand(Index).getImm()));
+            FieldNameValueOperands.push_back(artifactRegister(
+                MI.getOperand(Index + 1).getReg(), Registers, Body));
+          }
+          Body.instructions.push_back(CDInstruction::structValue(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              TypeName < 0 ? cd::InvalidIndex
+                           : static_cast<unsigned>(TypeName),
+              std::move(FieldNameValueOperands)));
+          break;
+        }
+        case CD::CD_FIELD:
+          if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm())
+            unsupported("an invalid CD_FIELD machine instruction");
+          Body.instructions.push_back(CDInstruction::field(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              static_cast<unsigned>(MI.getOperand(2).getImm())));
+          break;
+        case CD::CD_ASSIGN_FIELD:
+          if (MI.getNumOperands() != 4 || !MI.getOperand(0).isReg() ||
+              !MI.getOperand(1).isReg() || !MI.getOperand(2).isImm() ||
+              !MI.getOperand(3).isReg())
+            unsupported("an invalid CD_ASSIGN_FIELD machine instruction");
+          Body.instructions.push_back(CDInstruction::assignField(
+              artifactRegister(MI.getOperand(0).getReg(), Registers, Body),
+              artifactRegister(MI.getOperand(1).getReg(), Registers, Body),
+              static_cast<unsigned>(MI.getOperand(2).getImm()),
+              artifactRegister(MI.getOperand(3).getReg(), Registers, Body)));
+          break;
         case CD::CD_INDEX:
           if (MI.getNumOperands() != 3 || !MI.getOperand(0).isReg() ||
               !MI.getOperand(1).isReg() || !MI.getOperand(2).isReg())
@@ -1102,12 +1217,19 @@ public:
         unsupported("unused global variables");
       for (const User *User : Global.users()) {
         const auto *Call = dyn_cast<CallBase>(User);
-        if (!Call || !cd::isStringIntrinsic(*Call) ||
-            Call->getArgOperand(0) != &Global)
-          unsupported("globals used outside llvm.cd.string");
+        const bool IsStringUse =
+            Call && cd::isStringIntrinsic(*Call) && Call->arg_size() > 0 &&
+            Call->getArgOperand(0) == &Global;
+        const bool IsNameUse = Call && cd::isNameOperand(*Call, Global);
+        if (!IsStringUse && !IsNameUse)
+          unsupported("globals used outside CD string/name intrinsics");
         std::string Error;
-        if (!cd::getStringConstant(*Call, Error))
+        if (IsStringUse) {
+          if (!cd::getStringConstant(*Call, Error))
+            unsupported(Error);
+        } else if (!cd::getNameConstant(Global, Error)) {
           unsupported(Error);
+        }
       }
     }
 

@@ -99,6 +99,18 @@ It lowers to `map [rKey: rValue, ...]` through both direct and opt-in machine
 paths. Duplicate keys retain first insertion position while the last value
 wins, and map lookup/resource failures remain Rust VM runtime behavior.
 
+The first record-value boundary is the `llvm.cd.struct` /
+`llvm.cd.field` / `llvm.cd.assign.field` intrinsic group. `struct` takes an
+optional anonymous `ptr null` or private UTF-8 type-name global, an immediate
+field count, and alternating private UTF-8 field-name globals and scalar, nil,
+or explicit CD-value operands. It lowers to `struct`, preserving field order
+and name-table identity. `field` reads a named field and `assign.field` mutates
+the struct in place while returning the assigned value; their overloaded
+results are limited to scalar values or address-space-zero CD tokens. Ordinary
+pointers, aggregates, and name globals used outside this explicit ABI remain
+unsupported, and the direct/machine paths share the same validator and artifact
+bridge.
+
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.
 The optimized artifact exercises alloca promotion, constant folding, dead-code
@@ -106,6 +118,6 @@ elimination, and scalar-select lowering; its Rust VM `dump` and `run` results
 must remain canonical and observable-equivalent to the `-O0` artifact.
 
 This target deliberately has no object-file, assembler, JIT, or native-call
-output.  `-filetype=obj` is rejected.  Structs, variants, non-string globals,
-native calls, and debug source sections remain deferred until an explicit
-LLVM-to-CD representation is defined.
+output.  `-filetype=obj` is rejected.  Variants, non-string globals, native
+calls, and debug source sections remain deferred until an explicit LLVM-to-CD
+representation is defined.
