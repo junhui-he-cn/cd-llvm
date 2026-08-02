@@ -39,3 +39,4 @@ artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # constant scheduling gives the main add different operand/register order.
 behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "Runtime error at runtime.cd:1:22: division by zero"
+runtime-error llvm/test/CodeGen/CD/cdbc-debug-native-runtime.ll "Runtime error at native.cd:1:1: sqrt expects non-negative number"

@@ -653,4 +653,4 @@ The Rust VM can therefore render source lines, carets, and nested call stacks
 for these locations; the LLVM parity fixture covers a nested divide-by-zero
 failure through both direct and machine artifacts. This slice deliberately
 emits no `debug_ranges`; source-local byte ranges, invalid-index diagnostics,
-and failed-native-call diagnostics remain later M5 gates.
+and debugger behavior remain later M5 gates.

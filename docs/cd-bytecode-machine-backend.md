@@ -118,7 +118,9 @@ model. The follow-on location slice propagates each source instruction's
 bridge, so direct and machine paths emit identical sparse `debug_locations`
 entries. `debug_ranges` remains a later parity gate.
 The runtime-error parity gate also confirms that a nested divide-by-zero keeps
-the same source line, caret, and call stack through both artifact paths.
+the same source line, caret, and call stack through both artifact paths. It also
+covers the bounded `sqrt(-1)` native failure with the same source-backed main
+call stack.
 
 ## Direct/machine parity gate
 

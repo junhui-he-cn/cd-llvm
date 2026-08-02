@@ -139,8 +139,9 @@ table is present, matching non-zero `DILocation` metadata is emitted as sparse
 metadata still do not supply source bytes. Unmatched locations are omitted,
 ambiguous source-path matches are rejected. The Rust VM parity fixture covers
 the resulting source line, caret, and nested call stack for divide-by-zero;
-`debug_ranges`, invalid-index diagnostics, and failed-native-call diagnostics
-remain deferred.
+the bounded `sqrt(-1)` native failure has the same source-backed main call
+stack. `debug_ranges`, invalid-index diagnostics, and debugger behavior remain
+deferred.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.

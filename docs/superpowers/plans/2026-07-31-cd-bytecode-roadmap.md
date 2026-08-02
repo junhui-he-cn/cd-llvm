@@ -599,8 +599,10 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
 - [ ] Emit optional half-open byte ranges only when the source metadata supplies exact byte offsets.
 - [x] Verify a nested-function divide-by-zero error through the Rust VM's
   source location, caret, and call-stack reporting on both artifact paths.
-- [ ] Verify invalid-index and failed-native-call errors through the Rust VM's
-  location and call-stack reporting.
+- [x] Verify a failed `sqrt(-1)` native call through the Rust VM's source
+  location, caret, and main call-stack reporting on both artifact paths.
+- [ ] Verify invalid-index errors through the Rust VM's location and call-stack
+  reporting.
 - [ ] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
@@ -612,7 +614,7 @@ slice are complete. Source records and sparse `debug_locations` are validated
 and emitted through both direct and machine artifact paths, and the Rust VM
 accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
 source-backed runtime diagnostics and call-stack parity. `debug_ranges`,
-invalid-index and failed-native-call diagnostics, and debugger behavior remain
+invalid-index diagnostics, and debugger behavior remain
 the next independent M5 boundaries.
 
 ## 10. M6 — Support module products and linking
