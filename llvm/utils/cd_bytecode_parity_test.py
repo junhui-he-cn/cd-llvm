@@ -98,6 +98,7 @@ observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;step;next;quit" step-next
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;continue;delete 1;continue" line-delete
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;s;n;q" aliases
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "help;quit" help
 debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
 """
 
@@ -133,6 +134,12 @@ debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause re
                     "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
                     "break-range ranges.cd:6-11;s;n;q",
                     "aliases",
+                ),
+                (
+                    "observability",
+                    "llvm/test/CodeGen/CD/cdbc-debug-ranges.ll",
+                    "help;quit",
+                    "help",
                 ),
                 (
                     "debug-error",
@@ -324,6 +331,34 @@ debug_ranges:
                 "run\n",
                 "break-range ranges.cd:6-11;s;n;q",
                 "aliases",
+            )
+
+    def test_help_requires_debugger_command_reference_and_quit(self):
+        def run_surface(command, description, input_text=None):
+            return {
+                "trace": "trace status=ok\n",
+                "profile": "profile status=ok\n",
+                "debug": (
+                    "pause reason=entry\n"
+                    "debug help: break <path>:<line> | break-range "
+                    "<path>:<start>-<end> | continue | step | next | "
+                    "delete <id> | quit\n"
+                    "debug quit\n"
+                ),
+            }[command[1]]
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            cd_bytecode_parity._check_observability(
+                pathlib.Path("vm"),
+                "fixture.ll",
+                pathlib.Path("direct.cdbc"),
+                pathlib.Path("machine.cdbc"),
+                "cdbc 0.1\n",
+                "cdbc 0.1\n",
+                "run\n",
+                "run\n",
+                "help;quit",
+                "help",
             )
 
     def test_debug_error_requires_matching_source_backed_error_pause(self):

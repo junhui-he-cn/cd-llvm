@@ -13,7 +13,8 @@ scripted interactive-debugger output for metadata-backed and metadata-free
 artifacts. The step-next contract also checks the debugger's distinct resume
 and pause reasons. The line-delete contract also checks breakpoint removal
 before execution resumes. The aliases contract drives the short `s`, `n`, and
-`q` commands and checks their canonical debugger events. Debug-error cases
+`q` commands and checks their canonical debugger events. The help contract
+checks the interactive command reference before quitting. Debug-error cases
 compare the source-backed runtime error pause while allowing machine-specific
 synthetic entry locations.
 """
@@ -169,7 +170,7 @@ def parse_manifest(lines):
             and fields[0] == "observability"
             and fields[2]
             and fields[3]
-            in {"ranges", "metadata-free", "step-next", "line-delete", "aliases"}
+            in {"ranges", "metadata-free", "step-next", "aliases", "help", "line-delete"}
         ):
             entries.append((fields[0], fields[1], fields[2], fields[3]))
             continue
@@ -178,7 +179,7 @@ def parse_manifest(lines):
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>', "
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
-                "<ranges|metadata-free|step-next|line-delete|aliases>', or "
+                "<ranges|metadata-free|step-next|aliases|help|line-delete>', or "
                 "'debug-error <input> \"<commands>\" \"<pause-substring>\"'"
             )
     return entries
@@ -364,6 +365,16 @@ def _check_observability(
             "step pause": "pause reason=step",
             "next command": "debug resumed command=next",
             "next pause": "pause reason=next",
+            "quit command": "debug quit",
+        }
+        for label, expected in required.items():
+            if expected not in debug_output:
+                raise RuntimeError(
+                    f"{label} missing for {input_path}: expected {expected!r}"
+                )
+    elif contract == "help":
+        required = {
+            "help text": "debug help: break <path>:<line> | break-range",
             "quit command": "debug quit",
         }
         for label, expected in required.items():

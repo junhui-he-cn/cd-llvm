@@ -51,7 +51,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next aliases, line-breakpoint deletion, and source-backed error-pause parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
+| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next aliases, help output, line-breakpoint deletion, and source-backed error-pause parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only, explicit VM integration, focused CI, and direct/machine parity boundaries are verified; the broader release matrix remains |
 
@@ -654,6 +654,9 @@ direct and machine paths; the runtime-error pause itself must match exactly.
 The alias slice adds an `aliases` observability case using `s`, `n`, and `q` on
 the range-backed fixture. It verifies that both artifact paths accept the short
 commands and report the same canonical step, next, and quit events.
+
+The help slice adds a `help` observability case. It checks that both artifact
+paths expose the interactive command reference and can quit the session cleanly.
 
 ## 10. M6 — Support module products and linking
 

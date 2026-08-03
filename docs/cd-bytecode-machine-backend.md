@@ -153,7 +153,7 @@ diagnostics to contain the declared expected substring and match each other.
 The parity manifest also accepts opt-in observability cases:
 
 ```text
-observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free|step-next|aliases|line-delete>
+observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free|step-next|aliases|help|line-delete>
 ```
 
 Run this gate with the same explicitly built sibling VM executable and the
@@ -170,6 +170,8 @@ The `step-next` contract uses the range-backed fixture with `step` followed by
 the corresponding resume commands and a clean debugger quit.
 The `aliases` contract feeds the equivalent short `s`, `n`, and `q` commands
 and requires the same canonical step/next pause and resume events.
+The `help` contract checks the command reference emitted by the interactive
+debugger and then quits cleanly.
 The `line-delete` contract creates a source-line breakpoint, requires exactly
 one breakpoint pause, deletes it, and verifies that execution resumes to the
 fixture's final output. A `debug-error` case has the form:
