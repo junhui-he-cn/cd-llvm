@@ -106,11 +106,14 @@ CD constructors retain definition-before-use ordering. Ordinary pointers and
 aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
-`hash`, and `range`. Their name-table index is an immediate machine operand,
-while arguments and the result remain in the `CDValue` virtual register class.
-The `CD_NATIVE_CALL` bridge emits the existing `native_call` artifact operation
-after shared name-specific validation; callback natives, unsupported names,
-and ordinary pointer arguments remain outside this boundary.
+`hash`, `range`, `substr`, and `charAt`. Their name-table index is an
+immediate machine operand, while arguments and the result remain in the
+`CDValue` virtual register class. The `CD_NATIVE_CALL` bridge emits the
+existing `native_call` artifact operation after shared name-specific
+validation; `substr` and `charAt` reuse that bridge and keep Unicode scalar,
+runtime type, and bounds semantics in the Rust VM. Callback natives,
+unsupported names, and ordinary pointer arguments remain outside this
+boundary.
 
 The M5 source-table slice parses the same explicit `!cd.sources` named metadata
 as the direct path and moves the validated entries into the shared artifact

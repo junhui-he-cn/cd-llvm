@@ -4,7 +4,7 @@ Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
 implemented; M5 explicit debug-source-table, instruction-location,
 source-backed runtime-diagnostic, and debug-range slices implemented;
-M6 module-envelope and opt-in linker integration implemented, 2026-08-02.
+M6 module-envelope and opt-in linker integration implemented, 2026-08-03.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -534,19 +534,24 @@ for the selected native name. The first bounded capability matrix is:
 | `typeOf` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | runtime type name |
 | `hash` | exactly one scalar or CD dynamic value | `double` | runtime hash number |
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
+| `substr` | one CD dynamic value, two `double` values | address-space-zero `ptr` | Unicode-scalar string slice |
+| `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
 
 The `str`, `typeOf`, and `hash` operands may be scalar, CD nil, or a value
 produced by an explicit CD intrinsic. The `range` result is a CD dynamic-value
 token and may be consumed by the existing `len`, `index`, and `assert_array`
-intrinsics. Name-table metadata is not a CD string value, and arbitrary
-ordinary pointers are rejected.
+intrinsics. `substr` and `charAt` require an explicit CD dynamic-value token;
+the target cannot prove its runtime string tag, so non-string values remain a
+valid compile-time token shape and receive the Rust VM's runtime type error.
+Their numeric operands must be `double`; the VM owns integer-valuedness,
+Unicode scalar boundaries, and range checks. Both operations return a fresh
+string value and do not mutate or alias the source. Name-table metadata is not
+a CD string value, and arbitrary ordinary pointers are rejected.
 
 Unknown names and callback/collection helpers such as `map`, `filter`,
 `flatMap`, `any`, `all`, `count`, `find`, `findIndex`, and `reduce` remain
-compile-time target errors. `substr`, `charAt`, and collection mutation
-helpers are also deferred until their string/aliasing capability matrices are
-defined. This restriction prevents a native call from becoming an unbounded
-external-call escape hatch.
+compile-time target errors. This restriction prevents a native call from
+becoming an unbounded external-call escape hatch.
 
 The wire operation is:
 
@@ -556,9 +561,11 @@ rD = native_call nName [rArg0, rArg1, ...]
 
 The Rust VM owns native arity, runtime type, resource-budget, cancellation,
 and failure behavior. For example, `sqrt` preserves the runtime error
-`sqrt expects non-negative number` for a negative input. Native calls do not
-cross ordinary LLVM function boundaries in this first slice; their values may
-only flow through already-supported local explicit CD consumers.
+`sqrt expects non-negative number` for a negative input, while representative
+string failures include `substr length out of bounds` and
+`charAt index out of bounds`. Native calls do not cross ordinary LLVM function
+boundaries in this slice; their values may only flow through already-supported
+local explicit CD consumers.
 
 ## Verification contract
 
@@ -616,8 +623,10 @@ dynamic-value, non-variant, and out-of-bounds runtime parity.
 The bounded native-call group is complete only when `llvm.cd.native` enforces
 the name-specific matrix above, emits `native_call` through both backends,
 rejects unknown/callback names and ordinary pointer substitutes, passes Rust
-`dump`/`run`, and covers direct/machine artifact parity plus a shared runtime
-failure.
+`dump`/`run`, and covers direct/machine artifact parity plus shared runtime
+failures for numeric and string helpers. The string-helper extension additionally
+requires UTF-8 scalar-boundary output and malformed shape diagnostics for both
+`substr` and `charAt`.
 
 The sibling `cd-compiler` checkout already defines the string, collection,
 record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and

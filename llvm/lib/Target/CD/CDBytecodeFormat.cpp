@@ -88,7 +88,7 @@ static bool fail(std::string &Error, Twine Message) {
 static bool isSupportedNativeName(StringRef Name) {
   return Name == "floor" || Name == "ceil" || Name == "sqrt" ||
          Name == "str" || Name == "typeOf" || Name == "hash" ||
-         Name == "range";
+         Name == "range" || Name == "substr" || Name == "charAt";
 }
 
 static bool validateRegister(const CDBody &Body, unsigned Register,

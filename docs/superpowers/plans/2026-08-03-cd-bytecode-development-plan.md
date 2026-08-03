@@ -112,7 +112,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `69 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `72 passed / 1 unsupported` for the CD
 lit directory, `13/13` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -133,7 +133,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8` in the recorded
-baseline), the direct/machine manifest passes all `46` entries in the current
+baseline), the direct/machine manifest passes all `49` entries in the current
 checkout, the module-link harness passes, and the nested checkout remains
 clean.
 
@@ -203,7 +203,7 @@ must be `double`; integer-valuedness, Unicode scalar boundaries, and range
 errors remain VM runtime semantics. Both operations return a fresh CD string
 value and do not mutate or alias the source string.
 
-- [ ] **Step 1: Add the positive UTF-8 fixture**
+- [x] **Step 1: Add the positive UTF-8 fixture**
 
 Use the existing native-call declaration and explicit string intrinsic. The
 fixture must include ASCII, an empty result, and multi-byte scalar boundaries:
@@ -239,7 +239,7 @@ Add direct and machine FileCheck expectations for three `native_call` operations
 and assert that `dump`/`run` produce an empty string, `🙂e`, and `🙂`, proving
 Unicode scalar rather than byte indexing.
 
-- [ ] **Step 2: Extend the shared native capability matrix**
+- [x] **Step 2: Extend the shared native capability matrix**
 
 Add the two names to `isSupportedNativeName` and add these branches to
 `validateNativeCall` before the unsupported-name diagnostic:
@@ -271,14 +271,14 @@ validator must accept `substr` and `charAt` in `native_call`, while the Rust VM
 continues to own exact arity, runtime string type, integer-index, Unicode
 scalar, and bounds errors.
 
-- [ ] **Step 3: Add malformed coverage for both backends**
+- [x] **Step 3: Add malformed coverage for both backends**
 
 Extend `cdbc-native-errors.ll` with direct and machine checks for wrong arity,
 non-`double` indexes, scalar/non-CD pointer arguments, and non-pointer results.
 The stable diagnostics must distinguish shape errors from the existing
 unsupported-name error. Keep callback names such as `map` rejected.
 
-- [ ] **Step 4: Add runtime and parity coverage**
+- [x] **Step 4: Add runtime and parity coverage**
 
 Keep `cdbc-native-runtime.ll` as the existing `sqrt(-1)` runtime fixture. Add
 one `substr` runtime-error fixture and one `charAt` runtime-error fixture so
@@ -301,7 +301,7 @@ for `cdbc-native-substr-runtime.ll` and
 artifacts to pass `dump`, both runs to fail for the error cases, and the
 diagnostics to match exactly.
 
-- [ ] **Step 5: Run the focused and complete gates**
+- [x] **Step 5: Run the focused and complete gates**
 
 ~~~
 ninja -C build-cd llc FileCheck
@@ -321,7 +321,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: focused direct/machine fixtures pass, the full CD suite remains
-green, the parity manifest passes all old and new cases, and the nested VM is
+green, the parity manifest passes all `49` entries, and the nested VM is
 unchanged. Commit only the outer slice:
 
 ~~~
@@ -335,9 +335,15 @@ git add llvm/lib/Target/CD/CDValueABI.cpp \
   docs/cd-bytecode-llvm-abi.md \
   docs/cd-bytecode-machine-backend.md \
   llvm/lib/Target/CD/README.md \
-  docs/superpowers/plans/2026-07-31-cd-bytecode-roadmap.md
+  docs/superpowers/plans/2026-07-31-cd-bytecode-roadmap.md \
+  docs/superpowers/plans/2026-08-03-cd-bytecode-development-plan.md
 git commit -m "feat(cd): lower string native helpers"
 ~~~
+
+Completed on 2026-08-03. Focused lit passed `4/4`; the full CD suite passed
+with `72` supported tests and `1` expected unsupported VM integration test;
+direct/machine parity passed all `49` entries; the positive fixture produced an
+empty line, `🙂e`, and `🙂`; and the nested checkout remained clean.
 
 ## Task 2: Define the public debugger query contract before adding commands
 

@@ -39,7 +39,7 @@ independent VM oracle and is not absorbed into this repository.
 | M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives | Complete for the implemented bounded ABI | Function-boundary dynamic values and callback values are separate ABI decisions |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface | New query commands and richer debugger state require a public contract first |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 70 lit (69 passed, 1 unsupported), parity 46/46, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 73 lit (72 passed, 1 unsupported), parity 49/49, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
 
 ### Active queue after M7-local
@@ -49,13 +49,11 @@ opcodes:
 
 1. Close the hosted M7 gate and record the observed result.  Keep the LLVM 24
    upstream `llc -g` rejection as an explicit driver boundary.
-2. Add `substr` and `charAt` through the existing bounded `native_call` ABI;
-   this should require no new opcode, artifact field, or VM change.
-3. Define the public debugger state/query contract before adding commands such
+2. Define the public debugger state/query contract before adding commands such
    as `list`, `where`, locals, or breakpoint queries.
-4. Design one minimal dynamic-value transport edge—function parameter/return,
+3. Design one minimal dynamic-value transport edge—function parameter/return,
    PHI/select propagation, or one-slot storage—then implement only that slice.
-5. Add callback native helpers one vertical slice at a time, only after the
+4. Add callback native helpers one vertical slice at a time, only after the
    debugger and dynamic-value contracts are explicit.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
@@ -103,8 +101,9 @@ The outer repository contains the experimental target in:
 
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
-`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, and `range` use target-specific
-CD intrinsics and existing `cdbc 0.1` operations.  Ordinary LLVM pointers,
+`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, and
+`charAt` use target-specific CD intrinsics and existing `cdbc 0.1` operations.
+Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
 values.  Dynamic values crossing ordinary function parameters/returns,
 callback function values, and richer debugger queries remain future design
@@ -645,6 +644,34 @@ Verification on 2026-08-02: focused native lit `4/4`, complete CD lit `55/55`,
 direct/machine parity `33/33`, Rust VM cargo tests `73 + 3 + 8`, and the
 nested checkout remained clean.
 
+### Narrow M4 follow-up: string native helpers (2026-08-03)
+
+**Goal:** Extend the existing bounded `native_call` ABI with `substr` and
+`charAt` without adding a wire opcode, intrinsic, artifact field, or nested VM
+change.
+
+**ABI gate:** `substr` takes one explicit CD dynamic-value token and two
+`double` operands and returns an address-space-zero CD string pointer;
+`charAt` takes one explicit CD dynamic-value token and one `double` operand and
+returns the same pointer type. The target validates only the token and LLVM
+shape. The Rust VM owns runtime string typing, integer-valuedness, Unicode
+scalar indexing, and bounds diagnostics.
+
+- [x] Extend the shared native capability matrix and artifact allowlist.
+- [x] Add UTF-8 positive coverage, including empty substrings and multi-byte
+  scalar boundaries.
+- [x] Add malformed direct/machine coverage for arity, operand, and result
+  shapes.
+- [x] Add direct/machine runtime-error parity for substring length and
+  character-index failures.
+- [x] Update the ABI, machine-backend, target README, and roadmap contracts.
+
+Verification on 2026-08-03: focused string-native fixtures passed; the full CD
+lit suite passed with `72` supported tests and `1` expected unsupported VM
+integration test; the expanded direct/machine parity manifest passed all `49`
+entries; Rust VM cargo tests remained `73 + 3 + 8`; and the nested checkout
+remained clean.
+
 ## 9. M5 — Add source-backed debug metadata
 
 **Purpose:** Preserve source locations and runtime diagnostics across LLVM lowering without fabricating source text that is not present in LLVM IR.
@@ -808,13 +835,11 @@ The order is deliberately dependency-driven:
 
 1. Close the M7 hosted LLVM-only and Rust-VM workflow gate, while retaining the
    upstream `llc -g` rejection as an explicit boundary.
-2. Add `substr` and `charAt` through the existing bounded `native_call` path;
-   this requires no new opcode, artifact field, or nested VM change.
-3. Define the public debugger query/state contract before adding more commands
+2. Define the public debugger query/state contract before adding more commands
    such as `list` or `where`.
-4. Define and then implement the smallest dynamic-value transport boundary for
+3. Define and then implement the smallest dynamic-value transport boundary for
    function parameters/returns, PHI/select, or local storage.
-5. Add callback native helpers one vertical slice at a time only after dynamic
+4. Add callback native helpers one vertical slice at a time only after dynamic
    value and callback contracts have direct/machine/Rust parity.
 
 Do not combine steps 2-5 in one implementation commit. In particular, callback

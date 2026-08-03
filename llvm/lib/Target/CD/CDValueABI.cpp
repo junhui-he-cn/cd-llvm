@@ -529,6 +529,29 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "substr") {
+    if (Call.arg_size() != 4 || !isCDValue(*Call.getArgOperand(1)) ||
+        !Call.getArgOperand(2)->getType()->isDoubleTy() ||
+        !Call.getArgOperand(3)->getType()->isDoubleTy() ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native substr requires a CD string value, two double "
+              "arguments, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "charAt") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !Call.getArgOperand(2)->getType()->isDoubleTy() ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native charAt requires a CD string value, one double "
+              "argument, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
   Error = ("llvm.cd.native native name is not supported by the bounded CD "
            "ABI: " +
            NativeName.str());
