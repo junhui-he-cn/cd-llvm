@@ -196,9 +196,9 @@ stack. An explicit `!cd.ranges` named metadata table can add validated
 source-local half-open byte ranges keyed by `DILocation`; ranges are never
 inferred from line/column metadata. The direct and machine paths share the
 same `debug_ranges` serializer and parity coverage. Opt-in direct/machine
-parity covers range and metadata-free observability, step/next, line-breakpoint
-deletion, and source-backed runtime-error pauses; broader interactive debugger
-behavior remains deferred.
+parity covers range and metadata-free observability, step/next and their short
+aliases, line-breakpoint deletion, and source-backed runtime-error pauses;
+broader interactive debugger behavior remains deferred.
 
 `cdbc-optimization.ll` checks direct `llc` emission at `-O0` and `-O2`, and
 also runs LLVM's explicit `default<O2>` middle-end pipeline before emission.

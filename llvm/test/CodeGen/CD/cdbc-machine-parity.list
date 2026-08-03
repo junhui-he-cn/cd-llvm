@@ -42,6 +42,7 @@ behavior llvm/test/CodeGen/CD/cdbc-debug-ranges.ll
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;continue;quit" ranges
 observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;step;next;quit" step-next
+observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;s;n;q" aliases
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;continue;delete 1;continue" line-delete
 # The location fixture has identical debug tables, while direct and machine
 # constant scheduling gives the main add different operand/register order.

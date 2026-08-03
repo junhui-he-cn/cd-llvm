@@ -12,8 +12,10 @@ Observability cases additionally compare debug sections, trace, profile, and
 scripted interactive-debugger output for metadata-backed and metadata-free
 artifacts. The step-next contract also checks the debugger's distinct resume
 and pause reasons. The line-delete contract also checks breakpoint removal
-before execution resumes. Debug-error cases compare the source-backed runtime
-error pause while allowing machine-specific synthetic entry locations.
+before execution resumes. The aliases contract drives the short `s`, `n`, and
+`q` commands and checks their canonical debugger events. Debug-error cases
+compare the source-backed runtime error pause while allowing machine-specific
+synthetic entry locations.
 """
 
 import argparse
@@ -166,7 +168,8 @@ def parse_manifest(lines):
             len(fields) == 4
             and fields[0] == "observability"
             and fields[2]
-            and fields[3] in {"ranges", "metadata-free", "step-next", "line-delete"}
+            and fields[3]
+            in {"ranges", "metadata-free", "step-next", "line-delete", "aliases"}
         ):
             entries.append((fields[0], fields[1], fields[2], fields[3]))
             continue
@@ -175,7 +178,7 @@ def parse_manifest(lines):
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>', "
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
-                "<ranges|metadata-free|step-next|line-delete>', or "
+                "<ranges|metadata-free|step-next|line-delete|aliases>', or "
                 "'debug-error <input> \"<commands>\" \"<pause-substring>\"'"
             )
     return entries
@@ -354,7 +357,7 @@ def _check_observability(
                 f"metadata-free observability output contains source range for "
                 f"{input_path}"
             )
-    elif contract == "step-next":
+    elif contract in {"step-next", "aliases"}:
         required = {
             "entry pause": "pause reason=entry",
             "step command": "debug resumed command=step",

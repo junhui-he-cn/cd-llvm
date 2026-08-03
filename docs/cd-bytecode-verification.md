@@ -99,6 +99,7 @@ explicit !dbg and !cd.sources metadata instead.
 | O0 and O2 | cdbc-optimization.ll | Passed in the CD lit suite |
 | Source-backed debug locations and ranges | cdbc-debug-*.ll and the parity manifest | Direct/machine parity passed |
 | Metadata-free output | The metadata-free observability entry for cdbc-machine.ll | No debug sections and unknown runtime locations passed |
+| Debugger command aliases | The aliases observability entry for cdbc-debug-ranges.ll | Direct/machine canonical step/next/quit parity passed |
 | Source-backed debugger error pause | The debug-error parity entry for cdbc-debug-runtime.ll | Direct/machine error pause and call-stack parity passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
