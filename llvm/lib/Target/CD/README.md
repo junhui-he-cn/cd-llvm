@@ -90,7 +90,9 @@ CD_COMPILER_ROOT="$PWD/cd-compiler" \
 
 Without CD_COMPILER_ROOT, the integration test is unsupported and the
 LLVM-only CD suite does not inspect or mutate a sibling checkout. The
-reproducible verification matrix is recorded in
+driver/output boundary, including the upstream `-g` rejection, is covered by
+`llvm/test/CodeGen/CD/cdbc-driver-options.ll`. The reproducible verification
+matrix is recorded in
 docs/cd-bytecode-verification.md.
 
 Integer constants are accepted only when their signed value is exactly

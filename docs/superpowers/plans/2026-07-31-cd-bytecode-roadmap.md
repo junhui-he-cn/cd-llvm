@@ -708,22 +708,26 @@ The recommended input boundary is named metadata for module identity, entry orde
 - [x] Make VM integration opt-in through an explicit `CD_COMPILER_ROOT` path; never discover or mutate the untracked nested checkout implicitly.
 - [x] Add a focused CI job that builds `CD`, `llc`, `FileCheck`, and the CD lit suite, then a separate job that installs Rust and runs VM integration.
 - [x] Record exact LLVM and Rust toolchain versions, artifact format version, and verification commands.
-- [ ] Test `llc -mtriple=cd-unknown-unknown`, `-O0`, `-O2`, `-g`, metadata-free output, object-output rejection, invalid IR, and invalid CD ABI operations.
-- [ ] Run `git diff --check`, focused lit tests, VM dump/run/link tests, and the repository's normal LLVM checks before claiming a milestone complete.
+- [x] Test `llc -mtriple=cd-unknown-unknown`, `-O0`, `-O2`, metadata-free output, object-output rejection, invalid IR, and invalid CD ABI operations. The `-g` driver boundary is explicitly tested as an upstream rejection in `cdbc-driver-options.ll`.
+- [ ] Add target-side `-g` semantics after the upstream `llc` driver accepts the flag; CD debug coverage currently uses explicit `!dbg` and `!cd.sources` metadata.
+- [x] Run `git diff --check`, focused lit tests, VM dump/run/link tests, and the repository's applicable LLVM checks before claiming a milestone complete.
 
-The supported M7 matrix entries are covered by the existing CD fixtures and
-the direct/machine parity manifest. The `-g` subcase remains open because the
-LLVM 24 `llc` driver rejects `-g` before target selection; CD debug output
-therefore continues to use explicit `!dbg` and `!cd.sources` metadata. This is
-an upstream tool-boundary decision, not a CD-target-local flag to emulate.
+The supported M7 matrix entries are covered by the existing CD fixtures,
+`cdbc-driver-options.ll`, and the direct/machine parity manifest. The `-g`
+subcase is now an executable negative boundary because the LLVM 24 `llc`
+driver rejects `-g` before target selection; CD debug output therefore
+continues to use explicit `!dbg` and `!cd.sources` metadata. Target-side `-g`
+semantics remain open and are not emulated locally.
 
 The focused workflow is now defined in `.github/workflows/cd-bytecode.yml`.
 Its LLVM-only job runs without a VM checkout, while its separate integration
 job pins the sibling VM checkout and sets `CD_COMPILER_ROOT` explicitly. The
-workflow definition and its two-job structure were validated locally. The VM
-job also builds the pinned binary and runs the complete direct/machine parity
-manifest, including the opt-in observability cases. Hosted CI execution and
-the broader release matrix remain separate work.
+workflow definition and its two-job structure were validated locally. The
+LLVM-only job also runs the parity/module-link Python unit tests and the
+whitespace gate; the VM job builds the pinned binary and runs the complete
+direct/machine parity manifest, including the opt-in observability cases.
+Hosted CI execution, the broader release matrix, and target-side `-g`
+semantics remain separate work.
 
 The following remain explicit non-goals unless a separate design request changes scope: compiling `.cd` source through Clang, adding a Clang CD language frontend, native object files, assembler/disassembler syntax, JIT support, binary `.cdbc` encoding, garbage-collector layout, and a new artifact version.
 

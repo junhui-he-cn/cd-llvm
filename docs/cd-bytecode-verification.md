@@ -6,7 +6,7 @@ the Rust VM remains an explicitly selected integration dependency.
 
 ## Recorded Environment
 
-Recorded on 2026-08-02 from the current checkout:
+Recorded on 2026-08-03 from the current checkout:
 
 | Component | Observed version |
 | --- | --- |
@@ -84,13 +84,20 @@ Focused module and diagnostic tests can be run directly:
 build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD/cdbc-modules.ll llvm/test/CodeGen/CD/cdbc-module-errors.ll llvm/test/CodeGen/CD/cdbc-module-fallthrough.ll llvm/test/CodeGen/CD/cdbc-module-link-diagnostic-entry.ll llvm/test/CodeGen/CD/cdbc-module-link-diagnostic-dependency.ll
 ~~~
 
+The driver and output-mode boundary can be checked directly:
+
+~~~sh
+build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD/cdbc-driver-options.ll
+~~~
+
 The wider release matrix remains separate from this opt-in gate. In
 particular, the supported O0/O2, metadata-free, object-output rejection,
 invalid IR, and invalid CD ABI operation checks are covered by the existing
-CD lit fixtures and the direct/machine parity manifest. The remaining -g
-subcase is an upstream tool boundary: LLVM 24 llc rejects -g as an unknown
-command-line argument before CD target selection, so CD debug coverage uses
-explicit !dbg and !cd.sources metadata instead.
+CD lit fixtures and the direct/machine parity manifest. The
+`cdbc-driver-options.ll` fixture also records the remaining `-g` subcase as an
+upstream tool boundary: LLVM 24 `llc` rejects `-g` as an unknown command-line
+argument before CD target selection, so CD debug coverage uses explicit `!dbg`
+and `!cd.sources` metadata instead.
 
 ## Coverage Matrix
 
@@ -102,9 +109,10 @@ explicit !dbg and !cd.sources metadata instead.
 | Debugger command aliases | The aliases observability entry for cdbc-debug-ranges.ll | Direct/machine canonical step/next/quit parity passed |
 | Debugger help output | The help observability entry for cdbc-debug-ranges.ll | Direct/machine command-reference parity passed |
 | Source-backed debugger error pause | The debug-error parity entry for cdbc-debug-runtime.ll | Direct/machine error pause and call-stack parity passed |
+| Driver options and output modes | cdbc-driver-options.ll and cdbc-optimization.ll | `-mtriple`, O0/O2, object rejection, and the upstream `-g` boundary passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
-| llc -g | build-cd/bin/llc -mtriple=cd-unknown-unknown -g ... | Not accepted by the upstream llc driver; remains open |
+| llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 
 The parity evidence can be rerun with an explicitly built VM binary:
 
