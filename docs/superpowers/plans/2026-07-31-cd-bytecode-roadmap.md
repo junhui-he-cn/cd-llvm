@@ -10,6 +10,58 @@
 
 ---
 
+## 0. Roadmap status at a glance (2026-08-03)
+
+This document is the high-level roadmap and implementation record.  The
+independently executable queue for the next slices lives in the
+[2026-08-03 development plan](2026-08-03-cd-bytecode-development-plan.md).
+The two documents have different jobs: this one freezes scope and status; the
+development plan carries step-by-step work for the active queue.
+
+The current boundary is locally verified at outer revision `5b9aef658`:
+
+```text
+LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.1 --> Rust VM
+```
+
+The direct emitter remains the compatibility path.  The TableGen machine
+emitter is opt-in and shares the typed artifact model, ABI validation, and
+direct/machine parity harness.  The nested `cd-compiler/` checkout remains an
+independent VM oracle and is not absorbed into this repository.
+
+### Current stage map
+
+| Stage | Scope | Status | Evidence or next boundary |
+| --- | --- | --- | --- |
+| M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
+| M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
+| M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives | Complete for the implemented bounded ABI | Function-boundary dynamic values and callback values are separate ABI decisions |
+| M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface | New query commands and richer debugger state require a public contract first |
+| M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 70 lit (69 passed, 1 unsupported), parity 46/46, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
+
+### Active queue after M7-local
+
+Work is intentionally ordered by dependency rather than by adding more
+opcodes:
+
+1. Close the hosted M7 gate and record the observed result.  Keep the LLVM 24
+   upstream `llc -g` rejection as an explicit driver boundary.
+2. Add `substr` and `charAt` through the existing bounded `native_call` ABI;
+   this should require no new opcode, artifact field, or VM change.
+3. Define the public debugger state/query contract before adding commands such
+   as `list`, `where`, locals, or breakpoint queries.
+4. Design one minimal dynamic-value transport edge—function parameter/return,
+   PHI/select propagation, or one-slot storage—then implement only that slice.
+5. Add callback native helpers one vertical slice at a time, only after the
+   debugger and dynamic-value contracts are explicit.
+
+Do not combine items 2-5 in one implementation commit.  In particular,
+callback support must not introduce an implicit function-value or ordinary
+pointer ABI.
+
 ## 1. Scope and invariants
 
 The active boundary is:
@@ -26,34 +78,51 @@ The following rules apply to every milestone:
 4. The current target remains text-only: no ELF/COFF/Mach-O object output, assembler syntax, JIT, or native machine-code ABI is part of this roadmap.
 5. `cd-compiler/` is an independent Git checkout currently visible as an untracked directory in the outer repository. Cross-repository VM changes must be committed in that checkout separately; the LLVM repository must not absorb its `.git` directory or generated build files.
 
-## 2. Current baseline: M0, already present
+## 2. Implemented baseline and ownership boundaries
 
-The outer repository already contains an experimental target in:
+The implementation record below is retained for historical traceability; the
+stage table in section 0 is the current status source of truth.
+
+The outer repository contains the experimental target in:
 
 - `llvm/lib/Target/CD/TargetInfo/`: `cd` triple registration.
 - `llvm/lib/Target/CD/MCTargetDesc/`: minimal MC descriptions required by `llc`.
-- `llvm/lib/Target/CD/CDTargetMachine.{h,cpp}`: assembly-file-only target machine and module pass hookup.
-- `llvm/lib/Target/CD/CDBytecodeEmitter.{h,cpp}`: direct LLVM IR to text lowering.
-- `llvm/lib/Target/CD/README.md`: current target boundary.
-- `llvm/test/CodeGen/CD/cdbc-basic.ll`: arithmetic, comparison, call, print, branch, PHI, and object-output rejection coverage.
-- `llvm/test/CodeGen/CD/cdbc-parameters.ll`: function parameter metadata and unnamed-parameter naming coverage.
+- `llvm/lib/Target/CD/CDTargetMachine.{h,cpp}`: text-only target machine and
+  direct/machine pass hookup.
+- `llvm/lib/Target/CD/CDBytecodeEmitter.{h,cpp}`: direct LLVM IR lowering.
+- `llvm/lib/Target/CD/CDMachineBytecodeEmitter.{h,cpp}`: opt-in machine-path
+  lowering.
+- `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}`: typed artifact model,
+  validation, and canonical serialization.
+- `llvm/lib/Target/CD/CDValueABI.{h,cpp}`: explicit `llvm.cd.*` capability
+  validation shared by both paths.
+- `llvm/test/CodeGen/CD/`: LLVM lit, malformed-input, runtime, debug,
+  module, and direct/machine parity fixtures.
+- `llvm/utils/cd_bytecode_parity.py` and `cd_module_link.py`: executable VM
+  integration gates.
 
-The implemented subset currently covers scalar integer/floating values, finite constants, arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca` load/store, direct calls to defined functions, `cd_print`/`print`, conditional and unconditional branches, PHI edge stores, returns, and the implemented M4 string, array, map, record-value, enum-variant, and bounded native-call groups. The current boundary remains conservative around general globals, broader native calls, and broader source/debug capabilities not covered by the M5 slices.
+The implemented value boundary is deliberately explicit.  Strings, arrays,
+maps, records, enum variants, indexing/mutation, and the bounded native names
+`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, and `range` use target-specific
+CD intrinsics and existing `cdbc 0.1` operations.  Ordinary LLVM pointers,
+aggregates, globals, allocas, and external calls are not inferred to be CD
+values.  Dynamic values crossing ordinary function parameters/returns,
+callback function values, and richer debugger queries remain future design
+boundaries.
 
-This baseline is source-present but must be freshly verified in the current checkout before the next implementation slice is selected.
+The current release gate is split deliberately:
 
-## 3. Milestone map
+- local LLVM-only and VM-integrated verification is complete and reproducible;
+- hosted GitHub Actions execution is an external pending gate;
+- target-side `-g` support is not emulated while the LLVM 24 `llc` driver
+  rejects `-g` before target selection.
 
-| Milestone | Outcome | Depends on | Status |
-| --- | --- | --- | --- |
-| M0 | Reproducible build, lit tests, Rust `dump`, and explicit object rejection for the existing target | — | Complete; verified in the current checkout |
-| M1 | Typed CD artifact model, canonical serializer, and pre-VM reference validation | M0 | Complete; direct emitter now uses the typed boundary |
-| M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
-| M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
-| M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next aliases, help output, line-breakpoint deletion, and source-backed error-pause parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
-| M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
-| M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only, explicit VM integration, focused CI, and direct/machine parity boundaries are verified; the broader release matrix remains |
+## 3. Historical implementation slices
+
+Sections 4-11 preserve the detailed design gates and completed slice records.
+Use section 0 for current status and section 12 plus the linked development
+plan for what should be implemented next; do not interpret old unchecked
+historical steps as a second active queue.
 
 ## 4. M0 — Revalidate the existing target
 
@@ -733,14 +802,23 @@ The following remain explicit non-goals unless a separate design request changes
 
 ## 12. Recommended next execution order
 
-The next development session should execute only this narrow sequence:
+The detailed active sequence is maintained in
+[the 2026-08-03 development plan](2026-08-03-cd-bytecode-development-plan.md).
+The order is deliberately dependency-driven:
 
-1. Keep the M5 direct/machine observability parity gate opt-in and extend it
-   only with explicit contracts for more complete interactive debugger behavior
-   and other observability capabilities not covered by the completed slices.
-2. Keep M7 as an independent planned CI and release-quality boundary, including
-   opt-in VM integration and reproducible verification rather than a default
-   parity gate.
+1. Close the M7 hosted LLVM-only and Rust-VM workflow gate, while retaining the
+   upstream `llc -g` rejection as an explicit boundary.
+2. Add `substr` and `charAt` through the existing bounded `native_call` path;
+   this requires no new opcode, artifact field, or nested VM change.
+3. Define the public debugger query/state contract before adding more commands
+   such as `list` or `where`.
+4. Define and then implement the smallest dynamic-value transport boundary for
+   function parameters/returns, PHI/select, or local storage.
+5. Add callback native helpers one vertical slice at a time only after dynamic
+   value and callback contracts have direct/machine/Rust parity.
+
+Do not combine steps 2-5 in one implementation commit. In particular, callback
+native work must not smuggle in an implicit function-value or pointer ABI.
 
 Do not infer source text from ordinary LLVM debug metadata: `DIFile` and
 `DILocation` identify locations, but only explicit `!cd.sources` records provide
