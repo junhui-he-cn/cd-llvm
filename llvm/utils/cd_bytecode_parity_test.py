@@ -100,6 +100,7 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;conti
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;s;n;q" aliases
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "help;quit" help
 debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
+state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;continue;continue;quit" "division by zero"
 """
 
         self.assertEqual(
@@ -147,6 +148,12 @@ debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause re
                     "continue;quit",
                     "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22",
                 ),
+                (
+                    "state",
+                    "llvm/test/CodeGen/CD/cdbc-debug-contract.ll",
+                    "break-range contract.cd:0-1;continue;continue;quit",
+                    "division by zero",
+                ),
             ],
         )
 
@@ -158,6 +165,10 @@ debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause re
             'debug-error input.ll "continue"',
             'debug-error input.ll "continue" ""',
             'debug-error input.ll "continue" "expected" extra',
+            'state input.ll "continue"',
+            'state input.ll "continue" ""',
+            'state input.ll "" "division by zero"',
+            'state input.ll "continue" "division by zero" extra',
         )
 
         for line in invalid_lines:
@@ -390,6 +401,45 @@ debug_ranges:
                     "location=runtime.cd:1:22 "
                     "stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
                 ),
+            )
+
+    def test_state_contract_allows_only_synthetic_entry_difference(self):
+        direct_debug = (
+            "pause reason=entry function=main instruction=0 module=none "
+            "location=contract.cd:2:1 stack=main@contract.cd:2:1 locals={}\n"
+            "debug breakpoint id=1 spec=contract.cd:0-1\n"
+            "debug resumed command=continue\n"
+            "pause reason=breakpoint function=identity instruction=2 module=none "
+            "location=contract.cd:1:29 "
+            "stack=main@contract.cd:2:1>identity@contract.cd:1:29 "
+            "locals={input=\"2\"} range=s0:0:1\n"
+            "debug resumed command=continue\n"
+            "pause reason=error function=identity instruction=4 module=none "
+            "location=contract.cd:1:42 "
+            "stack=main@contract.cd:2:1>identity@contract.cd:1:42 "
+            "locals={input=\"2\"}\n"
+            "debug quit\n"
+        )
+        machine_debug = direct_debug.replace(
+            "location=contract.cd:2:1 stack=main@contract.cd:2:1",
+            "location=<unknown> stack=main@<unknown>",
+            1,
+        )
+        direct_dump = "debug_locations:\n  main 0 = s0:2:1\n  main 2 = s0:2:1\n"
+        machine_dump = "debug_locations:\n  main 2 = s0:2:1\n"
+
+        def run_surface(command, description, input_text=None):
+            return direct_debug if "direct.cdbc" in command[2] else machine_debug
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            cd_bytecode_parity._check_state(
+                pathlib.Path("vm"),
+                "llvm/test/CodeGen/CD/cdbc-debug-contract.ll",
+                pathlib.Path("/tmp/direct.cdbc"),
+                pathlib.Path("/tmp/machine.cdbc"),
+                direct_dump,
+                machine_dump,
+                "break-range contract.cd:0-1;continue;continue;quit",
             )
 
 

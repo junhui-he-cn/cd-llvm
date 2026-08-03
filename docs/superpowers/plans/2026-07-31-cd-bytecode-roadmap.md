@@ -18,7 +18,7 @@ independently executable queue for the next slices lives in the
 The two documents have different jobs: this one freezes scope and status; the
 development plan carries step-by-step work for the active queue.
 
-The current boundary is locally verified at outer revision `5b9aef658`:
+The current boundary is locally verified in this outer checkout:
 
 ```text
 LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.1 --> Rust VM
@@ -37,9 +37,9 @@ independent VM oracle and is not absorbed into this repository.
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
 | M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives | Complete for the implemented bounded ABI | Function-boundary dynamic values and callback values are separate ABI decisions |
-| M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface | New query commands and richer debugger state require a public contract first |
+| M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 73 lit (72 passed, 1 unsupported), parity 49/49, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 74 lit (73 passed, 1 unsupported), parity 50/50, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
 
 ### Active queue after M7-local
@@ -49,8 +49,10 @@ opcodes:
 
 1. Close the hosted M7 gate and record the observed result.  Keep the LLVM 24
    upstream `llc -g` rejection as an explicit driver boundary.
-2. Define the public debugger state/query contract before adding commands such
-   as `list`, `where`, locals, or breakpoint queries.
+2. Keep the public debugger state/query contract frozen before adding commands
+   such as `list`, `where`, locals, or breakpoint queries. The current pause
+   fields, command markers, and synthetic-entry parity exception are now
+   documented and tested.
 3. Design one minimal dynamic-value transport edge—function parameter/return,
    PHI/select propagation, or one-slot storage—then implement only that slice.
 4. Add callback native helpers one vertical slice at a time, only after the
@@ -754,6 +756,16 @@ commands and report the same canonical step, next, and quit events.
 The help slice adds a `help` observability case. It checks that both artifact
 paths expose the interactive command reference and can quit the session cleanly.
 
+The 2026-08-03 contract-only debugger slice adds
+`docs/cd-bytecode-debugger-contract.md`, the `cdbc-debug-contract.ll` fixture,
+and the `state` parity manifest form. It freezes the ordered pause fields
+`reason`, `function`, `instruction`, `module`, `location`, `stack`, `locals`,
+and optional `range`, together with breakpoint/resume/quit markers and invalid
+command, EOF, and error-pause behavior. Direct and machine outputs must match
+exactly except for the machine path's synthetic entry location and the
+corresponding optional `main 0` debug-location record. The fixture covers entry,
+source-breakpoint, and error pauses; parity is `50/50`.
+
 ## 10. M6 — Support module products and linking
 
 **Purpose:** Make LLVM-produced artifacts composable without conflating a module product with an executable linked program.
@@ -835,8 +847,9 @@ The order is deliberately dependency-driven:
 
 1. Close the M7 hosted LLVM-only and Rust-VM workflow gate, while retaining the
    upstream `llc -g` rejection as an explicit boundary.
-2. Define the public debugger query/state contract before adding more commands
-   such as `list` or `where`.
+2. Keep richer debugger query commands behind the now-frozen public state
+   contract; adding `list`, `where`, locals, or breakpoint queries requires a
+   separate design and fixture.
 3. Define and then implement the smallest dynamic-value transport boundary for
    function parameters/returns, PHI/select, or local storage.
 4. Add callback native helpers one vertical slice at a time only after dynamic

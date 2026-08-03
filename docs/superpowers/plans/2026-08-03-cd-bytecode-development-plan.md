@@ -23,8 +23,9 @@ independent `cd-compiler/vm-rs` Rust VM.
 
 ## Current state and operating rules
 
-The current outer checkout is `main` at `5b9aef658`, synchronized with
-`origin/main`. The independent, untracked `cd-compiler/` checkout is not part
+The current outer checkout is `main`, ahead of `origin/main` by the local
+roadmap and contract commits. The independent, untracked `cd-compiler/`
+checkout is not part
 of this repository and must remain clean unless a future ABI decision
 explicitly requires a separate VM change. The roadmap and this active plan may
 be intentionally edited in the outer checkout while the queue is being
@@ -38,8 +39,9 @@ LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.1 --> cd-compiler Rust VM
 
 M0-M4 are complete for the bounded value ABI and native allowlist. M5 has
 source tables, locations, ranges, runtime diagnostics, trace/profile/debug
-parity, `step`/`next`, aliases, help, line-breakpoint deletion, and error-pause
-parity. M6 module products and linking are complete. M7 is locally defined and
+parity, `step`/`next`, aliases, help, line-breakpoint deletion, error-pause
+parity, and a frozen pause-state contract. M6 module products and linking are
+complete. M7 is locally defined and
 verified, but hosted workflow execution and the wider release matrix still need
 an explicit gate. LLVM 24's upstream `llc -g` rejection remains a documented
 driver boundary; this plan does not emulate target-side `-g` support.
@@ -112,8 +114,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `72 passed / 1 unsupported` for the CD
-lit directory, `13/13` parity-harness unit tests, `5/5` module-link unit tests,
+Expected at the current fixture set: `73 passed / 1 unsupported` for the CD
+lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
 
@@ -133,7 +135,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8` in the recorded
-baseline), the direct/machine manifest passes all `49` entries in the current
+baseline), the direct/machine manifest passes all `50` entries in the current
 checkout, the module-link harness passes, and the nested checkout remains
 clean.
 
@@ -351,7 +353,9 @@ empty line, `🙂e`, and `🙂`; and the nested checkout remained clean.
 - Read only: `cd-compiler/vm-rs/src/vm.rs`, `cd-compiler/vm-rs/src/main.rs`, `cd-compiler/vm-rs/tests/library_api.rs`, and the debugger-related Rust tests.
 - Create: `docs/cd-bytecode-debugger-contract.md`.
 - Create: `llvm/test/CodeGen/CD/cdbc-debug-contract.ll`.
-- Modify: `llvm/test/CodeGen/CD/cdbc-machine-parity.list` and verify with `llvm/utils/cd_bytecode_parity.py`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-machine-parity.list`,
+  `llvm/utils/cd_bytecode_parity_test.py`, and verify with
+  `llvm/utils/cd_bytecode_parity.py`.
 - Modify: `docs/cd-bytecode-machine-backend.md`, `docs/cd-bytecode-verification.md`, and `docs/superpowers/plans/2026-07-31-cd-bytecode-roadmap.md` only after the contract is written and reviewed locally.
 
 The existing command surface is already covered for `continue`/`c`,
@@ -359,7 +363,7 @@ The existing command surface is already covered for `continue`/`c`,
 `quit`/`q`. Do not add `list`, `where`, frame inspection, local inspection, or
 breakpoint listing as ad-hoc commands.
 
-- [ ] **Step 1: Inventory the existing state machine and output surfaces**
+- [x] **Step 1: Inventory the existing state machine and output surfaces**
 
 Record the exact states and transitions exercised by the current VM:
 
@@ -374,7 +378,7 @@ For each pause, record the function, module, instruction, source location or
 and exit status. Treat current direct/machine parity tolerances for synthetic
 entry locations as explicit contract text, not implicit harness behavior.
 
-- [ ] **Step 2: Specify deterministic query and mutation semantics**
+- [x] **Step 2: Specify deterministic query and mutation semantics**
 
 The new contract document must define, before implementation, the exact output
 grammar and error behavior for state queries, source listing, stack queries,
@@ -383,23 +387,31 @@ paused on an error. Every field must have a direct/machine parity rule: exact
 equality, normalized register identity, or an explicitly allowed synthetic
 location difference.
 
-- [ ] **Step 3: Add contract-only fixtures and self-checks**
+- [x] **Step 3: Add contract-only fixtures and self-checks**
 
 Create `cdbc-debug-contract.ll` with explicit `!cd.sources`, `!dbg`, and
 `!cd.ranges` metadata for one entry pause, one source pause, and one runtime
-failure. Add it to `cdbc-machine-parity.list` as a behavior or observability
-case using only commands already supported by the VM. The fixture and parity
-output must cover every documented current-state field; a future command or
-field is not considered part of the public contract until it has a fixture and
-an exact direct/machine comparison rule.
+failure. Add it to `cdbc-machine-parity.list` as a `state` case using only
+commands already supported by the VM. The fixture and parity output cover every
+documented current-state field; a future command or field is not considered
+part of the public contract until it has a fixture and an exact direct/machine
+comparison rule.
 
-- [ ] **Step 4: Set the implementation boundary**
+- [x] **Step 4: Set the implementation boundary**
 
 If the contract requires new public VM output or query state, create a
 separate nested-checkout implementation task and a corresponding outer parity
-fixture. If the contract can be expressed through existing output, add only
-the outer parity case. In either case, do not begin dynamic-value transport or
-callback work in the same commit.
+fixture. The contract is expressible through existing output, so this slice
+adds only the outer fixture, harness contract, and documentation. No
+dynamic-value transport or callback work is included.
+
+Completed on 2026-08-03. Focused debugger lit passed `5/5`; the full CD lit
+directory passed `73` tests with `1` expected VM unsupported case; direct/machine
+parity passed `50/50`; parity self-tests passed `14/14`; module-link self-tests
+passed `5/5`; and Rust VM tests passed `73 + 3 + 8`. The direct/machine state
+exception is limited to the synthetic entry location and its optional `main 0`
+debug-location record. The next task is the separate dynamic-value transport
+ABI decision.
 
 ## Task 3: Design the dynamic-value transport ABI as a separate decision gate
 

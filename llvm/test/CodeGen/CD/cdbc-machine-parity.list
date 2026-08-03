@@ -53,5 +53,6 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;conti
 behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "Runtime error at runtime.cd:1:22: division by zero"
 debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
+state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;continue;continue;quit" "division by zero"
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-native-runtime.ll "Runtime error at native.cd:1:1: sqrt expects non-negative number"
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-index-runtime.ll "Runtime error at index.cd:1:14: array index out of range"

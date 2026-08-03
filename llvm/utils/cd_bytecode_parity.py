@@ -16,7 +16,9 @@ before execution resumes. The aliases contract drives the short `s`, `n`, and
 `q` commands and checks their canonical debugger events. The help contract
 checks the interactive command reference before quitting. Debug-error cases
 compare the source-backed runtime error pause while allowing machine-specific
-synthetic entry locations.
+synthetic entry locations. State cases freeze the complete current pause line
+and command markers, while allowing only the machine path's synthetic entry
+location and its corresponding `main 0` debug-location omission.
 """
 
 import argparse
@@ -35,6 +37,11 @@ _FUNCTION = re.compile(r'^function (f\d+) name=(\S+) arity=')
 _BODY = re.compile(r"^(?:main registers=|function f\d+ name=)")
 _DEBUG_SECTION_HEADERS = {"debug_sources:", "debug_locations:", "debug_ranges:"}
 _REGISTER_DEFINITION = re.compile(r"^\s+r(\d+) =")
+_SYNTHETIC_ENTRY_PAUSE = re.compile(
+    r"^(pause reason=entry function=main instruction=0 module=none) "
+    r"location=(\S+) stack=main@(\S+) (locals=\{\})$"
+)
+_SYNTHETIC_ENTRY_LOCATION = re.compile(r"^  main 0 = \S+$")
 
 
 def _table_mapping(lines, pattern, prefix):
@@ -165,6 +172,9 @@ def parse_manifest(lines):
         if len(fields) == 4 and fields[0] == "debug-error" and fields[2] and fields[3]:
             entries.append((fields[0], fields[1], fields[2], fields[3]))
             continue
+        if len(fields) == 4 and fields[0] == "state" and fields[2] and fields[3]:
+            entries.append((fields[0], fields[1], fields[2], fields[3]))
+            continue
         if (
             len(fields) == 4
             and fields[0] == "observability"
@@ -180,7 +190,8 @@ def parse_manifest(lines):
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
                 "<ranges|metadata-free|step-next|aliases|help|line-delete>', or "
-                "'debug-error <input> \"<commands>\" \"<pause-substring>\"'"
+                "'debug-error <input> \"<commands>\" \"<pause-substring>\"', or "
+                "'state <input> \"<commands>\" \"<runtime-error>\"'"
             )
     return entries
 
@@ -271,6 +282,110 @@ def _compare_observability_output(input_path, surface, direct, machine):
         raise RuntimeError(
             f"{surface} output mismatch for {input_path}:\n"
             f"direct: {direct!r}\nmachine: {machine!r}"
+        )
+
+
+def _normalize_state_debug_sections(text):
+    """Allow only the machine path's synthetic main-entry location omission."""
+
+    sections = _debug_sections(text)
+    lines = sections.splitlines()
+    removed = 0
+    normalized = []
+    for line in lines:
+        if _SYNTHETIC_ENTRY_LOCATION.fullmatch(line):
+            removed += 1
+            continue
+        normalized.append(line)
+    if removed > 1:
+        raise RuntimeError(
+            "state contract found multiple synthetic main-entry locations"
+        )
+    return "\n".join(normalized) + ("\n" if sections.endswith("\n") else "")
+
+
+def _normalize_state_debug_output(text):
+    """Normalize only entry location/stack values; all other pause fields stay exact."""
+
+    lines = text.splitlines()
+    normalized = []
+    entry_pauses = 0
+    for line in lines:
+        match = _SYNTHETIC_ENTRY_PAUSE.fullmatch(line)
+        if match:
+            entry_pauses += 1
+            line = (
+                f"{match.group(1)} location=<synthetic-entry> "
+                f"stack=main@<synthetic-entry> {match.group(4)}"
+            )
+        normalized.append(line)
+    if entry_pauses != 1:
+        raise RuntimeError(
+            f"state contract expected exactly one entry pause, got {entry_pauses}"
+        )
+    return "\n".join(normalized) + ("\n" if text.endswith("\n") else "")
+
+
+def _check_state(
+    vm, input_path, direct, machine, direct_dump, machine_dump, debug_commands
+):
+    direct_sections = _normalize_state_debug_sections(direct_dump)
+    machine_sections = _normalize_state_debug_sections(machine_dump)
+    _compare_observability_output(
+        input_path, "state debug section", direct_sections, machine_sections
+    )
+
+    command_input = "\n".join(debug_commands.split(";")) + "\n"
+    outputs = []
+    for label, artifact in (("direct", direct), ("machine", machine)):
+        output = _run(
+            [str(vm), "debug", str(artifact)],
+            f"{label} state debugger for {input_path}",
+            command_input,
+        )
+        outputs.append(_normalize_state_debug_output(output))
+
+    if outputs[0] != outputs[1]:
+        raise RuntimeError(
+            f"state debugger output mismatch for {input_path}:\n"
+            f"direct: {outputs[0]!r}\nmachine: {outputs[1]!r}"
+        )
+
+    output = outputs[0]
+    required = {
+        "entry pause": (
+            "pause reason=entry function=main instruction=0 module=none "
+            "location=<synthetic-entry> stack=main@<synthetic-entry> locals={}"
+        ),
+        "breakpoint pause": (
+            "pause reason=breakpoint function=identity instruction=2 module=none "
+            "location=contract.cd:1:29 "
+            "stack=main@contract.cd:2:1>identity@contract.cd:1:29 "
+            "locals={input=\"2\"} range=s0:0:1"
+        ),
+        "error pause": (
+            "pause reason=error function=identity instruction=4 module=none "
+            "location=contract.cd:1:42 "
+            "stack=main@contract.cd:2:1>identity@contract.cd:1:42 "
+            "locals={input=\"2\"}"
+        ),
+        "breakpoint creation": "debug breakpoint id=1 spec=contract.cd:0-1",
+        "continue markers": "debug resumed command=continue",
+        "quit marker": "debug quit",
+    }
+    for label, expected in required.items():
+        if expected not in output:
+            raise RuntimeError(
+                f"{label} missing for {input_path}: expected {expected!r}"
+            )
+    if output.count("debug resumed command=continue") != 2:
+        raise RuntimeError(
+            f"state contract expected two continue markers for {input_path}"
+        )
+    if output.count("pause reason=") != 3:
+        raise RuntimeError(
+            f"state contract expected entry, breakpoint, and error pauses for "
+            f"{input_path}"
         )
 
 
@@ -463,6 +578,35 @@ def _check_case(
             )
             return
 
+        if mode == "state":
+            if debug_commands is None or expected_error is None:
+                raise RuntimeError(f"state case has incomplete contract: {input_path}")
+            direct_error = _run_expected_failure(
+                [str(vm), "run", str(direct)],
+                f"direct state run for {input_path}",
+                expected_error,
+            )
+            machine_error = _run_expected_failure(
+                [str(vm), "run", str(machine)],
+                f"machine state run for {input_path}",
+                expected_error,
+            )
+            if direct_error != machine_error:
+                raise RuntimeError(
+                    f"state runtime error mismatch for {input_path}:\n"
+                    f"direct: {direct_error!r}\nmachine: {machine_error!r}"
+                )
+            _check_state(
+                vm,
+                input_path,
+                direct,
+                machine,
+                direct_dump,
+                machine_dump,
+                debug_commands,
+            )
+            return
+
         if mode == "runtime-error":
             if expected_error is None:
                 raise RuntimeError(
@@ -541,8 +685,10 @@ def main(argv=None):
         for entry in entries:
             mode, input_path = entry[:2]
             expected_error = entry[2] if mode == "runtime-error" else None
+            if mode == "state":
+                expected_error = entry[3]
             debug_commands = (
-                entry[2] if mode in {"observability", "debug-error"} else None
+                entry[2] if mode in {"observability", "debug-error", "state"} else None
             )
             observability_contract = entry[3] if mode == "observability" else None
             debug_error_expected = entry[3] if mode == "debug-error" else None

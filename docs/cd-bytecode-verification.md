@@ -109,6 +109,7 @@ and `!cd.sources` metadata instead.
 | Debugger command aliases | The aliases observability entry for cdbc-debug-ranges.ll | Direct/machine canonical step/next/quit parity passed |
 | Debugger help output | The help observability entry for cdbc-debug-ranges.ll | Direct/machine command-reference parity passed |
 | Source-backed debugger error pause | The debug-error parity entry for cdbc-debug-runtime.ll | Direct/machine error pause and call-stack parity passed |
+| Debugger pause-state contract | The state parity entry for cdbc-debug-contract.ll and `docs/cd-bytecode-debugger-contract.md` | Entry, source-breakpoint, and error pause fields match; synthetic entry exception is constrained |
 | Driver options and output modes | cdbc-driver-options.ll and cdbc-optimization.ll | `-mtriple`, O0/O2, object rejection, and the upstream `-g` boundary passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |

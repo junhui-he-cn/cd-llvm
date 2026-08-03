@@ -4,9 +4,9 @@ Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
 enum-variant, and bounded native-call slices share the machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
-runtime-diagnostic, debug-range, and scripted debugger slices also share that
-bridge; broader native-call capabilities and broader interactive debugger
-behavior remain deferred, 2026-08-03.
+runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
+slices also share that bridge; broader native-call capabilities and broader
+interactive debugger behavior remain deferred, 2026-08-03.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -131,6 +131,11 @@ line, caret, and main call stack. The `debug-error` parity case additionally
 drives the interactive debugger through the entry pause to a source-backed
 runtime-error pause, comparing the exact error pause line while allowing
 machine-specific synthetic entry locations.
+The contract-only `state` case freezes the complete pause line for an entry
+pause, a source breakpoint, and a runtime-error pause. It allows only the
+machine path's synthetic entry location and its corresponding `main 0`
+debug-location omission; all other state fields and command markers must
+match exactly.
 
 ## Direct/machine parity gate
 
@@ -157,6 +162,7 @@ The parity manifest also accepts opt-in observability cases:
 
 ```text
 observability <input> "<semicolon-separated debugger commands>" <ranges|metadata-free|step-next|aliases|help|line-delete>
+state <input> "<semicolon-separated debugger commands>" "<runtime-error substring>"
 ```
 
 Run this gate with the same explicitly built sibling VM executable and the
@@ -188,6 +194,11 @@ It requires both artifacts to pass `dump`, then compares the unique
 ordinary `run` diagnostic remains covered by a separate `runtime-error` entry;
 this case exists because `trace` and `profile` intentionally return failure for
 the same runtime error.
+
+The `state` case runs the artifact normally to require matching failure
+diagnostics, then drives the debugger through the entry, source-breakpoint,
+and error pauses. Its state grammar and deferred query boundary are documented
+in `docs/cd-bytecode-debugger-contract.md`.
 
 ## TableGen pseudo-instruction mapping
 
