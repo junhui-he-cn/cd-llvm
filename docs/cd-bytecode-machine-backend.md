@@ -6,7 +6,8 @@ enum-variant, and bounded native-call slices share the machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
 slices also share that bridge; broader native-call capabilities and broader
-interactive debugger behavior remain deferred, 2026-08-03.
+interactive debugger behavior remain deferred; the first M8 dynamic-value
+function parameter/return slice is complete, 2026-08-03.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -49,12 +50,25 @@ remains intentionally incomplete.
 then bridges those bodies to the typed artifact model.  The supported values
 and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `move`, `fneg`, boolean inversion as `not`, `nil`/`ret void` returns,
-`cd_print`/`print`, defined-function calls, scalar function parameters,
-single-slot scalar storage through `load_var` and `store_var`, conditional and
-unconditional branches, scalar PHI values, and scalar `select`.  Conditional PHI edges use
-synthetic machine edge blocks so each predecessor edge stores the correct
-incoming value before jumping to the successor; symbolic machine block
-targets are patched to artifact instruction offsets before validation.
+`cd_print`/`print`, defined-function calls, scalar function parameters and
+marked address-space-zero CD parameters/returns, single-slot scalar storage
+through `load_var` and `store_var`, conditional and unconditional branches,
+scalar PHI values, and scalar `select`. Conditional PHI edges use synthetic
+machine edge blocks so each predecessor edge stores the correct incoming value
+before jumping to the successor; symbolic machine block targets are patched to
+artifact instruction offsets before validation.
+
+The first function-boundary transport slice recognizes the explicit
+`cd.value.params` and `cd.value.return` function attributes through the shared
+`CDValueABI` validator. A marked CD parameter is loaded with the existing
+`CD_LOAD_VAR`/`load_var` sequence, and a marked direct call result or pointer
+return uses the existing `CD_CALL`/`CD_RETURN` bridge. The machine path does not
+reinterpret ordinary pointer registers as CD values: allocas, globals, pointer
+operations, indirect calls, and unmarked pointer interfaces remain rejected.
+The positive identity/mutation/nil fixture and malformed-interface fixture are
+`cdbc-function-values.ll` and `cdbc-function-value-errors.ll`; the former is
+a behavior parity case because its scalar branch has a machine-specific
+control-flow lowering shape.
 
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
@@ -268,4 +282,7 @@ The current M4 map, record, enum-variant, and bounded native-call slices retain
 the direct path, keep the machine path opt-in, and define collection/value
 construction separately from aggregate or ordinary-pointer lowering. Native
 calls beyond the allowlist above still require a separate name-specific
-capability matrix before new pseudos are implemented.
+capability matrix before new pseudos are implemented. Dynamic PHI/select
+propagation, dynamic local storage, and function-value callback transport also
+remain separate ABI decisions; the function attributes do not authorize those
+machine shapes.

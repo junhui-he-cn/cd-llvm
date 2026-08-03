@@ -46,7 +46,11 @@ static bool isScalarType(const Type *Type) {
 }
 
 static bool isSupportedOperand(const Value *Value) {
-  return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
+  return isScalarType(Value->getType()) || cd::isCDValue(*Value);
+}
+
+static bool isSupportedScalarOperand(const Value *Value) {
+  return isScalarType(Value->getType());
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
@@ -210,8 +214,8 @@ class CDFunctionEmitter {
   void emitBinary(const Instruction &I, CDOpcode Opcode) {
     const auto *BO = cast<BinaryOperator>(&I);
     if (!isScalarType(BO->getType()) || BO->getType()->isIntegerTy(1) ||
-        !isSupportedOperand(BO->getOperand(0)) ||
-        !isSupportedOperand(BO->getOperand(1)))
+        !isSupportedScalarOperand(BO->getOperand(0)) ||
+        !isSupportedScalarOperand(BO->getOperand(1)))
       unsupportedInstruction(I);
 
     appendInstruction(CDInstruction::binary(
@@ -221,8 +225,8 @@ class CDFunctionEmitter {
 
   void emitCompare(const Instruction &I, CDOpcode Opcode) {
     const auto *Cmp = cast<CmpInst>(&I);
-    if (!isSupportedOperand(Cmp->getOperand(0)) ||
-        !isSupportedOperand(Cmp->getOperand(1)))
+    if (!isSupportedScalarOperand(Cmp->getOperand(0)) ||
+        !isSupportedScalarOperand(Cmp->getOperand(1)))
       unsupportedInstruction(I);
 
     appendInstruction(CDInstruction::binary(
@@ -233,7 +237,7 @@ class CDFunctionEmitter {
   void emitCast(const Instruction &I, CDOpcode Opcode) {
     const auto *Cast = cast<CastInst>(&I);
     if (!isScalarType(Cast->getType()) ||
-        !isSupportedOperand(Cast->getOperand(0)))
+        !isSupportedScalarOperand(Cast->getOperand(0)))
       unsupportedInstruction(I);
 
     appendInstruction(CDInstruction::unary(
@@ -241,7 +245,8 @@ class CDFunctionEmitter {
   }
 
   void emitUnary(const Instruction &I, CDOpcode Opcode) {
-    if (!isScalarType(I.getType()) || !isSupportedOperand(I.getOperand(0)))
+    if (!isScalarType(I.getType()) ||
+        !isSupportedScalarOperand(I.getOperand(0)))
       unsupportedInstruction(I);
 
     appendInstruction(CDInstruction::unary(
@@ -265,7 +270,7 @@ class CDFunctionEmitter {
       }
 
       if (Input || !Operand->getType()->isIntegerTy(1) ||
-          !isSupportedOperand(Operand.get()))
+          !isSupportedScalarOperand(Operand.get()))
         unsupportedInstruction(I);
       Input = Operand.get();
     }
@@ -325,7 +330,7 @@ class CDFunctionEmitter {
 
   void emitStore(const StoreInst &Store) {
     if (Store.isVolatile() || Store.isAtomic() ||
-        !isSupportedOperand(Store.getValueOperand()))
+        !isSupportedScalarOperand(Store.getValueOperand()))
       unsupportedInstruction(Store);
 
     appendInstruction(CDInstruction::storeVar(
@@ -537,6 +542,10 @@ class CDFunctionEmitter {
     if (Callee->isIntrinsic())
       unsupportedInstruction(Call);
 
+    std::string Error;
+    if (!cd::validateFunctionCall(Call, Error))
+      unsupportedOperation(Error);
+
     auto FunctionIndex = Module.functionIndex(Callee);
     if (!FunctionIndex)
       unsupportedOperation("calls to declarations and the @main entry function");
@@ -609,6 +618,18 @@ void CDModuleEmitter::emit(Module &M) {
     report_fatal_error("CD target requires a defined @main entry function");
   if (Main->arg_size() != 0)
     report_fatal_error("CD target @main must not have parameters");
+
+  for (Function &Function : M) {
+    if (Function.isIntrinsic())
+      continue;
+    const bool HasCDABI = Function.hasFnAttribute("cd.value.params") ||
+                          Function.hasFnAttribute("cd.value.return");
+    if (Function.isDeclaration() && !HasCDABI)
+      continue;
+    std::string Error;
+    if (!cd::validateFunctionABI(Function, Error))
+      unsupportedOperation(Error);
+  }
 
   std::vector<cd::CDDebugSource> ParsedDebugSources;
   std::string DebugError;
@@ -687,19 +708,9 @@ void CDModuleEmitter::emit(Module &M) {
 }
 
 void CDFunctionEmitter::validateFunctionTypes() {
-  for (const Argument &Argument : F.args())
-    if (!isScalarType(Argument.getType()))
-      unsupportedOperation("non-scalar function parameters");
-
-  if (!F.getReturnType()->isVoidTy() && !isScalarType(F.getReturnType())) {
-    if (!F.getReturnType()->isPointerTy())
-      unsupportedOperation("non-scalar function return values");
-    for (const BasicBlock &BB : F) {
-      const auto *Return = dyn_cast<ReturnInst>(BB.getTerminator());
-      if (!Return || !isa<ConstantPointerNull>(Return->getReturnValue()))
-        unsupportedOperation("non-nil pointer function return values");
-    }
-  }
+  std::string Error;
+  if (!cd::validateFunctionABI(F, Error))
+    unsupportedOperation(Error);
 }
 
 void CDFunctionEmitter::allocateValuesAndStorage() {
@@ -779,7 +790,7 @@ unsigned CDFunctionEmitter::materializeConstant(const Constant *C) {
       report_fatal_error("CD target floating-point constant is not finite");
     Kind = CDConstant::Number;
     Text = cd::CDConstant::number(Number).text;
-  } else if (isa<ConstantPointerNull>(C)) {
+  } else if (cd::isCDNil(*C)) {
     Kind = CDConstant::Nil;
   } else {
     unsupportedOperation("aggregate, undef, poison, or expression constants");

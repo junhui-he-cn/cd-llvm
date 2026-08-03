@@ -8,11 +8,13 @@
 
 #include "CDValueABI.h"
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/JSON.h"
 
@@ -21,6 +23,82 @@
 using namespace llvm;
 
 namespace llvm::cd {
+
+static constexpr char CDValueParamsAttribute[] = "cd.value.params";
+static constexpr char CDValueReturnAttribute[] = "cd.value.return";
+
+static bool isScalarType(const Type *Type) {
+  return Type->isIntegerTy() || Type->isFloatingPointTy();
+}
+
+static bool isAddressSpaceZeroPointer(const Type *Type) {
+  return Type->isPointerTy() &&
+         cast<PointerType>(Type)->getAddressSpace() == 0;
+}
+
+static bool parseCDValueParameterAttribute(
+    const Function &F, SmallVectorImpl<unsigned> &Indices, std::string &Error) {
+  if (!F.hasFnAttribute(CDValueParamsAttribute))
+    return true;
+
+  const Attribute Attribute = F.getFnAttribute(CDValueParamsAttribute);
+  if (!Attribute.isStringAttribute()) {
+    Error = "cd.value.params must be a string attribute";
+    return false;
+  }
+
+  const StringRef Text = Attribute.getValueAsString();
+  if (Text.empty()) {
+    Error = "cd.value.params requires a non-empty parameter list";
+    return false;
+  }
+
+  SmallVector<StringRef, 8> Parts;
+  Text.split(Parts, ',', -1, /*KeepEmpty=*/true);
+  unsigned Previous = 0;
+  bool HasPrevious = false;
+  for (StringRef Part : Parts) {
+    unsigned Index = 0;
+    if (Part.empty() || Part.getAsInteger(10, Index)) {
+      Error = "cd.value.params requires decimal parameter indexes";
+      return false;
+    }
+    if (HasPrevious && Index <= Previous) {
+      Error = "cd.value.params indexes must be strictly increasing";
+      return false;
+    }
+    if (Index >= F.arg_size()) {
+      Error = "cd.value.params parameter index is out of range";
+      return false;
+    }
+
+    const Type *ParameterType = F.getArg(Index)->getType();
+    if (!ParameterType->isPointerTy()) {
+      Error = "cd.value.params may mark only pointer parameters";
+      return false;
+    }
+    if (!isAddressSpaceZeroPointer(ParameterType)) {
+      Error = "cd.value.params requires address-space-zero pointer parameters";
+      return false;
+    }
+
+    Indices.push_back(Index);
+    Previous = Index;
+    HasPrevious = true;
+  }
+  return true;
+}
+
+static bool isCDValueParameter(const Argument &Argument) {
+  SmallVector<unsigned, 8> Indices;
+  std::string Error;
+  if (!parseCDValueParameterAttribute(*Argument.getParent(), Indices, Error))
+    return false;
+  for (unsigned Index : Indices)
+    if (Index == Argument.getArgNo())
+      return true;
+  return false;
+}
 
 bool isStringIntrinsic(const CallBase &Call) {
   const Function *Callee = Call.getCalledFunction();
@@ -106,30 +184,145 @@ bool isAssertArrayIntrinsic(const CallBase &Call) {
          Callee->getIntrinsicID() == Intrinsic::cd_assert_array;
 }
 
+bool isCDNil(const Value &Value) {
+  const auto *Null = dyn_cast<ConstantPointerNull>(&Value);
+  return Null && isAddressSpaceZeroPointer(Null->getType());
+}
+
 bool isCDValue(const Value &Value) {
-  if (const auto *Null = dyn_cast<ConstantPointerNull>(&Value))
-    return cast<PointerType>(Null->getType())->getAddressSpace() == 0;
+  if (isCDNil(Value))
+    return true;
+
+  if (const auto *Argument = dyn_cast<llvm::Argument>(&Value))
+    if (isCDValueParameter(*Argument))
+      return true;
 
   const auto *Call = dyn_cast<CallBase>(&Value);
-  return Call && (isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
-                  isMapIntrinsic(*Call) ||
-                  isStructIntrinsic(*Call) ||
-                  (isVariantIntrinsic(*Call) && Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
-                  (isVariantFieldIntrinsic(*Call) &&
-                   Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
-                  (isFieldIntrinsic(*Call) && Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
-                  (isAssignFieldIntrinsic(*Call) &&
-                   Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
-                  isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
-                  (isAssignIndexIntrinsic(*Call) &&
-                   Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0) ||
-                  (isNativeIntrinsic(*Call) && Call->getType()->isPointerTy() &&
-                   cast<PointerType>(Call->getType())->getAddressSpace() == 0));
+  if (!Call)
+    return false;
+
+  if (const Function *Callee = Call->getCalledFunction())
+    if (!Callee->isDeclaration() && !Callee->isIntrinsic() &&
+        Callee->hasFnAttribute(CDValueReturnAttribute) &&
+        isAddressSpaceZeroPointer(Call->getType()))
+      return true;
+
+  return isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
+         isMapIntrinsic(*Call) || isStructIntrinsic(*Call) ||
+         (isVariantIntrinsic(*Call) &&
+          isAddressSpaceZeroPointer(Call->getType())) ||
+         (isVariantFieldIntrinsic(*Call) &&
+          isAddressSpaceZeroPointer(Call->getType())) ||
+         (isFieldIntrinsic(*Call) && isAddressSpaceZeroPointer(Call->getType())) ||
+         (isAssignFieldIntrinsic(*Call) &&
+          isAddressSpaceZeroPointer(Call->getType())) ||
+         isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
+         (isAssignIndexIntrinsic(*Call) &&
+          isAddressSpaceZeroPointer(Call->getType())) ||
+         (isNativeIntrinsic(*Call) &&
+          isAddressSpaceZeroPointer(Call->getType()));
+}
+
+bool validateFunctionABI(const Function &F, std::string &Error) {
+  SmallVector<unsigned, 8> CDValueParameters;
+  if (!parseCDValueParameterAttribute(F, CDValueParameters, Error))
+    return false;
+
+  for (unsigned Index = 0; Index < F.arg_size(); ++Index) {
+    const Type *ParameterType = F.getArg(Index)->getType();
+    bool IsCDValueParameter = false;
+    for (unsigned MarkedIndex : CDValueParameters)
+      if (MarkedIndex == Index) {
+        IsCDValueParameter = true;
+        break;
+      }
+
+    if (ParameterType->isPointerTy()) {
+      if (!IsCDValueParameter) {
+        Error = "every pointer function parameter must be listed by "
+                "cd.value.params";
+        return false;
+      }
+      if (!isAddressSpaceZeroPointer(ParameterType)) {
+        Error = "cd.value.params requires address-space-zero pointer parameters";
+        return false;
+      }
+      continue;
+    }
+
+    if (IsCDValueParameter) {
+      Error = "cd.value.params may mark only pointer parameters";
+      return false;
+    }
+    if (!isScalarType(ParameterType)) {
+      Error = "non-scalar function parameters";
+      return false;
+    }
+  }
+
+  const bool HasCDValueReturn = F.hasFnAttribute(CDValueReturnAttribute);
+  const Type *ReturnType = F.getReturnType();
+  if (HasCDValueReturn) {
+    if (!isAddressSpaceZeroPointer(ReturnType)) {
+      Error = "cd.value.return requires an address-space-zero pointer return";
+      return false;
+    }
+  } else if (ReturnType->isPointerTy()) {
+    Error = "every pointer function return must carry cd.value.return";
+    return false;
+  } else if (!ReturnType->isVoidTy() && !isScalarType(ReturnType)) {
+    Error = "non-scalar function return values";
+    return false;
+  }
+
+  if (!ReturnType->isPointerTy() || F.isDeclaration())
+    return true;
+
+  for (const BasicBlock &BB : F) {
+    const auto *Return = dyn_cast<ReturnInst>(BB.getTerminator());
+    if (!Return)
+      continue;
+    if (!Return->getReturnValue() ||
+        !isCDValue(*Return->getReturnValue())) {
+      Error = "cd.value.return requires every pointer return value to have "
+              "proven CD provenance";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool validateFunctionCall(const CallBase &Call, std::string &Error) {
+  const Function *Callee = Call.getCalledFunction();
+  if (!Callee || Callee->isDeclaration() || Callee->isIntrinsic()) {
+    Error = "CD value transport requires a direct call to a defined function";
+    return false;
+  }
+  if (!validateFunctionABI(*Callee, Error))
+    return false;
+  if (Call.arg_size() != Callee->arg_size()) {
+    Error = "function call argument count does not match the callee ABI";
+    return false;
+  }
+
+  for (unsigned Index = 0; Index < Call.arg_size(); ++Index) {
+    const Value *Argument = Call.getArgOperand(Index);
+    const Type *ParameterType = Callee->getArg(Index)->getType();
+    if (Argument->getType() != ParameterType) {
+      Error = "function call argument type does not match the callee ABI";
+      return false;
+    }
+    if (ParameterType->isPointerTy()) {
+      if (!isCDValue(*Argument)) {
+        Error = "cd.value.params requires a proven CD value argument";
+        return false;
+      }
+    } else if (!isScalarType(Argument->getType())) {
+      Error = "function calls require scalar arguments or proven CD values";
+      return false;
+    }
+  }
+  return true;
 }
 
 bool isNameOperand(const CallBase &Call, const Value &Value) {

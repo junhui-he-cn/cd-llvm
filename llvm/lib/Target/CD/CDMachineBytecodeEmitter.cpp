@@ -49,7 +49,7 @@ static bool isScalarType(const Type *Type) {
 }
 
 static bool isSupportedValue(const Value *Value) {
-  return isScalarType(Value->getType()) || isa<ConstantPointerNull>(Value);
+  return isScalarType(Value->getType()) || cd::isCDValue(*Value);
 }
 
 static bool isSupportedPrintValue(const Value *Value) {
@@ -114,7 +114,7 @@ class CDMachineModuleEmitter {
         unsupported("a non-finite floating-point constant");
       Value = CDConstant::number(Number);
       Key = Value.text;
-    } else if (isa<ConstantPointerNull>(&C)) {
+    } else if (cd::isCDNil(C)) {
       Value = CDConstant::nil();
       Key = "nil";
     } else {
@@ -596,6 +596,9 @@ class CDMachineModuleEmitter {
     if (!Callee || Callee->isDeclaration() || Callee->isIntrinsic() ||
         FunctionIndexes.find(Callee) == FunctionIndexes.end())
       unsupported("a call to an undefined, declared, intrinsic, or @main function");
+    std::string Error;
+    if (!cd::validateFunctionCall(Call, Error))
+      unsupported(Error);
     if (Call.arg_size() != Callee->arg_size())
       unsupported("a function call with mismatched arity");
     for (const Use &Argument : Call.args())
@@ -864,7 +867,7 @@ class CDMachineModuleEmitter {
 
     unsigned AnonymousArgumentSerial = 0;
     for (Argument &Argument : F.args()) {
-      if (!isScalarType(Argument.getType()))
+      if (!isScalarType(Argument.getType()) && !cd::isCDValue(Argument))
         unsupported("a non-scalar function parameter");
 
       std::string Name = Argument.hasName()
@@ -1378,6 +1381,18 @@ public:
     Function *Main = M.getFunction("main");
     if (!Main || Main->isDeclaration())
       unsupported("a module without a defined @main entry function");
+
+    for (Function &Function : M) {
+      if (Function.isIntrinsic())
+        continue;
+      const bool HasCDABI = Function.hasFnAttribute("cd.value.params") ||
+                            Function.hasFnAttribute("cd.value.return");
+      if (Function.isDeclaration() && !HasCDABI)
+        continue;
+      std::string Error;
+      if (!cd::validateFunctionABI(Function, Error))
+        unsupported(Error);
+    }
 
     std::vector<cd::CDDebugSource> DebugSources;
     std::string DebugError;

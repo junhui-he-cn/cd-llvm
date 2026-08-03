@@ -39,8 +39,9 @@ independent VM oracle and is not absorbed into this repository.
 | M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives | Complete for the implemented bounded ABI | Function-boundary dynamic values and callback values are separate ABI decisions |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 74 lit (73 passed, 1 unsupported), parity 50/50, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 76 lit (75 passed, 1 unsupported), parity 51/51, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select, dynamic storage, and callbacks remain deferred |
 
 ### Active queue after M7-local
 
@@ -53,8 +54,9 @@ opcodes:
    such as `list`, `where`, locals, or breakpoint queries. The current pause
    fields, command markers, and synthetic-entry parity exception are now
    documented and tested.
-3. Design one minimal dynamic-value transport edge—function parameter/return,
-   PHI/select propagation, or one-slot storage—then implement only that slice.
+3. Keep the completed function parameter/return transport slice as the ABI
+   foundation; design PHI/select or one-slot storage as separate follow-on
+   slices.
 4. Add callback native helpers one vertical slice at a time, only after the
    debugger and dynamic-value contracts are explicit.
 
@@ -107,9 +109,9 @@ maps, records, enum variants, indexing/mutation, and the bounded native names
 `charAt` use target-specific CD intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
-values.  Dynamic values crossing ordinary function parameters/returns,
-callback function values, and richer debugger queries remain future design
-boundaries.
+values.  The first marked function parameter/return boundary is implemented;
+PHI/select propagation, dynamic local storage, callback function values, and
+richer debugger queries remain future design boundaries.
 
 The current release gate is split deliberately:
 
@@ -839,6 +841,37 @@ semantics remain separate work.
 
 The following remain explicit non-goals unless a separate design request changes scope: compiling `.cd` source through Clang, adding a Clang CD language frontend, native object files, assembler/disassembler syntax, JIT support, binary `.cdbc` encoding, garbage-collector layout, and a new artifact version.
 
+### Narrow M8-first slice: function-boundary dynamic values (2026-08-03)
+
+**Goal:** Carry proven CD dynamic values across defined function parameters and
+returns while preserving the existing `cdbc 0.1` `Call` and `Return` operations.
+
+**ABI gate:** A function uses `"cd.value.params"="0,2"` to mark a sorted,
+comma-separated set of address-space-zero `ptr` parameters and
+`"cd.value.return"` to mark an address-space-zero pointer return. Every pointer
+parameter must be marked and every pointer return must carry the marker. The
+shared `CDValueABI` validator recognizes only CD nil, explicit intrinsic
+results, marked parameters, and direct calls to defined marked-return functions
+as provenance. Ordinary addresses, pointer operations, indirect calls, and
+unmarked interfaces remain target errors.
+
+- [x] Add shared function attribute parsing, parameter/return ABI validation,
+  call-site validation, and marked-argument/call-result provenance.
+- [x] Allow proven CD values through direct and machine `Call`/`Return` lowering
+  without changing `CDBytecodeFormat`, the artifact version, or the nested VM.
+- [x] Cover identity, mixed scalar/CD parameters, mutation visibility, and nil
+  transport with direct/machine FileCheck and Rust VM behavior parity.
+- [x] Cover malformed attributes, omitted markers, ordinary alloca/global
+  arguments, and ordinary pointer returns with matched target diagnostics.
+- [x] Update the LLVM ABI, machine-backend, target README, fixtures, and parity
+  manifest.
+
+Verification on 2026-08-03: the focused function-value lit fixtures passed;
+direct and machine artifacts passed Rust `dump` and produced identical `7` /
+`nil` output; the expanded parity manifest passed `51/51`; and the nested VM
+checkout remained unchanged. PHI/select propagation, dynamic local storage,
+and function-value callback transport remain separate decisions.
+
 ## 12. Recommended next execution order
 
 The detailed active sequence is maintained in
@@ -850,8 +883,9 @@ The order is deliberately dependency-driven:
 2. Keep richer debugger query commands behind the now-frozen public state
    contract; adding `list`, `where`, locals, or breakpoint queries requires a
    separate design and fixture.
-3. Define and then implement the smallest dynamic-value transport boundary for
-   function parameters/returns, PHI/select, or local storage.
+3. Keep the completed marked function parameter/return boundary as the base;
+   define PHI/select or one-slot dynamic storage in a separate decision and
+   parity slice.
 4. Add callback native helpers one vertical slice at a time only after dynamic
    value and callback contracts have direct/machine/Rust parity.
 

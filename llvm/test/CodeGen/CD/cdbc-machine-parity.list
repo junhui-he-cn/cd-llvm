@@ -5,6 +5,7 @@ artifact llvm/test/CodeGen/CD/cdbc-machine.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-call.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-cast.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-nil-return.ll
+behavior llvm/test/CodeGen/CD/cdbc-function-values.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-parameters.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-storage.ll
 artifact llvm/test/CodeGen/CD/cdbc-machine-unary.ll

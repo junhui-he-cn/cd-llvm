@@ -4,7 +4,10 @@ Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, and bounded native-call slices
 implemented; M5 explicit debug-source-table, instruction-location,
 source-backed runtime-diagnostic, and debug-range slices implemented;
-M6 module-envelope and opt-in linker integration implemented, 2026-08-03.
+M6 module-envelope and opt-in linker integration implemented; the first M8
+dynamic-value function parameter/return transport slice is implemented,
+2026-08-03. PHI/select, dynamic local storage, and callback value transport
+remain deferred.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -27,11 +30,13 @@ may write a second wire representation.
 The ABI follows these rules:
 
 1. A CD value that has no faithful native LLVM type is carried in LLVM IR as an
-   opaque `ptr` SSA token only at a defined `llvm.cd.*` boundary.  It is not a
-   native address and it must not be dereferenced, compared, indexed, passed
-   to an ordinary external call, or used by an ordinary pointer operation.
-2. A target-specific intrinsic is the proof that an opaque pointer is a CD
-   value.  An arbitrary LLVM `ptr` remains unsupported, including a pointer
+   opaque `ptr` SSA token only at a defined `llvm.cd.*` boundary or an explicit
+   marked function boundary. It is not a native address and it must not be
+   dereferenced, compared, indexed, passed to an ordinary external call, or
+   used by an ordinary pointer operation.
+2. A target-specific intrinsic or a validated `cd.value.params` /
+   `cd.value.return` function ABI marker is the proof that an opaque pointer is
+   a CD value. An arbitrary LLVM `ptr` remains unsupported, including a pointer
    produced by `alloca`, `load`, `getelementptr`, `inttoptr`, or a global whose
    contents are not consumed by a defined CD intrinsic.
 3. Immutable constants are module-owned and are interned by their complete CD
@@ -219,11 +224,65 @@ The resulting CD string token may currently be:
 - passed to `cd_print` or `print` when the declaration has one `ptr` argument
   and returns `void`;
 
-Ordinary scalar operations, pointer comparisons, loads/stores, ordinary calls,
-and native calls do not accept this token in the first slice.  Function
-returns, PHI/select propagation, and parameters carrying CD strings are
-deferred until the function-value ABI is specified; the implementation
-restricts string tokens to local materialization and printing.
+Ordinary scalar operations, pointer comparisons, loads/stores, unmarked calls,
+and native calls do not accept this token. Marked function parameters and
+returns are covered by the function-boundary slice below; PHI/select
+propagation and dynamic local storage remain deferred.
+
+## Function-boundary dynamic values: first transport slice
+
+The first cross-function transport boundary uses explicit function attributes
+and reuses the existing `Call` and `Return` artifact operations:
+
+```llvm
+define ptr @identity(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+```
+
+`cd.value.params` is a non-empty, strictly increasing, comma-separated list of
+zero-based parameter indexes. Every listed parameter must be an
+address-space-zero `ptr`, and every address-space-zero pointer parameter must
+be listed. `cd.value.return` is a marker valid only on a function returning an
+address-space-zero `ptr`; every pointer-returning function must carry it.
+Malformed lists, duplicate or unsorted indexes, out-of-range indexes, foreign
+address spaces, and markers on scalar or aggregate types are target errors.
+
+A marked parameter or pointer return accepts only a proven CD value: an
+address-space-zero `ptr null`, a direct explicit `llvm.cd.*` producer, a marked
+CD parameter, or a direct call to a defined function carrying
+`cd.value.return`. Ordinary pointers from allocas, globals, loads, GEPs,
+bitcasts, address-space casts, indirect calls, declarations, and function-value
+casts are rejected. Direct and machine emitters run the same function ABI and
+call validators before lowering.
+
+Mixed scalar and marked CD parameters are allowed. A marked parameter may be
+printed, consumed by an explicit CD intrinsic, passed to another marked
+function, or returned through a marked pointer-return ABI. The first slice does
+not infer CD provenance for PHI/select values or ordinary load/store results.
+
+The artifact representation is unchanged:
+
+```text
+param 0 = "value"
+rCall = call rFunction [rArgument]
+return rValue
+```
+
+The Rust VM copies each argument into the callee parameter cell and copies the
+returned value into the caller register. Array, map, and struct handles retain
+shared backing storage, so explicit callee mutation is visible to the caller;
+rebinding the callee parameter cell is local. Nil remains VM `nil`, and no LLVM
+pointer address is exposed. Positive, malformed, mutation, nil, and
+direct/machine parity coverage is in `cdbc-function-values.ll` and
+`cdbc-function-value-errors.ll`.
+
+PHI/select propagation, one-slot dynamic local storage, and function-value
+callback transport remain separate ABI decisions. They must not be inferred
+from these function attributes.
 
 ## Future ABI groups
 

@@ -65,7 +65,7 @@ These rules apply to every task:
 
 | Area | Files | Responsibility |
 | --- | --- | --- |
-| Target ABI | `llvm/lib/Target/CD/CDValueABI.{h,cpp}` | Recognize explicit `llvm.cd.*` operations and enforce source-shape capability matrices. |
+| Target ABI | `llvm/lib/Target/CD/CDValueABI.{h,cpp}` | Recognize explicit `llvm.cd.*` operations, enforce source-shape capability matrices, and validate marked function-value transport. |
 | Artifact boundary | `llvm/lib/Target/CD/CDBytecodeFormat.{h,cpp}` | Typed instructions, structural validation, and canonical `cdbc 0.1` serialization. |
 | Lowering | `llvm/lib/Target/CD/CDBytecodeEmitter.cpp`, `llvm/lib/Target/CD/CDMachineBytecodeEmitter.cpp` | Direct and opt-in machine lowering into the shared artifact model. |
 | Machine description | `llvm/include/llvm/IR/IntrinsicsCD.td`, `llvm/lib/Target/CD/CDInstrInfo.td` | Intrinsic signatures and CD virtual-value pseudos when a slice needs them. |
@@ -475,7 +475,45 @@ passed: CD lit `73 passed / 1 unsupported`, parity unit tests `14/14`,
 module-link unit tests `5/5`, Rust VM tests `73 + 3 + 8`, `git diff --check`,
 and a clean nested checkout.
 
-## Task 4: Roll out callback native helpers only after Tasks 2 and 3
+## Task 4: Implement the first dynamic-value transport slice
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.{h,cpp}`.
+- Modify: `llvm/lib/Target/CD/CDBytecodeEmitter.cpp` and
+  `llvm/lib/Target/CD/CDMachineBytecodeEmitter.cpp`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-machine-nil-return.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Create: `llvm/test/CodeGen/CD/cdbc-function-values.ll` and
+  `llvm/test/CodeGen/CD/cdbc-function-value-errors.ll`.
+- Modify: `docs/cd-bytecode-llvm-abi.md`, `docs/cd-bytecode-machine-backend.md`,
+  `llvm/lib/Target/CD/README.md`, and
+  `docs/superpowers/plans/2026-07-31-cd-bytecode-roadmap.md`.
+- Do not modify: `CDBytecodeFormat`, the `.cdbc 0.1` format, or the nested VM.
+
+The first implementation slice uses the decision in
+`docs/superpowers/plans/2026-08-03-cd-dynamic-value-transport-decision.md`:
+`"cd.value.params"` marks a sorted list of address-space-zero pointer
+parameters and `"cd.value.return"` marks a pointer return. The shared validator
+must reject omitted or malformed markers, ordinary pointer provenance, and
+indirect/declaration calls before either emitter lowers a boundary.
+
+- [x] Add shared attribute grammar and function ABI preflight.
+- [x] Recognize marked `Argument` values and direct defined marked-return call
+  results in `isCDValue`.
+- [x] Reuse existing parameter metadata, `Call`, and `Return` lowering in both
+  paths while preserving scalar calls and ordinary pointer rejection.
+- [x] Add positive identity/mutation/nil and malformed direct/machine fixtures.
+- [x] Add the positive fixture to direct/machine parity and verify Rust
+  dump/run behavior without changing the nested checkout.
+- [x] Update all public ABI, machine, target README, and roadmap records.
+
+Completed on 2026-08-03. Focused function-value lit passed `3/3`; the full CD
+lit and expanded parity manifest passed after the slice was added; Rust VM
+behavior produced `7` and `nil` on both paths; and the nested checkout remained
+clean and unchanged. PHI/select, dynamic local storage, and function-value
+callback transport remain explicitly deferred.
+
+## Task 5: Roll out callback native helpers only after Tasks 2 through 4
 
 This is a dependent future lane, not part of the `substr`/`charAt` slice.
 Callback helpers require both a public debugger/runtime contract and a dynamic

@@ -23,8 +23,10 @@ unconditional branches, PHI edge stores, returns, and declarations named
 inversion: an `i1` value XORed with the literal `true` (in either operand order)
 lowers to `not`; other XOR operations remain unsupported.  Unsupported LLVM
 instructions fail with a CD-target diagnostic rather than producing an invalid
-artifact. A `ptr null` return is accepted as the CD `nil` value; non-nil pointer
-returns remain unsupported.
+artifact. Address-space-zero `ptr null` remains the CD `nil` value. Pointer
+function parameters and returns require the explicit `cd.value.params` and
+`cd.value.return` attributes described below; ordinary pointer interfaces remain
+unsupported.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
@@ -110,9 +112,29 @@ private-linkage, constant, address-space-zero byte global with exactly one
 trailing NUL and valid UTF-8 before that terminator; LLVM's canonical
 one-byte-zero initializer represents the empty string. The result is lowered
 to a deduplicated `string` constant and may currently be passed only to a
-one-argument `cd_print` or `print` declaration. Ordinary pointer operations,
-comparisons, storage, function parameters/returns, and non-string globals
-remain rejected.
+one-argument `cd_print` or `print` declaration, or across the marked
+function-boundary ABI below. Ordinary pointer operations, comparisons, storage,
+unmarked function parameters/returns, and non-string globals remain rejected.
+
+The first dynamic-value transport boundary uses the function attributes
+`"cd.value.params"="0,2"` and `"cd.value.return"`. The parameter attribute is
+a sorted, comma-separated list of pointer parameter indexes; every listed and
+every pointer parameter must be an address-space-zero `ptr`. The return marker
+is required for an address-space-zero pointer return. The shared validator
+accepts only CD nil, explicit `llvm.cd.*` results, marked CD parameters, and
+direct calls to defined marked-return functions as boundary values. Alloca or
+global addresses, pointer arithmetic/casts, indirect calls, and unmarked
+pointer interfaces fail in both direct and machine paths. The existing
+`param`, `call`, and `return` artifact operations carry the values, so no new
+wire operation or artifact version is needed.
+
+The Rust VM copies arguments into fresh parameter cells and copies return
+values into the caller register. Mutable array, map, and struct handles keep
+shared backing storage across the call, so explicit callee mutation is visible;
+rebinding a parameter is local. PHI/select propagation, dynamic local storage,
+and function-value callbacks remain deferred ABI decisions. The positive and
+malformed boundaries are covered by `cdbc-function-values.ll` and
+`cdbc-function-value-errors.ll`.
 
 The first M4 collection operation is `llvm.cd.array(i32 count, ...)`. The
 immediate count must equal the number of following scalar, address-space-zero

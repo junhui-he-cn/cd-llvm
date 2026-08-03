@@ -16,6 +16,7 @@
 
 namespace llvm {
 class CallBase;
+class Function;
 class Value;
 
 namespace cd {
@@ -48,8 +49,18 @@ bool isLenIntrinsic(const CallBase &Call);
 
 bool isAssertArrayIntrinsic(const CallBase &Call);
 
+/// Return whether a pointer value is the address-space-zero CD nil token.
+bool isCDNil(const Value &Value);
+
 /// Return whether a value is an opaque CD dynamic-value token.
 bool isCDValue(const Value &Value);
+
+/// Validate the function attributes and pointer-value return boundary used by
+/// the first dynamic-value transport slice.
+bool validateFunctionABI(const Function &Function, std::string &Error);
+
+/// Validate a direct call to a defined function using that function's CD ABI.
+bool validateFunctionCall(const CallBase &Call, std::string &Error);
 
 /// Return whether a global value is used as a CD struct/field name operand.
 bool isNameOperand(const CallBase &Call, const Value &Value);
