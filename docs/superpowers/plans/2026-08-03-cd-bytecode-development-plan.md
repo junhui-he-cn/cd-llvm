@@ -432,7 +432,7 @@ explicit value -> one-slot local storage
 function value -> callback native argument
 ~~~
 
-- [ ] **Step 1: Write the provenance matrix**
+- [x] **Step 1: Write the provenance matrix**
 
 For each edge, record accepted producers, accepted LLVM types, nil behavior,
 ordinary-pointer rejection, aliasing behavior, and whether the value may be
@@ -440,7 +440,7 @@ observed after a mutating `assign_field` or `assign_index` operation. The
 matrix must keep `ptr addrspace(0)` as an opaque representation rather than a
 native address.
 
-- [ ] **Step 2: Compare the three boundary mechanisms**
+- [x] **Step 2: Compare the three boundary mechanisms**
 
 Evaluate an explicit boundary intrinsic/attribute, a provenance-checked
 address-space-zero pointer convention, and a new artifact-level value type.
@@ -449,7 +449,7 @@ ordinary pointers, and can be implemented identically by direct and machine
 paths. Record the rejected alternatives and why they fail the current VM
 semantics.
 
-- [ ] **Step 3: Define the minimal first transport slice**
+- [x] **Step 3: Define the minimal first transport slice**
 
 The decision record must choose one independently testable slice: function
 parameter/return transport, PHI/select propagation, or one-slot local storage.
@@ -458,12 +458,22 @@ parity. It must also define whether a new wire operation is required; the
 default assumption is reuse of existing `Call`, `Move`, `LoadVar`, `StoreVar`,
 and `Return` operations with no artifact-version change.
 
-- [ ] **Step 4: Stop before implementation until the decision is complete**
+- [x] **Step 4: Stop before implementation until the decision is complete**
 
 Run the existing baseline gates and commit the decision record separately. Do
 not modify `CDBytecodeFormat`, emitters, or the nested VM merely to make a
 pointer-shaped test compile. The next implementation plan must name the exact
 chosen boundary, its fixture grammar, and its Rust VM oracle checks.
+
+Completed on 2026-08-03: the decision record chooses the explicit
+`cd.value.params`/`cd.value.return` function attributes plus address-space-zero
+provenance checks, with function parameter/return transport as the first
+implementation slice. PHI/select, one-slot local storage, and callback
+function-value transport remain deferred. The slice reuses `Call` and
+`Return` with no artifact-format or nested-VM change. Baseline verification
+passed: CD lit `73 passed / 1 unsupported`, parity unit tests `14/14`,
+module-link unit tests `5/5`, Rust VM tests `73 + 3 + 8`, `git diff --check`,
+and a clean nested checkout.
 
 ## Task 4: Roll out callback native helpers only after Tasks 2 and 3
 
