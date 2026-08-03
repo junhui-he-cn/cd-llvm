@@ -51,7 +51,7 @@ This baseline is source-present but must be freshly verified in the current chec
 | M2 | Well-defined scalar/control-flow semantics and `-O0`/`-O2` compatibility | M1 | Complete; scalar and control-flow subset verified |
 | M3 | TableGen-backed machine instruction path with parity against the direct emitter | M1, M2 | Complete; supported scalar/control-flow parity verified |
 | M4 | Explicit CD value ABI for arrays, maps, strings, structs, variants, indexing, and native calls | M1, M2, M3 | Complete for the bounded native-call allowlist; broader native capabilities remain deferred |
-| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next, and line-breakpoint deletion parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
+| M5 | Source locations, source ranges, call-stack diagnostics, and trace parity | M1, M2, M3 | In progress; source tables, locations, ranges, call-stack diagnostics, direct/machine observability, step/next, line-breakpoint deletion, and source-backed error-pause parity are implemented; broader interactive debugger behavior and other uncovered capabilities remain deferred |
 | M6 | Program versus module artifacts, dependency metadata, and VM linker integration | M1, M3, M4, M5 | Complete; LLVM products, Rust linking, graph failures, fall-through bodies, and linked diagnostics verified |
 | M7 | Reproducible CI/integration harness, documentation, and release-quality boundary | M0-M6 | In progress; LLVM-only, explicit VM integration, focused CI, and direct/machine parity boundaries are verified; the broader release matrix remains |
 
@@ -606,6 +606,8 @@ Use LLVM `DILocation`/`DIFile` for line and column identity. Because ordinary LL
 - [x] Verify invalid-index errors through the Rust VM's location and call-stack
   reporting on both artifact paths.
 - [x] Compare `dump`, `trace`, `debug`, and `profile` behavior for artifacts with and without metadata.
+- [x] Compare the source-backed runtime-error pause and call stack through the
+  interactive debugger on direct and machine artifacts.
 
 **Exit criteria:** Debug metadata is additive and backward-compatible with metadata-free `cdbc 0.1`; runtime errors identify the original source when source bytes were explicitly supplied.
 
@@ -618,8 +620,9 @@ emitted through both direct and machine artifact paths, and the Rust VM
 accepts the resulting artifacts. A nested divide-by-zero fixture now verifies
 source-backed runtime diagnostics and call-stack parity for divide-by-zero,
 failed native calls, and invalid indexes. Scripted debug parity is complete;
-more complete interactive debugger behavior and other uncovered observability
-capabilities remain deferred as later M5 work.
+the source-backed runtime-error pause is also covered by an opt-in
+`debug-error` parity case. More complete interactive debugger behavior and
+other uncovered observability capabilities remain deferred as later M5 work.
 
 The direct/machine observability parity slice is now covered by the opt-in
 manifest `observability` case. It compares dump debug sections, run, trace,
@@ -641,6 +644,12 @@ The line-breakpoint slice extends the contract with `line-delete`: it verifies
 source-line breakpoint creation and one matching pause, deletion by ID, and
 successful execution after resuming. Command aliases and other interactive
 session behavior remain deferred.
+
+The source-backed error-pause slice adds a `debug-error` manifest case for the
+nested divide-by-zero fixture. It drives both artifacts through `continue` to
+the Rust VM's error pause, compares the unique source location and call-stack
+line, and quits the session. Synthetic entry locations may differ between the
+direct and machine paths; the runtime-error pause itself must match exactly.
 
 ## 10. M6 — Support module products and linking
 

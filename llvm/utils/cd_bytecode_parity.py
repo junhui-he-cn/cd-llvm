@@ -12,7 +12,8 @@ Observability cases additionally compare debug sections, trace, profile, and
 scripted interactive-debugger output for metadata-backed and metadata-free
 artifacts. The step-next contract also checks the debugger's distinct resume
 and pause reasons. The line-delete contract also checks breakpoint removal
-before execution resumes.
+before execution resumes. Debug-error cases compare the source-backed runtime
+error pause while allowing machine-specific synthetic entry locations.
 """
 
 import argparse
@@ -158,6 +159,9 @@ def parse_manifest(lines):
         if len(fields) == 3 and fields[0] == "runtime-error" and fields[2]:
             entries.append((fields[0], fields[1], fields[2]))
             continue
+        if len(fields) == 4 and fields[0] == "debug-error" and fields[2] and fields[3]:
+            entries.append((fields[0], fields[1], fields[2], fields[3]))
+            continue
         if (
             len(fields) == 4
             and fields[0] == "observability"
@@ -171,7 +175,8 @@ def parse_manifest(lines):
                 f"manifest line {line_number}: expected '<artifact|behavior> <input>', "
                 "'runtime-error <input> \"<diagnostic>\"', or "
                 "'observability <input> \"<commands>\" "
-                "<ranges|metadata-free|step-next|line-delete>'"
+                "<ranges|metadata-free|step-next|line-delete>', or "
+                "'debug-error <input> \"<commands>\" \"<pause-substring>\"'"
             )
     return entries
 
@@ -205,6 +210,48 @@ def _run_expected_failure(command, description, expected):
             f"expected substring: {expected!r}\nactual: {diagnostic!r}"
         )
     return diagnostic
+
+
+def _check_debug_error(
+    vm, input_path, direct, machine, debug_commands, expected_pause
+):
+    command_input = "\n".join(debug_commands.split(";")) + "\n"
+    error_pauses = []
+    for label, artifact in (("direct", direct), ("machine", machine)):
+        output = _run(
+            [str(vm), "debug", str(artifact)],
+            f"{label} debug error pause for {input_path}",
+            command_input,
+        )
+        pauses = [
+            line
+            for line in output.splitlines()
+            if line.startswith("pause reason=error ")
+        ]
+        if len(pauses) != 1:
+            raise RuntimeError(
+                f"{label} debug error pause expected exactly one error pause for "
+                f"{input_path}, got {pauses!r}"
+            )
+        pause = pauses[0]
+        if expected_pause not in pause:
+            raise RuntimeError(
+                f"{label} debug error pause missing for {input_path}: "
+                f"expected {expected_pause!r}, actual {pause!r}"
+            )
+        for expected in ("debug resumed command=continue", "debug quit"):
+            if expected not in output:
+                raise RuntimeError(
+                    f"{label} debug error session missing for {input_path}: "
+                    f"expected {expected!r}"
+                )
+        error_pauses.append(pause)
+
+    if error_pauses[0] != error_pauses[1]:
+        raise RuntimeError(
+            f"debug error pause mismatch for {input_path}:\n"
+            f"direct: {error_pauses[0]!r}\nmachine: {error_pauses[1]!r}"
+        )
 
 
 def _debug_sections(text):
@@ -356,6 +403,7 @@ def _check_case(
     expected_error=None,
     debug_commands=None,
     observability_contract=None,
+    debug_error_expected=None,
 ):
     source = (root / input_path).resolve()
     if not source.is_file():
@@ -385,6 +433,21 @@ def _check_case(
         machine_dump = _run([str(vm), "dump", str(machine)], f"machine dump for {input_path}")
         if not direct_dump.startswith("cdbc 0.1") or not machine_dump.startswith("cdbc 0.1"):
             raise RuntimeError(f"VM dump did not produce cdbc 0.1 for {input_path}")
+
+        if mode == "debug-error":
+            if debug_commands is None or debug_error_expected is None:
+                raise RuntimeError(
+                    f"debug-error case has incomplete contract: {input_path}"
+                )
+            _check_debug_error(
+                vm,
+                input_path,
+                direct,
+                machine,
+                debug_commands,
+                debug_error_expected,
+            )
+            return
 
         if mode == "runtime-error":
             if expected_error is None:
@@ -464,8 +527,11 @@ def main(argv=None):
         for entry in entries:
             mode, input_path = entry[:2]
             expected_error = entry[2] if mode == "runtime-error" else None
-            debug_commands = entry[2] if mode == "observability" else None
+            debug_commands = (
+                entry[2] if mode in {"observability", "debug-error"} else None
+            )
             observability_contract = entry[3] if mode == "observability" else None
+            debug_error_expected = entry[3] if mode == "debug-error" else None
             _check_case(
                 args.llc,
                 args.vm,
@@ -475,6 +541,7 @@ def main(argv=None):
                 expected_error,
                 debug_commands,
                 observability_contract,
+                debug_error_expected,
             )
             print(f"{mode} parity: {input_path}")
     except (OSError, RuntimeError, ValueError) as error:

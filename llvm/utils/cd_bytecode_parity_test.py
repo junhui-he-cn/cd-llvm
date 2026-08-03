@@ -97,6 +97,7 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6
 observability llvm/test/CodeGen/CD/cdbc-machine.ll "continue" metadata-free
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;step;next;quit" step-next
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;continue;delete 1;continue" line-delete
+debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
 """
 
         self.assertEqual(
@@ -126,6 +127,12 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;conti
                     "break ranges.cd:1;continue;delete 1;continue",
                     "line-delete",
                 ),
+                (
+                    "debug-error",
+                    "llvm/test/CodeGen/CD/cdbc-debug-runtime.ll",
+                    "continue;quit",
+                    "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22",
+                ),
             ],
         )
 
@@ -134,6 +141,9 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;conti
             'observability input.ll "continue"',
             'observability input.ll "continue" invalid',
             'observability input.ll "continue" ranges extra',
+            'debug-error input.ll "continue"',
+            'debug-error input.ll "continue" ""',
+            'debug-error input.ll "continue" "expected" extra',
         )
 
         for line in invalid_lines:
@@ -278,6 +288,37 @@ debug_ranges:
                 "run\n",
                 "break ranges.cd:1;continue;delete 1;continue",
                 "line-delete",
+            )
+
+    def test_debug_error_requires_matching_source_backed_error_pause(self):
+        def run_surface(command, description, input_text=None):
+            if command[1] == "dump":
+                return "cdbc 0.1\n"
+            if command[1] == "debug":
+                return (
+                    "pause reason=entry function=main instruction=0 "
+                    "location=runtime.cd:2:1\n"
+                    "debug resumed command=continue\n"
+                    "pause reason=error function=fail instruction=2 module=none "
+                    "location=runtime.cd:1:22 "
+                    "stack=main@runtime.cd:2:1>fail@runtime.cd:1:22\n"
+                    "debug quit\n"
+                )
+            return ""
+
+        with mock.patch.object(cd_bytecode_parity, "_run", side_effect=run_surface):
+            cd_bytecode_parity._check_case(
+                pathlib.Path("llc"),
+                pathlib.Path("vm"),
+                pathlib.Path("."),
+                "debug-error",
+                "llvm/utils/cd_bytecode_parity.py",
+                debug_commands="continue;quit",
+                debug_error_expected=(
+                    "pause reason=error function=fail instruction=2 module=none "
+                    "location=runtime.cd:1:22 "
+                    "stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
+                ),
             )
 
 

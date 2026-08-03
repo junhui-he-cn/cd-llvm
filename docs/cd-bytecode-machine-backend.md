@@ -4,8 +4,9 @@ Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
 enum-variant, and bounded native-call slices share the machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
-runtime-diagnostic, and debug-range slices also share that bridge; broader
-native-call capabilities and broader interactive debugger behavior remain deferred, 2026-08-02.
+runtime-diagnostic, debug-range, and scripted debugger slices also share that
+bridge; broader native-call capabilities and broader interactive debugger
+behavior remain deferred, 2026-08-03.
 
 This document fixes the boundary between LLVM's machine representation and the
 existing `cdbc 0.1` artifact.  It remains a design gate while the current
@@ -123,7 +124,10 @@ The runtime-error parity gate also confirms that a nested divide-by-zero keeps
 the same source line, caret, and call stack through both artifact paths. It also
 covers the bounded `sqrt(-1)` native failure with the same source-backed main
 call stack. It also covers an out-of-range array index with the same source
-line, caret, and main call stack.
+line, caret, and main call stack. The `debug-error` parity case additionally
+drives the interactive debugger through the entry pause to a source-backed
+runtime-error pause, comparing the exact error pause line while allowing
+machine-specific synthetic entry locations.
 
 ## Direct/machine parity gate
 
@@ -166,7 +170,17 @@ The `step-next` contract uses the range-backed fixture with `step` followed by
 the corresponding resume commands and a clean debugger quit.
 The `line-delete` contract creates a source-line breakpoint, requires exactly
 one breakpoint pause, deletes it, and verifies that execution resumes to the
-fixture's final output.
+fixture's final output. A `debug-error` case has the form:
+
+```text
+debug-error <input> "<semicolon-separated debugger commands>" "<error-pause substring>"
+```
+
+It requires both artifacts to pass `dump`, then compares the unique
+`pause reason=error` line and the debugger resume/quit markers. The VM's
+ordinary `run` diagnostic remains covered by a separate `runtime-error` entry;
+this case exists because `trace` and `profile` intentionally return failure for
+the same runtime error.
 
 ## TableGen pseudo-instruction mapping
 

@@ -720,5 +720,6 @@ source-backed location, and ranges beyond the UTF-8 source bytes. It never
 infers a range from line/column values. Direct and machine paths emit identical
 sparse `debug_ranges` entries; synthetic instructions remain range-free. The
 parity fixtures also cover a failed `sqrt(-1)` native call and an out-of-range
-array index with source-backed diagnostics. Debugger behavior remains a later
-M5 gate.
+array index with source-backed diagnostics. The outer direct/machine parity gate
+also covers source-backed interactive runtime-error pauses; richer interactive
+session behavior remains a later M5 boundary.
