@@ -292,6 +292,28 @@ bool validateFunctionABI(const Function &F, std::string &Error) {
   return true;
 }
 
+static bool isNativeCallback(const Value &Value, bool ReturnsCDValue) {
+  const auto *Callback = dyn_cast<Function>(&Value);
+  if (!Callback || Callback->isDeclaration() || Callback->isIntrinsic() ||
+      Callback->getName() == "main")
+    return false;
+
+  std::string Error;
+  SmallVector<unsigned, 8> Parameters;
+  if (!validateFunctionABI(*Callback, Error) ||
+      !parseCDValueParameterAttribute(*Callback, Parameters, Error) ||
+      Parameters.size() != 1 || Parameters.front() != 0 ||
+      Callback->arg_size() != 1 ||
+      !isAddressSpaceZeroPointer(Callback->getArg(0)->getType()))
+    return false;
+
+  if (ReturnsCDValue)
+    return isAddressSpaceZeroPointer(Callback->getReturnType()) &&
+           Callback->hasFnAttribute(CDValueReturnAttribute);
+  return Callback->getReturnType()->isIntegerTy(1) &&
+         !Callback->hasFnAttribute(CDValueReturnAttribute);
+}
+
 bool validateFunctionCall(const CallBase &Call, std::string &Error) {
   const Function *Callee = Call.getCalledFunction();
   if (!Callee || Callee->isDeclaration() || Callee->isIntrinsic()) {
@@ -740,6 +762,38 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
         !HasCDPointerResult) {
       Error = "llvm.cd.native charAt requires a CD string value, one double "
               "argument, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "map") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native map requires a CD dynamic-value array, a "
+              "direct callback, and a ptr result";
+      return false;
+    }
+
+    if (!isNativeCallback(*Call.getArgOperand(2), true)) {
+      Error = "llvm.cd.native map requires a direct defined callback with "
+              "one address-space-zero CD parameter and a cd.value.return "
+              "pointer result";
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "filter") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native filter requires a CD dynamic-value array, a "
+              "direct callback, and a ptr result";
+      return false;
+    }
+    if (!isNativeCallback(*Call.getArgOperand(2), false)) {
+      Error = "llvm.cd.native filter requires a direct defined callback with "
+              "one address-space-zero CD parameter and an i1 result";
       return false;
     }
     return true;

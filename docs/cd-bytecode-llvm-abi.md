@@ -1,13 +1,13 @@
 # LLVM CD value ABI
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
-map-constructor, record-value, enum-variant, and bounded native-call slices
-implemented; M5 explicit debug-source-table, instruction-location,
-source-backed runtime-diagnostic, and debug-range slices implemented;
-M6 module-envelope and opt-in linker integration implemented; the first M8
-dynamic-value function parameter/return transport slice is implemented,
-2026-08-03. PHI/select, dynamic local storage, and callback value transport
-remain deferred.
+map-constructor, record-value, enum-variant, bounded native-call, and `map` /
+`filter` callback-native slices implemented; M5 explicit debug-source-table,
+instruction-location, source-backed runtime-diagnostic, and debug-range slices
+implemented; M6 module-envelope and opt-in linker integration implemented; the
+first M8 dynamic-value function parameter/return transport slice is
+implemented, 2026-08-04. PHI/select and dynamic local storage remain deferred;
+the other callback helpers remain outside the selected `map`/`filter` slices.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -565,8 +565,9 @@ parameters/returns, PHI/select, allocas, pointer operations, or external calls.
 
 The bounded allowlist below is implemented through the shared ABI validator,
 the typed artifact model, and both direct and opt-in machine emitters. The
-Rust VM remains the runtime oracle; this section does not authorize arbitrary
-external or callback calls.
+Rust VM remains the runtime oracle; only the explicitly documented `map`
+and `filter` callback shapes are admitted in addition to the non-callback
+helpers.
 
 ### Accepted source shape
 
@@ -595,6 +596,8 @@ for the selected native name. The first bounded capability matrix is:
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
 | `substr` | one CD dynamic value, two `double` values | address-space-zero `ptr` | Unicode-scalar string slice |
 | `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
+| `map` | one CD dynamic-value token, one direct callback function value | address-space-zero `ptr` | fresh array of callback results |
+| `filter` | one CD dynamic-value token, one direct predicate function value | address-space-zero `ptr` | fresh shallow array of matching source values |
 
 The `str`, `typeOf`, and `hash` operands may be scalar, CD nil, or a value
 produced by an explicit CD intrinsic. The `range` result is a CD dynamic-value
@@ -607,10 +610,79 @@ Unicode scalar boundaries, and range checks. Both operations return a fresh
 string value and do not mutate or alias the source. Name-table metadata is not
 a CD string value, and arbitrary ordinary pointers are rejected.
 
-Unknown names and callback/collection helpers such as `map`, `filter`,
-`flatMap`, `any`, `all`, `count`, `find`, `findIndex`, and `reduce` remain
-compile-time target errors. This restriction prevents a native call from
-becoming an unbounded external-call escape hatch.
+Unknown names and the not-yet-selected callback helpers `flatMap`, `any`,
+`all`, `count`, `find`, `findIndex`, and `reduce` remain compile-time target
+errors. This restriction prevents a native call from becoming an unbounded
+external-call escape hatch.
+
+### `map` callback boundary
+
+`map` is the first callback-native vertical slice. Its source shape is:
+
+```llvm
+@map_name = private unnamed_addr constant [4 x i8] c"map\00"
+
+define ptr @identity(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+
+%mapped = call ptr (ptr, ...) @llvm.cd.native(
+    ptr @map_name, ptr %array, ptr @identity)
+
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+```
+
+The array operand must be a proven address-space-zero CD value token; its
+runtime tag remains owned by the VM, so a non-array token reaches the VM and
+produces `map expects array as first argument`. The callback must be a direct,
+defined LLVM function, not a declaration, `bitcast`, indirect function
+pointer, or `@main`. It must have exactly one address-space-zero `ptr`
+parameter marked by `cd.value.params="0"` and an address-space-zero `ptr`
+return marked by `cd.value.return`. The callback may return any CD dynamic
+value, including nil.
+
+Both emitters materialize the direct callback with the existing
+`make_function` operation before emitting `native_call`; no new intrinsic,
+artifact opcode, or `.cdbc 0.1` field is introduced. The Rust VM requires
+exactly two arguments and callback arity one. It snapshots the input elements,
+returns a fresh array, preserves shared handles passed to the callback, checks
+the instruction budget before each callback iteration, and charges the output
+allocation as one array plus its elements. Cancellation is checked before
+budget/resource growth, matching the existing VM native-call contract.
+
+### `filter` callback boundary
+
+`filter` uses the same native-call transport with a boolean predicate:
+
+```llvm
+@filter_name = private unnamed_addr constant [7 x i8] c"filter\00"
+
+define i1 @keep(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+
+%filtered = call ptr (ptr, ...) @llvm.cd.native(
+    ptr @filter_name, ptr %array, ptr @keep)
+
+attributes #0 = { "cd.value.params"="0" }
+```
+
+The array operand must be a proven address-space-zero CD value token; its
+runtime tag remains owned by the VM, so a non-array token reaches the VM and
+produces `filter expects array as first argument`. The predicate must be a
+direct, defined LLVM function, not a declaration, `bitcast`, indirect function
+pointer, or `@main`. It must have exactly one address-space-zero `ptr`
+parameter marked by `cd.value.params="0"` and return exactly `i1`; it does not
+use `cd.value.return`.
+
+Both emitters materialize the predicate with `make_function` before
+`native_call`. The Rust VM requires exactly two arguments and callback arity
+one, snapshots the input array, invokes the predicate from left to right, and
+returns a fresh shallow array containing the original elements whose predicate
+result is `true`. Predicate result typing, resource-budget, cancellation, and
+callback failures remain VM-owned behavior.
 
 The wire operation is:
 
@@ -681,11 +753,11 @@ dynamic-value, non-variant, and out-of-bounds runtime parity.
 
 The bounded native-call group is complete only when `llvm.cd.native` enforces
 the name-specific matrix above, emits `native_call` through both backends,
-rejects unknown/callback names and ordinary pointer substitutes, passes Rust
-`dump`/`run`, and covers direct/machine artifact parity plus shared runtime
-failures for numeric and string helpers. The string-helper extension additionally
-requires UTF-8 scalar-boundary output and malformed shape diagnostics for both
-`substr` and `charAt`.
+rejects unknown/not-yet-selected callback names and ordinary pointer
+substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
+plus shared runtime failures for numeric, string, `map`, and `filter` helpers.
+The string-helper extension additionally requires UTF-8 scalar-boundary output
+and malformed shape diagnostics for both `substr` and `charAt`.
 
 The sibling `cd-compiler` checkout already defines the string, collection,
 record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and

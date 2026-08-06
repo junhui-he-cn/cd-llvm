@@ -6,7 +6,7 @@ the Rust VM remains an explicitly selected integration dependency.
 
 ## Recorded Environment
 
-Recorded on 2026-08-03 from the current checkout:
+Recorded on 2026-08-04 from the current checkout:
 
 | Component | Observed version |
 | --- | --- |
@@ -31,6 +31,10 @@ env -u CD_COMPILER_ROOT build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD
 The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
+
+The current local LLVM-only run is `79 passed / 1 unsupported` across 80
+fixtures. The direct/machine parity manifest has 55 passing entries, including
+the selected `map` and `filter` callback behavior and runtime type-error cases.
 
 ## Opt-In VM Gate
 
@@ -113,6 +117,7 @@ and `!cd.sources` metadata instead.
 | Driver options and output modes | cdbc-driver-options.ll and cdbc-optimization.ll | `-mtriple`, O0/O2, object rejection, and the upstream `-g` boundary passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
+| Callback native `map` and `filter` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, and callback-shape diagnostics passed |
 | llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 
 The parity evidence can be rerun with an explicitly built VM binary:

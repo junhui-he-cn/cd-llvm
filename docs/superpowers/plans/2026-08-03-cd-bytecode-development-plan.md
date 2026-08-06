@@ -114,7 +114,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `73 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `77 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -135,7 +135,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8` in the recorded
-baseline), the direct/machine manifest passes all `50` entries in the current
+baseline), the direct/machine manifest passes all `52` entries in the current
 checkout, the module-link harness passes, and the nested checkout remains
 clean.
 
@@ -513,21 +513,22 @@ behavior produced `7` and `nil` on both paths; and the nested checkout remained
 clean and unchanged. PHI/select, dynamic local storage, and function-value
 callback transport remain explicitly deferred.
 
-## Task 5: Roll out callback native helpers only after Tasks 2 through 4
+## Task 5: Roll out selected callback native helpers
 
-This is a dependent future lane, not part of the `substr`/`charAt` slice.
-Callback helpers require both a public debugger/runtime contract and a dynamic
-function-value transport contract.
+This dependent lane follows the debugger/runtime contract and the dynamic
+function-value transport contract. The selected helpers are `map` and its
+follow-on `filter` slice; the remaining callback names stay outside the
+allowlist until their own matrices are defined.
 
 **Files to audit before writing the implementation plan:**
 - Read: `cd-compiler/vm-rs/src/vm.rs` native dispatch and callback frame code, `cd-compiler/vm-rs/tests/library_api.rs`, `cd-compiler/docs/bytecode-text-format.md`, `llvm/lib/Target/CD/CDValueABI.cpp`, and `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
 - Future outer files: `llvm/lib/Target/CD/CDValueABI.cpp`, the two emitters, `CDBytecodeFormat` only if the chosen contract needs a new operation, callback fixtures, the parity harness, and the three ABI documents.
 
-- [ ] **Step 1: Capture the Rust callback matrix**
+- [x] **Step 1: Capture the Rust callback matrix**
 
-Record exact arity, callback result type/truthiness, empty-input result,
-mutation/aliasing behavior, instruction-budget accounting, cancellation
-ordering, and error text for:
+The Rust dispatch audit records exact arity, callback result type/truthiness,
+empty-input result, mutation/aliasing behavior, instruction-budget accounting,
+cancellation ordering, and error text for:
 
 ~~~
 map, filter, flatMap,
@@ -535,22 +536,64 @@ any, all, count, find, findIndex,
 reduce
 ~~~
 
-Use the Rust VM tests as the semantic oracle; do not infer callback behavior
-from native names alone.
+`map` requires two arguments and a one-argument callback, returns a fresh array,
+returns an empty fresh array for empty input, snapshots input elements, and
+preserves shared dynamic handles passed to the callback. Each input element
+gets a native instruction checkpoint before the callback; callback body
+instructions are charged normally, and the output allocation charges one array
+plus its elements. Cancellation is checked before budget/resource growth. The
+other helpers' matrices remain documented by the unchanged Rust tests but are
+not admitted by this slice.
 
-- [ ] **Step 2: Select one vertical slice**
+- [x] **Step 2: Select one vertical slice**
 
-Start with one helper whose callback arity and result contract can be
-represented without introducing multiple independent ABI decisions. The
-implementation plan must include positive, empty, malformed, runtime-error,
-resource-budget, cancellation, direct/machine, and nested-VM checks before
-the helper is added to the allowlist.
+`map` is represented as:
 
-- [ ] **Step 3: Keep the remaining helpers rejected**
+~~~
+llvm.cd.native(ptr name, ptr value, ptr callback) -> ptr
+~~~
 
-Unknown and not-yet-selected callback names must continue to fail with the
-stable bounded-ABI diagnostic. Do not add a generic external-call escape hatch
-or a callback pseudo that bypasses `CDBytecodeFormat` validation.
+The value is a proven CD token whose runtime tag must be an array. The callback
+is a direct defined LLVM function with exactly one address-space-zero pointer
+parameter marked `cd.value.params="0"` and an address-space-zero pointer return
+marked `cd.value.return`. The target materializes it with the existing
+`make_function` operation before `native_call`; no new artifact operation is
+needed. Positive empty/non-empty, malformed shape/callback, runtime type-error,
+resource-budget, cancellation, direct/machine, and nested-VM checks are
+covered by the target fixtures plus the unchanged Rust callback tests.
+
+- [x] **Step 3: Keep the remaining helpers rejected**
+
+Unknown and not-yet-selected callback names continue to fail with the stable
+bounded-ABI diagnostic. No generic external-call escape hatch or callback
+pseudo bypasses `CDBytecodeFormat` validation.
+
+- [x] **Step 4: Add the `filter` callback helper**
+
+`filter` reuses the same transport:
+
+~~~
+llvm.cd.native(ptr name, ptr value, ptr predicate) -> ptr
+~~~
+
+The value is a proven CD token whose runtime tag must be an array. The
+predicate is a direct defined function with one address-space-zero pointer
+parameter marked `cd.value.params="0"` and an exact `i1` return; it does not use
+`cd.value.return`. Both emitters materialize it with `make_function` before the
+existing `native_call`. The Rust VM owns the snapshot, fresh shallow-array,
+left-to-right predicate, boolean-result, resource-budget, cancellation, and
+runtime type semantics. Positive empty/all/none cases, the non-array runtime
+error, direct/machine parity, and malformed callback/shape diagnostics are
+covered by `cdbc-native-filter*.ll` and `cdbc-native-errors.ll`.
+
+The filter slice adds no opcode, artifact field, `.cdbc 0.1` version, or nested
+VM change.
+
+Completed on 2026-08-04 for the selected `map`/`filter` callback lane. The
+full local gate passed with 80 lit tests (79 passed, 1 unsupported), parity
+55/55, parity unit 14/14, module-link unit 5/5, and Rust VM tests `73 + 3 + 8`.
+The unchanged Rust VM callback budget test continues to cover instruction
+charging, and the nested checkout remains clean.
 
 ## Completion and delivery gates
 

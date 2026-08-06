@@ -3,6 +3,32 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/unknown-name.ll -o - 2>&1 | FileCheck %s --check-prefix=UNKNOWN-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/callback-name.ll -o - 2>&1 | FileCheck %s --check-prefix=CALLBACK-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/callback-name.ll -o - 2>&1 | FileCheck %s --check-prefix=CALLBACK-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-SHAPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-SHAPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-callback-declaration.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-DECL-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-callback-declaration.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-DECL-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-callback-cast.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-CAST-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-callback-cast.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-CAST-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-callback-main.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-MAIN-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-callback-main.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-CALLBACK-MAIN-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-SHAPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-SHAPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-callback-declaration.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-DECL-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-callback-declaration.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-DECL-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-callback-cast.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-CAST-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-callback-cast.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-CAST-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-callback-main.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-MAIN-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-callback-main.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-MAIN-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/filter-callback-return-marker.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-RETURN-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/filter-callback-return-marker.ll -o - 2>&1 | FileCheck %s --check-prefix=FILTER-CALLBACK-RETURN-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/floor-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=FLOOR-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/floor-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=FLOOR-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/floor-type.ll -o - 2>&1 | FileCheck %s --check-prefix=FLOOR-TYPE-DIRECT
@@ -38,8 +64,34 @@
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
-; CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: map
-; CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: map
+; CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: flatMap
+; CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: flatMap
+; MAP-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
+; MAP-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
+; MAP-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
+; MAP-POINTER-MACHINE: CD machine backend does not support llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
+; MAP-CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-DECL-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-DECL-MACHINE: CD machine backend does not support llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-CAST-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-CAST-MACHINE: CD machine backend does not support llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-MAIN-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; MAP-CALLBACK-MAIN-MACHINE: CD machine backend does not support llvm.cd.native map requires a direct defined callback with one address-space-zero CD parameter and a cd.value.return pointer result
+; FILTER-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a CD dynamic-value array, a direct callback, and a ptr result
+; FILTER-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native filter requires a CD dynamic-value array, a direct callback, and a ptr result
+; FILTER-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a CD dynamic-value array, a direct callback, and a ptr result
+; FILTER-POINTER-MACHINE: CD machine backend does not support llvm.cd.native filter requires a CD dynamic-value array, a direct callback, and a ptr result
+; FILTER-CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-DECL-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-DECL-MACHINE: CD machine backend does not support llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-CAST-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-CAST-MACHINE: CD machine backend does not support llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-MAIN-DIRECT: CD target does not support LLVM operation: llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-MAIN-MACHINE: CD machine backend does not support llvm.cd.native filter requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FILTER-CALLBACK-RETURN-DIRECT: CD target does not support LLVM operation: cd.value.return requires an address-space-zero pointer return
+; FILTER-CALLBACK-RETURN-MACHINE: CD machine backend does not support cd.value.return requires an address-space-zero pointer return
 ; FLOOR-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native floor requires one double argument and a double result
 ; FLOOR-ARITY-MACHINE: CD machine backend does not support llvm.cd.native floor requires one double argument and a double result
 ; FLOOR-TYPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native floor requires one double argument and a double result
@@ -83,13 +135,232 @@ entry:
 }
 
 ;--- callback-name.ll
-@name = private unnamed_addr constant [4 x i8] c"map\00"
+@name = private unnamed_addr constant [8 x i8] c"flatMap\00"
 declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(ptr @name, double 1.0)
   ret i32 0
 }
+
+;--- map-shape.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name, i64 1)
+  ret i32 0
+}
+
+;--- map-pointer.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define ptr @callback(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+define i32 @main() {
+entry:
+  %source = inttoptr i64 1 to ptr
+  %mapped = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %source, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+
+;--- map-callback.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+
+define i64 @callback(i64 %value) {
+entry:
+  ret i64 %value
+}
+
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %mapped = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @callback)
+  ret i32 0
+}
+
+;--- map-callback-declaration.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+declare ptr @callback(ptr) #0
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %mapped = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+
+;--- map-callback-cast.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define ptr @callback(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %cast = addrspacecast ptr @callback to ptr addrspace(1)
+  %mapped = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr addrspace(1) %cast)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+
+;--- map-callback-main.ll
+@name = private unnamed_addr constant [4 x i8] c"map\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %mapped = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @main)
+  ret i32 0
+}
+
+;--- filter-shape.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name, i64 1)
+  ret i32 0
+}
+
+;--- filter-pointer.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i1 @callback(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+define i32 @main() {
+entry:
+  %source = inttoptr i64 1 to ptr
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %source, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" }
+
+;--- filter-callback.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+
+define ptr @callback(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+
+;--- filter-callback-declaration.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+declare i1 @callback(ptr) #0
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" }
+
+;--- filter-callback-cast.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define i1 @callback(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %cast = addrspacecast ptr @callback to ptr addrspace(1)
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr addrspace(1) %cast)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" }
+
+;--- filter-callback-main.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @main)
+  ret i32 0
+}
+
+;--- filter-callback-return-marker.ll
+@name = private unnamed_addr constant [7 x i8] c"filter\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare ptr @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define i1 @callback(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+define i32 @main() {
+entry:
+  %value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %value)
+  %filtered = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr @callback)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
 
 ;--- floor-arity.ll
 @name = private unnamed_addr constant [6 x i8] c"floor\00"

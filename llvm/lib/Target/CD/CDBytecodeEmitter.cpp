@@ -201,6 +201,7 @@ class CDFunctionEmitter {
 
   unsigned materializeConstant(const Constant *C);
   unsigned materializeNil();
+  unsigned materializeFunction(const Function *F);
   unsigned valueRegister(const Value *V);
 
   unsigned nameRegister(const Value *V, StringRef Operation) {
@@ -809,7 +810,20 @@ unsigned CDFunctionEmitter::materializeNil() {
   return Register;
 }
 
+unsigned CDFunctionEmitter::materializeFunction(const Function *F) {
+  auto FunctionIndex = Module.functionIndex(F);
+  if (!FunctionIndex)
+    unsupportedOperation("a callback to an undefined, declared, or @main function");
+  const unsigned Register = allocateRegister();
+  appendInstruction(
+      CDInstruction::makeFunction(Register, *FunctionIndex), nullptr);
+  return Register;
+}
+
 unsigned CDFunctionEmitter::valueRegister(const Value *V) {
+  if (const auto *FunctionValue = dyn_cast<Function>(V))
+    return materializeFunction(FunctionValue);
+
   if (const auto *C = dyn_cast<Constant>(V))
     return materializeConstant(C);
 

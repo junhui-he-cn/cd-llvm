@@ -131,10 +131,9 @@ wire operation or artifact version is needed.
 The Rust VM copies arguments into fresh parameter cells and copies return
 values into the caller register. Mutable array, map, and struct handles keep
 shared backing storage across the call, so explicit callee mutation is visible;
-rebinding a parameter is local. PHI/select propagation, dynamic local storage,
-and function-value callbacks remain deferred ABI decisions. The positive and
-malformed boundaries are covered by `cdbc-function-values.ll` and
-`cdbc-function-value-errors.ll`.
+rebinding a parameter is local. PHI/select propagation and dynamic local
+storage remain deferred ABI decisions. The positive and malformed boundaries
+are covered by `cdbc-function-values.ll` and `cdbc-function-value-errors.ll`.
 
 The first M4 collection operation is `llvm.cd.array(i32 count, ...)`. The
 immediate count must equal the number of following scalar, address-space-zero
@@ -198,15 +197,19 @@ name-table metadata, ordinary pointers and aggregates remain unsupported, and
 variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
-the allowlisted non-callback names `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
-`hash`, `range`, `substr`, and `charAt`. The name must be a private constant
-UTF-8 global; each name has an exact scalar/CD-value argument and result
-signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and `charAt`
-accept explicit CD dynamic-value tokens and leave string type, Unicode scalar
-boundaries, integer-valuedness, and bounds errors to the Rust VM. Direct and
-opt-in machine lowering share the `native_call` artifact bridge and parity
-coverage. Callback helpers, unsupported names, and ordinary pointer arguments
-remain rejected.
+the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`,
+`substr`, `charAt`, and the callback helpers `map` and `filter`. The name must be a
+private constant UTF-8 global; each name has an exact scalar/CD-value argument
+and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
+`charAt` accept explicit CD dynamic-value tokens and leave string type, Unicode
+scalar boundaries, integer-valuedness, and bounds errors to the Rust VM.
+`map` accepts one CD token and a direct defined callback with the explicit
+`cd.value.params="0"`/`cd.value.return` ABI markers; `filter` accepts one CD
+token and a direct defined predicate with `cd.value.params="0"` and an `i1`
+result. Both callback values are materialized with `make_function` before
+`native_call`. Direct and opt-in machine lowering share the `native_call`
+artifact bridge and parity coverage. The remaining callback helpers,
+unsupported names, and ordinary pointer arguments remain rejected.
 
 The M5A debug-source-table foundation accepts an explicit `!cd.sources` named
 metadata node with `path,text` or `module,path,text` string records. It validates

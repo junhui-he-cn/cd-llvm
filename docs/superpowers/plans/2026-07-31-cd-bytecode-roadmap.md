@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Roadmap status at a glance (2026-08-03)
+## 0. Roadmap status at a glance (2026-08-04)
 
 This document is the high-level roadmap and implementation record.  The
 independently executable queue for the next slices lives in the
@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives | Complete for the implemented bounded ABI | Function-boundary dynamic values and callback values are separate ABI decisions |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 76 lit (75 passed, 1 unsupported), parity 51/51, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 80 lit (79 passed, 1 unsupported), parity 55/55, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select, dynamic storage, and callbacks remain deferred |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter` callbacks are selected and verified |
 
 ### Active queue after M7-local
 
@@ -57,8 +57,9 @@ opcodes:
 3. Keep the completed function parameter/return transport slice as the ABI
    foundation; design PHI/select or one-slot storage as separate follow-on
    slices.
-4. Add callback native helpers one vertical slice at a time, only after the
-   debugger and dynamic-value contracts are explicit.
+4. Add callback native helpers one vertical slice at a time. The `map` and
+   `filter` slices now have explicit callback ABIs; keep the remaining names
+   rejected until their own matrices are defined.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
 callback support must not introduce an implicit function-value or ordinary
@@ -105,13 +106,14 @@ The outer repository contains the experimental target in:
 
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
-`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, and
-`charAt` use target-specific CD intrinsics and existing `cdbc 0.1` operations.
+`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, `charAt`,
+and the selected `map`/`filter` callbacks use target-specific CD intrinsics and
+existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
 values.  The first marked function parameter/return boundary is implemented;
-PHI/select propagation, dynamic local storage, callback function values, and
-richer debugger queries remain future design boundaries.
+PHI/select propagation, dynamic local storage, the remaining callback function
+values, and richer debugger queries remain future design boundaries.
 
 The current release gate is split deliberately:
 
@@ -611,8 +613,8 @@ against the existing Rust VM contract. The nested Rust VM checkout and the
 
 ### Narrow M4 slice: bounded native calls (2026-08-02)
 
-**Goal:** Lower only the non-callback native stdlib operations whose LLVM
-argument and result types have an explicit capability matrix:
+**Goal:** Lower the non-callback native stdlib operations whose LLVM argument
+and result types have an explicit capability matrix:
 `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, and `range`.
 
 **ABI gate:** `llvm.cd.native(ptr name, ...)` requires a direct private,
@@ -622,7 +624,8 @@ and return an address-space-zero CD string pointer; `hash` takes one scalar or
 CD value and returns `double`; `range` takes one to three `double` values and
 returns an address-space-zero CD range pointer. The wire form is
 `rD = native_call nName [rArg0, ...]`. Callback helpers, collection mutation,
-`substr`, `charAt`, unknown names, and ordinary pointers remain rejected.
+`substr`, `charAt`, callback names, unknown names, and ordinary pointers remain
+rejected.
 
 **Files:** modify the CD intrinsic/ABI/artifact/direct/machine layers and the
 three target ABI documents; create positive, malformed, and runtime native
@@ -675,6 +678,77 @@ lit suite passed with `72` supported tests and `1` expected unsupported VM
 integration test; the expanded direct/machine parity manifest passed all `49`
 entries; Rust VM cargo tests remained `73 + 3 + 8`; and the nested checkout
 remained clean.
+
+### Narrow M4/M8 follow-up: first callback native, `map` (2026-08-04)
+
+**Goal:** Admit only the Rust VM's `map` callback helper through the existing
+`native_call` artifact operation. The slice does not add a callback opcode,
+artifact field, or nested VM change.
+
+**Callback ABI gate:** `llvm.cd.native(ptr name, ptr value, ptr callback) ->
+ptr` requires a proven CD token for `value` and a direct defined LLVM function
+for `callback`. The callback must have exactly one address-space-zero pointer
+parameter marked by `cd.value.params="0"` and an address-space-zero pointer
+return marked by `cd.value.return`. Declarations, casts, indirect function
+pointers, `@main`, ordinary pointer values, and the other callback names remain
+rejected. The VM performs the runtime array/type check and callback arity check.
+
+The Rust matrix used for this choice is: `map` requires two arguments and a
+one-argument callback, returns a fresh array, returns an empty fresh array for
+empty input, snapshots input elements, preserves shared dynamic handles passed
+to the callback, charges one native checkpoint per element plus callback body
+instructions, charges one output array plus its elements, and checks
+cancellation before instruction/resource growth. `flatMap`, `any`, `all`,
+`count`, `find`, `findIndex`, and `reduce` remain rejected.
+
+- [x] Audit the Rust dispatch, callback frame, budget, cancellation, empty-input,
+  and fresh-output behavior before selecting the helper.
+- [x] Add shared direct/machine validation for `map` and its marked callback
+  function shape; materialize the callback with `make_function`.
+- [x] Add positive empty/non-empty, malformed callback/shape, runtime type-error,
+  and direct/machine parity fixtures.
+- [x] Update the ABI, machine-backend, target README, and parity records
+  without changing `cdbc 0.1` or the nested checkout.
+
+Verification on 2026-08-04: focused callback lit passed `3/3`; direct and
+machine artifacts both dumped and produced `[]` then `[one, two]`; the runtime
+type-error parity case matched `map expects array as first argument`; the Rust
+callback budget test remained covered by the unchanged nested VM; and the
+nested checkout remained clean.
+
+### Narrow M4/M8 follow-up: callback native, `filter` (2026-08-04)
+
+**Goal:** Admit only the Rust VM's `filter` callback helper through the existing
+`native_call` artifact operation. This follow-up adds no callback opcode,
+artifact field, or nested VM change.
+
+**Callback ABI gate:** `llvm.cd.native(ptr name, ptr value, ptr callback) ->
+ptr` requires a proven CD token for `value` and a direct defined LLVM function
+for `callback`. The callback must have exactly one address-space-zero pointer
+parameter marked by `cd.value.params="0"` and an exact `i1` return. It must not
+carry `cd.value.return`, which is reserved for CD pointer returns. Declarations,
+casts, indirect function pointers, `@main`, ordinary pointer values, and the
+remaining callback names stay rejected. The VM performs the runtime array/type,
+predicate-result, and callback-arity checks.
+
+The Rust matrix used for this choice is: `filter` requires two arguments and a
+one-argument boolean predicate, returns a fresh shallow array, returns an empty
+fresh array for empty input or an always-false predicate, snapshots input
+elements, preserves the original handles for retained elements, and invokes
+the predicate from left to right with the existing callback budget and
+cancellation behavior.
+
+- [x] Reuse the shared direct/machine callback validation and function-value
+  materialization path with the filter-specific `i1` result rule.
+- [x] Add positive empty/all/none, malformed callback/shape, runtime type-error,
+  and direct/machine parity fixtures.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan without changing `cdbc 0.1` or the nested checkout.
+
+Verification on 2026-08-04: focused filter fixtures passed; the full local
+gate passed with 80 lit tests (79 passed, 1 unsupported), parity 55/55, parity
+unit 14/14, module-link unit 5/5, and Rust VM tests `73 + 3 + 8`; the nested
+checkout remains clean.
 
 ## 9. M5 — Add source-backed debug metadata
 

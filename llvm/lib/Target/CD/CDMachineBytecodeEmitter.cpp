@@ -253,6 +253,9 @@ class CDMachineModuleEmitter {
 
   Register valueRegister(const Value *Value, MachineRegisterInfo &MRI,
                          MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
+    if (const auto *FunctionValue = dyn_cast<Function>(Value))
+      return materializeFunction(FunctionValue, MRI, MBB, TII);
+
     if (const auto *ConstantValue = dyn_cast<Constant>(Value))
       return materializeConstant(ConstantValue, MRI, MBB, TII);
 
