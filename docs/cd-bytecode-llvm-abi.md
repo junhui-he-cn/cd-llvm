@@ -2,13 +2,13 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call, and `map` /
-`filter` / `any` / `all` / `count` callback-native slices implemented; M5 explicit debug-source-table,
+`filter` / `any` / `all` / `count` / `find` callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
 implemented; M6 module-envelope and opt-in linker integration implemented; the
 first M8 dynamic-value function parameter/return transport slice is
 implemented, 2026-08-08. PHI/select and dynamic local storage remain deferred;
-the other callback helpers remain outside the selected `map`/`filter`/`any`/`all`/`count`
-slices.
+the other callback helpers remain outside the selected
+`map`/`filter`/`any`/`all`/`count`/`find` slices.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -567,8 +567,8 @@ parameters/returns, PHI/select, allocas, pointer operations, or external calls.
 The bounded allowlist below is implemented through the shared ABI validator,
 the typed artifact model, and both direct and opt-in machine emitters. The
 Rust VM remains the runtime oracle; only the explicitly documented `map`,
-`filter`, `any`, `all`, and `count` callback shapes are admitted in addition to
-the non-callback helpers.
+`filter`, `any`, `all`, `count`, and `find` callback shapes are admitted in
+addition to the non-callback helpers.
 
 ### Accepted source shape
 
@@ -602,6 +602,7 @@ for the selected native name. The first bounded capability matrix is:
 | `any` | one CD dynamic-value token, one direct predicate function value | `i1` | short-circuit true when any predicate result is true |
 | `all` | one CD dynamic-value token, one direct predicate function value | `i1` | short-circuit false when any predicate result is false |
 | `count` | one CD dynamic-value token, one direct predicate function value | `double` | number of elements whose predicate result is true |
+| `find` | one CD dynamic-value token, one direct predicate function value | address-space-zero `ptr` | first matching element, or `nil` when there is no match |
 
 The `str`, `typeOf`, and `hash` operands may be scalar, CD nil, or a value
 produced by an explicit CD intrinsic. The `range` result is a CD dynamic-value
@@ -614,9 +615,9 @@ Unicode scalar boundaries, and range checks. Both operations return a fresh
 string value and do not mutate or alias the source. Name-table metadata is not
 a CD string value, and arbitrary ordinary pointers are rejected.
 
-Unknown names and the not-yet-selected callback helpers `flatMap`, `find`,
-`findIndex`, and `reduce` remain compile-time target errors. This
-restriction prevents a native call from becoming an unbounded external-call
+Unknown names and the not-yet-selected callback helpers `flatMap`, `findIndex`,
+and `reduce` remain compile-time target errors. This restriction prevents a
+native call from becoming an unbounded external-call
 escape hatch.
 
 ### `map` callback boundary
@@ -746,6 +747,35 @@ returns `0`. The result type is exactly `double`, while callback arity,
 predicate result, runtime array type, budget, cancellation, and failures remain
 VM-owned behavior.
 
+### `find` predicate boundary
+
+`find` reuses the same direct predicate transport with an exact address-space-zero
+`ptr` result:
+
+```llvm
+@find_name = private unnamed_addr constant [5 x i8] c"find\00"
+
+define i1 @predicate(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+
+%match = call ptr (ptr, ...) @llvm.cd.native(
+    ptr @find_name, ptr %array, ptr @predicate)
+
+attributes #0 = { "cd.value.params"="0" }
+```
+
+The array operand and predicate have the same provenance and direct-defined
+function requirements as `any`, `all`, and `count`. The predicate must return
+exactly `i1` and must not carry `cd.value.return`. Both emitters materialize the
+predicate with `make_function` before `native_call`. The Rust VM snapshots the
+input, invokes the predicate from left to right, checks the native checkpoint
+before each callback, and returns the first matching element. Empty arrays and
+arrays with no match return `nil`; a non-array input retains the VM diagnostic
+`find expects array as first argument`. Callback arity, predicate result,
+runtime type, budget, cancellation, and failures remain VM-owned behavior.
+
 The wire operation is:
 
 ```text
@@ -818,7 +848,7 @@ the name-specific matrix above, emits `native_call` through both backends,
 rejects unknown/not-yet-selected callback names and ordinary pointer
 substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
 plus shared runtime failures for numeric, string, `map`, `filter`, `any`, `all`,
-and `count` helpers.
+`count`, and `find` helpers.
 The string-helper extension additionally requires UTF-8 scalar-boundary output
 and malformed shape diagnostics for both `substr` and `charAt`.
 

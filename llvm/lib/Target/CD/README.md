@@ -198,8 +198,8 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`,
-`substr`, `charAt`, and the callback helpers `map`, `filter`, `any`, `all`, and
-`count`.
+`substr`, `charAt`, and the callback helpers `map`, `filter`, `any`, `all`,
+`count`, and `find`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
 and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
@@ -212,9 +212,14 @@ result. `any` and `all` accept the same direct predicate shape, return exact
 `i1`, and use the empty-array and short-circuit behavior owned by the Rust VM.
 `count` accepts the same direct predicate shape, returns an exact `double`, and
 counts every true predicate result, including zero for an empty array.
+`find` accepts the same direct predicate shape, returns an exact address-space-zero
+`ptr`, and returns the first matching element or `nil` for an empty/no-match
+array. A non-array input retains the VM error `find expects array as first
+argument`; callback arity, predicate result, snapshot iteration, budget, and
+cancellation remain VM-owned.
 All callback values are materialized with `make_function` before `native_call`.
 Direct and opt-in machine lowering share the `native_call` artifact bridge and
-parity coverage. The remaining callback helpers `flatMap`, `find`,
+parity coverage. The remaining callback helpers `flatMap`,
 `findIndex`, and `reduce`, unsupported names, and ordinary pointer arguments
 remain rejected.
 

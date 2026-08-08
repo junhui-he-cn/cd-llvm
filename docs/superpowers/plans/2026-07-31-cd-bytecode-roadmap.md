@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`any`/`all`/`count` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`any`/`all`/`count`/`find` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 86 lit (85 passed, 1 unsupported), parity 60/60, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 88 lit (87 passed, 1 unsupported), parity 62/62, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31103840045` for `749aef4ba` failed because the workflow did not build LLVM's `not` tool; a local workflow fix is prepared and must be published before rerunning |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`any`/`all`/`count` callbacks are selected and verified |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`any`/`all`/`count`/`find` callbacks are selected and verified |
 
 ### Active queue after M7-local
 
@@ -58,8 +58,8 @@ opcodes:
    foundation; design PHI/select or one-slot storage as separate follow-on
    slices.
 4. Add callback native helpers one vertical slice at a time. The `map`,
-   `filter`, `any`, `all`, and `count` slices now have explicit callback ABIs;
-   keep `flatMap`, `find`, `findIndex`, and `reduce` rejected until their own
+   `filter`, `any`, `all`, `count`, and `find` slices now have explicit callback
+   ABIs; keep `flatMap`, `findIndex`, and `reduce` rejected until their own
    matrices are defined.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
@@ -108,7 +108,7 @@ The outer repository contains the experimental target in:
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
 `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, `charAt`,
-and the selected `map`/`filter`/`any`/`all`/`count` callbacks use target-specific CD
+and the selected `map`/`filter`/`any`/`all`/`count`/`find` callbacks use target-specific CD
 intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
@@ -821,6 +821,43 @@ direct/machine parity passed `60/60`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
 nested checkout remained clean. The hosted M7 gate remains pending publication
 of the workflow fix that builds LLVM's `not` test utility.
+
+### Narrow M4/M8 follow-up: predicate callback, `find` (2026-08-08)
+
+**Goal:** Admit the Rust VM's first-match predicate helper `find` through the
+existing `native_call` artifact operation. This slice adds no callback opcode,
+artifact field, or nested VM change.
+
+**Callback ABI gate:**
+`llvm.cd.native(ptr name, ptr value, ptr predicate) -> ptr` requires a proven CD
+token for `value` and a direct defined LLVM function with exactly one
+address-space-zero pointer parameter marked by `cd.value.params="0"`. The
+predicate returns exactly `i1` and must not carry `cd.value.return`; the native
+result is an address-space-zero `ptr` CD value. Declarations, casts, indirect
+function pointers, `@main`, ordinary pointer values, and `flatMap`, `findIndex`,
+and `reduce` remain rejected. The VM performs the runtime array/type,
+callback-arity, predicate-result, snapshot, budget, and first-match checks.
+
+The Rust matrix used for this choice is: `find` snapshots the input elements,
+invokes the predicate from left to right, returns the first matching element,
+and returns `nil` for an empty or unmatched array. It checks the existing native
+checkpoint before each callback and preserves the VM's callback frame and
+cancellation behavior.
+
+- [x] Reuse the shared direct/machine callback validation and function-value
+  materialization.
+- [x] Add positive empty/first-match/no-match, malformed shape/pointer/callback,
+  non-array runtime-error, and direct/machine parity fixtures.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan without changing `cdbc 0.1` or the nested checkout.
+
+Verification on 2026-08-08: focused find/predicate lit passed `3/3`; the full
+local suite passed `87` tests with `1` expected unsupported VM integration case;
+direct/machine parity passed `62/62`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, the explicit VM integration lit passed
+`1/1`, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
+clean. The hosted M7 gate remains pending publication of the workflow fix that
+builds LLVM's `not` test utility.
 
 ## 9. M5 — Add source-backed debug metadata
 
