@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call, and `map`/`filter`/`any`/`all` callback-native slices share the
+enum-variant, bounded native-call, and `map`/`filter`/`any`/`all`/`count` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -122,7 +122,7 @@ aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
 `hash`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
-`any`, and `all`. Their
+`any`, `all`, and `count`. Their
 name-table index is an immediate machine operand, while arguments and the
 result remain in the `CDValue` virtual register class. The `CD_NATIVE_CALL`
 bridge emits the existing `native_call` artifact operation after shared
@@ -143,9 +143,14 @@ exact `i1` native result, and materializes the predicate with
 `CD_MAKE_FUNCTION` before `CD_NATIVE_CALL`. The VM owns empty-array identity,
 left-to-right short-circuiting, runtime array/predicate checks, budget,
 cancellation, and callback failures.
+For `count`, it accepts that same direct predicate shape, requires an exact
+`double` native result, and materializes the predicate with `CD_MAKE_FUNCTION`
+before `CD_NATIVE_CALL`. The VM owns the empty-array result, left-to-right
+full traversal, runtime array/predicate checks, budget, cancellation, and
+callback failures.
 The array operand is only statically proven as a CD token; the VM owns the
-runtime array check, fresh-output allocation, callback iteration, budget, and
-cancellation behavior. Unsupported names (`flatMap`, `count`, `find`,
+runtime array check, callback iteration, budget, and
+cancellation behavior. Unsupported names (`flatMap`, `find`,
 `findIndex`, and `reduce`) and ordinary pointer arguments remain outside this
 boundary.
 
@@ -299,7 +304,7 @@ the pseudo-instruction model:
   `CDBytecodeFormat` validation.
 
 The current M4 map, record, enum-variant, bounded native-call, and selected
-`map`/`filter`/`any`/`all` callback slices retain the direct path, keep the
+`map`/`filter`/`any`/`all`/`count` callback slices retain the direct path, keep the
 machine path opt-in, and
 define collection/value construction separately from aggregate or
 ordinary-pointer lowering. Native calls beyond the allowlist above still

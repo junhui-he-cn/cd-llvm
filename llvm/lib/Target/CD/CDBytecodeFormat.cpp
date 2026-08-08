@@ -90,7 +90,7 @@ static bool isSupportedNativeName(StringRef Name) {
          Name == "str" || Name == "typeOf" || Name == "hash" ||
          Name == "range" || Name == "substr" || Name == "charAt" ||
          Name == "map" || Name == "filter" || Name == "any" ||
-         Name == "all";
+         Name == "all" || Name == "count";
 }
 
 static bool validateRegister(const CDBody &Body, unsigned Register,

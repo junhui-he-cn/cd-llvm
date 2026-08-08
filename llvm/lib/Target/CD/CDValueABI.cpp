@@ -816,6 +816,21 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "count") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !HasDoubleResult) {
+      Error = "llvm.cd.native count requires a CD dynamic-value array, a "
+              "direct callback, and a double result";
+      return false;
+    }
+    if (!isNativeCallback(*Call.getArgOperand(2), false)) {
+      Error = "llvm.cd.native count requires a direct defined callback with "
+              "one address-space-zero CD parameter and an i1 result";
+      return false;
+    }
+    return true;
+  }
+
   Error = ("llvm.cd.native native name is not supported by the bounded CD "
            "ABI: " +
            NativeName.str());

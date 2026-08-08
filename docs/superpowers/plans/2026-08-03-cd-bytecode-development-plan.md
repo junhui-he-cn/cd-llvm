@@ -115,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `83 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `85 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -630,6 +630,37 @@ direct/machine parity passed `58/58`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and
 the nested checkout remained clean. Hosted CI remains pending publication of
 the `not` build fix.
+
+## Task 7: Extend the predicate callback lane with `count`
+
+This follow-on reuses the completed direct predicate ABI and the existing
+`native_call` artifact operation. It adds no opcode, artifact field, `.cdbc
+0.1` version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-count.ll` and
+  `llvm/test/CodeGen/CD/cdbc-native-count-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-predicate-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, and two
+  roadmap documents.
+
+- [x] Admit `count` only for a proven CD array token, a direct defined
+  one-parameter predicate marked by `cd.value.params="0"`, and an exact
+  `double` result; keep `cd.value.return` forbidden for the predicate.
+- [x] Reuse `make_function` and `native_call` in both direct and machine paths.
+- [x] Cover empty/all/none counts, the non-array runtime failure, malformed
+  shape/pointer/callback diagnostics, and direct/machine parity.
+- [x] Keep `flatMap`, `find`, `findIndex`, and `reduce` rejected.
+
+Completed on 2026-08-08. Focused count/predicate lit passed `3/3`; the full
+local CD suite passed `85` tests with `1` expected unsupported VM integration
+case; direct/machine parity passed `60/60`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
+nested checkout remained clean. The hosted M7 gate remains pending publication
+of the workflow fix that builds LLVM's `not` test utility.
 
 ## Completion and delivery gates
 
