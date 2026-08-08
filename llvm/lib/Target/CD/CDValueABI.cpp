@@ -831,6 +831,21 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "find") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native find requires a CD dynamic-value array, a "
+              "direct callback, and a ptr result";
+      return false;
+    }
+    if (!isNativeCallback(*Call.getArgOperand(2), false)) {
+      Error = "llvm.cd.native find requires a direct defined callback with "
+              "one address-space-zero CD parameter and an i1 result";
+      return false;
+    }
+    return true;
+  }
+
   Error = ("llvm.cd.native native name is not supported by the bounded CD "
            "ABI: " +
            NativeName.str());
