@@ -115,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `89 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `92 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -136,7 +136,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8`), the direct/machine
-manifest passes all `64` entries in the current checkout, the module-link
+manifest passes all `66` entries in the current checkout, the module-link
 harness passes, and the nested checkout remains clean.
 
 - [ ] **Step 5: Check hosted workflow results without changing workflow scope**
@@ -727,6 +727,39 @@ passed `14/14`, module-link unit tests passed `5/5`, Rust VM tests passed
 `73 + 3 + 8`, and the nested checkout remained clean. The hosted M7 gate
 remains pending publication of the workflow fix that builds LLVM's `not` test
 utility.
+
+## Task 10: Extend the callback native lane with `flatMap`
+
+This follow-on reuses the completed dynamic callback ABI and the existing
+`native_call` artifact operation. It adds no opcode, artifact field, `.cdbc 0.1`
+version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-flat-map.ll`,
+  `llvm/test/CodeGen/CD/cdbc-native-flat-map-runtime.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-native-flat-map-errors.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, and two
+  roadmap documents.
+
+- [x] Admit `flatMap` only for a proven CD array token, a direct defined
+  one-parameter callback marked by `cd.value.params="0"`, an address-space-zero
+  `cd.value.return` callback result, and an exact address-space-zero `ptr`
+  native result.
+- [x] Reuse `make_function` and `native_call` in both direct and machine paths.
+- [x] Cover empty/nested-array flattening, the non-array runtime failure,
+  malformed shape/pointer/callback diagnostics, and direct/machine parity.
+- [x] Keep `reduce` rejected.
+
+Completed on 2026-08-08. Focused flatMap lit passed `3/3`; the full local CD
+suite passed `92` tests with `1` expected unsupported VM integration case;
+direct/machine parity passed `66/66`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
+nested checkout remained clean. The hosted M7 gate remains pending publication
+of the workflow fix that builds LLVM's `not` test utility.
 
 ## Completion and delivery gates
 

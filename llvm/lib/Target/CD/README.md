@@ -198,8 +198,8 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`,
-`substr`, `charAt`, and the callback helpers `map`, `filter`, `any`, `all`,
-`count`, `find`, and `findIndex`.
+`substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `any`,
+`all`, `count`, `find`, and `findIndex`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
 and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
@@ -222,10 +222,15 @@ and returns the zero-based first matching index or `-1` for an empty/no-match
 array. A non-array input retains the VM error `findIndex expects array as first
 argument`; callback arity, predicate result, snapshot iteration, budget, and
 cancellation remain VM-owned.
+`flatMap` accepts the same direct callback shape as `map`, returns an exact
+address-space-zero `ptr`, and performs one-level callback-array flattening. A
+non-array input retains the VM error `flatMap expects array as first argument`;
+callback result type, snapshot iteration, checkpoints, budget, cancellation,
+and callback failures remain VM-owned.
 All callback values are materialized with `make_function` before `native_call`.
 Direct and opt-in machine lowering share the `native_call` artifact bridge and
-parity coverage. The remaining callback helpers `flatMap`,
-`reduce`, unsupported names, and ordinary pointer arguments remain rejected.
+parity coverage. The remaining callback helper `reduce`, unsupported names, and
+ordinary pointer arguments remain rejected.
 
 The M5A debug-source-table foundation accepts an explicit `!cd.sources` named
 metadata node with `path,text` or `module,path,text` string records. It validates

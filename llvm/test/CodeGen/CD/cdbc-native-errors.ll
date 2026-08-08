@@ -64,8 +64,8 @@
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
-; CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: flatMap
-; CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: flatMap
+; CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: reduce
+; CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: reduce
 ; MAP-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
 ; MAP-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
 ; MAP-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
@@ -135,7 +135,7 @@ entry:
 }
 
 ;--- callback-name.ll
-@name = private unnamed_addr constant [8 x i8] c"flatMap\00"
+@name = private unnamed_addr constant [7 x i8] c"reduce\00"
 declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:

@@ -32,9 +32,9 @@ The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
 
-The current local LLVM-only run is `89 passed / 1 unsupported` across 90
-fixtures. The direct/machine parity manifest has 64 passing entries, including
-the selected `map`, `filter`, `any`, `all`, `count`, `find`, and `findIndex`
+The current local LLVM-only run is `92 passed / 1 unsupported` across 93
+fixtures. The direct/machine parity manifest has 66 passing entries, including
+the selected `map`, `filter`, `flatMap`, `any`, `all`, `count`, `find`, and `findIndex`
 callback behavior and runtime type-error cases.
 
 ## Opt-In VM Gate
@@ -118,7 +118,7 @@ and `!cd.sources` metadata instead.
 | Driver options and output modes | cdbc-driver-options.ll and cdbc-optimization.ll | `-mtriple`, O0/O2, object rejection, and the upstream `-g` boundary passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
-| Callback native `map`, `filter`, `any`, `all`, `count`, `find`, and `findIndex` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-count.ll, cdbc-native-count-runtime.ll, cdbc-native-find.ll, cdbc-native-find-runtime.ll, cdbc-native-find-index.ll, cdbc-native-find-index-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, predicate ABI, full count traversal, first-match/no-match `find` behavior, zero-based first-match/no-match `findIndex` behavior, and callback-shape diagnostics passed |
+| Callback native `map`, `filter`, `flatMap`, `any`, `all`, `count`, `find`, and `findIndex` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-flat-map.ll, cdbc-native-flat-map-runtime.ll, cdbc-native-flat-map-errors.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-count.ll, cdbc-native-count-runtime.ll, cdbc-native-find.ll, cdbc-native-find-runtime.ll, cdbc-native-find-index.ll, cdbc-native-find-index-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, one-level callback-array flattening, predicate ABI, full count traversal, first-match/no-match `find` behavior, zero-based first-match/no-match `findIndex` behavior, and callback-shape diagnostics passed |
 | llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 
 The parity evidence can be rerun with an explicitly built VM binary:

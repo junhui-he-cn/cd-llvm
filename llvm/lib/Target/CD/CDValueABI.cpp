@@ -767,18 +767,20 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
-  if (NativeName == "map") {
+  if (NativeName == "map" || NativeName == "flatMap") {
     if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
         !HasCDPointerResult) {
-      Error = "llvm.cd.native map requires a CD dynamic-value array, a "
-              "direct callback, and a ptr result";
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires a CD dynamic-value array, a direct callback, and "
+               "a ptr result");
       return false;
     }
 
     if (!isNativeCallback(*Call.getArgOperand(2), true)) {
-      Error = "llvm.cd.native map requires a direct defined callback with "
-              "one address-space-zero CD parameter and a cd.value.return "
-              "pointer result";
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires a direct defined callback with one "
+               "address-space-zero CD parameter and a cd.value.return pointer "
+               "result");
       return false;
     }
     return true;
