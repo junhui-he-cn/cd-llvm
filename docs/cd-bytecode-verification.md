@@ -62,8 +62,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link.py --llc build-cd/bi
 `.github/workflows/cd-bytecode.yml` keeps the two dependency boundaries
 explicit:
 
-- `llvm-only` builds `llc`, `FileCheck`, `count`, and `not`, then runs the CD lit
-  directory with `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
+- `llvm-only` builds `llc`, `FileCheck`, `count`, `not`, `llvm-config`,
+  `llvm-readobj`, and `split-file`, then runs the CD lit directory with
+  `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
 - `vm-integration` checks out `junhui-he-cn/cd-compiler` at the recorded
   commit `0295380ce3e29763949c09a815bda96cbed28ee2`, installs Rust 1.94.1,
   runs the VM Cargo tests, builds the VM binary for direct/machine parity,
@@ -73,12 +74,18 @@ The workflow is triggered for CD target, fixture, utility, documentation, or
 workflow changes on pull requests and pushes to `main`. The VM job is the only
 job that sets `CD_COMPILER_ROOT`.
 
+Run `31245584718` for committed baseline `770542a7e` completed with both jobs
+failing during test setup: the clean runner had built `llc`, `FileCheck`,
+`count`, and `not`, but `llvm-lit` could not invoke missing `llvm-config` and
+reported missing `llvm-readobj`. The workflow now builds those tools plus
+`split-file`; a hosted rerun remains pending publication.
+
 ## LLVM Build And Checks
 
 Build the target tools before running the gates:
 
 ~~~sh
-ninja -C build-cd llc FileCheck count not
+ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
 build-cd/bin/llvm-lit -q llvm/test/CodeGen/CD
 git diff --check
 ~~~

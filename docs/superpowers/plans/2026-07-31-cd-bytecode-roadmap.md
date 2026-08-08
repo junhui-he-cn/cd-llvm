@@ -40,7 +40,7 @@ independent VM oracle and is not absorbed into this repository.
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
 | M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 96 lit (95 passed, 1 unsupported), parity 68/68, VM `73 + 3 + 8`, module-link direct/machine passed |
-| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` is in progress; the workflow now builds LLVM's `not`, while `31103840045` was the older pre-fix failure |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` failed before the CD tests because the clean build omitted `llvm-config`, `llvm-readobj`, and `split-file`; the workflow now builds the complete tool set and needs publication/rerun |
 | M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks are selected and verified |
 
 ### Active queue after M7-local
@@ -961,9 +961,10 @@ runtime array checks remain VM-owned.
   active development plan without changing `cdbc 0.1` or the nested checkout.
 
 Verification on 2026-08-08: focused reduce lit passed `4/4`; the full local CD
-suite and parity counts are refreshed by the final gate for this slice. The
-hosted M7 workflow run for the preceding `flatMap` baseline remains an external
-pending check.
+suite and parity counts are refreshed by the final gate for this slice. Hosted
+run `31245584718` for the preceding `flatMap` baseline failed during clean
+runner test setup because `llvm-config`, `llvm-readobj`, and `split-file` were
+not built; the workflow fix is locally verified and awaits publication/rerun.
 
 ## 9. M5 — Add source-backed debug metadata
 

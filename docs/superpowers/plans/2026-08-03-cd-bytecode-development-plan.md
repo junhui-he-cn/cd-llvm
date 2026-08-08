@@ -99,7 +99,7 @@ clean and equals `origin/master`.
 - [ ] **Step 2: Rebuild the LLVM-only tools**
 
 ~~~
-ninja -C build-cd llc FileCheck count not
+ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
 ~~~
 
 Expected: exit status `0`; the build must not require `llvm-lit` as a Ninja
@@ -149,11 +149,12 @@ gh run view "$latest_run" --json status,conclusion,jobs
 
 The latest run must contain successful `llvm-only` and `vm-integration` jobs.
 Run `31103840045` for `749aef4ba` failed because the workflow omitted LLVM's
-`not` test utility from both build commands. The current workflow includes
-`not`, and run `31245584718` for `770542a7e` is the active hosted check. If it
-fails, reproduce that job locally
-and fix only the CD workflow or its directly covered fixture/documentation; do
-not weaken the gate or absorb the nested VM checkout into the outer repository.
+`not` test utility from both build commands. Run `31245584718` for `770542a7e`
+then built `not` successfully but failed before the CD tests because a clean
+runner also needed `llvm-config`, `llvm-readobj`, and `split-file`. The current
+workflow builds all seven required tools; reproduce the job locally and rerun
+the hosted gate after publication. Do not weaken the gate or absorb the nested
+VM checkout into the outer repository.
 
 - [ ] **Step 6: Record the release boundary and commit the gate**
 
@@ -309,7 +310,7 @@ diagnostics to match exactly.
 - [x] **Step 5: Run the focused and complete gates**
 
 ~~~
-ninja -C build-cd llc FileCheck count not
+ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
 build-cd/bin/llvm-lit -sv \
   llvm/test/CodeGen/CD/cdbc-native-string.ll \
   llvm/test/CodeGen/CD/cdbc-native-errors.ll \
@@ -805,8 +806,10 @@ attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
   roadmap records without changing `cdbc 0.1` or the nested checkout.
 
 Completed on 2026-08-08. Focused reduce lit passed `4/4`; the full local CD and
-parity gates are refreshed by the final verification run. The hosted M7
-workflow run for the preceding baseline remains an external pending check.
+parity gates are refreshed by the final verification run. Hosted run
+`31245584718` for the preceding baseline failed before the CD tests because
+the clean build lacked `llvm-config`, `llvm-readobj`, and `split-file`; the
+workflow fix is locally verified and awaits publication/rerun.
 
 ## Completion and delivery gates
 
@@ -814,7 +817,7 @@ A task is complete only when implementation, ABI docs, README, roadmap status,
 fixtures, and parity rules agree. The applicable checks are:
 
 ~~~
-ninja -C build-cd llc FileCheck count not
+ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
 env -u CD_COMPILER_ROOT build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity_test.py
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
