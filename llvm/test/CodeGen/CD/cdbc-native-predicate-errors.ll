@@ -23,6 +23,12 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/find-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/find-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-CALLBACK-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/find-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-CALLBACK-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/find-index-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-SHAPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/find-index-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-SHAPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/find-index-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/find-index-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/find-index-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-CALLBACK-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/find-index-callback.ll -o - 2>&1 | FileCheck %s --check-prefix=FIND-INDEX-CALLBACK-MACHINE
 
 ; ANY-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native any requires a CD dynamic-value array, a direct callback, and an i1 result
 ; ANY-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native any requires a CD dynamic-value array, a direct callback, and an i1 result
@@ -48,6 +54,12 @@
 ; FIND-POINTER-MACHINE: CD machine backend does not support llvm.cd.native find requires a CD dynamic-value array, a direct callback, and a ptr result
 ; FIND-CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native find requires a direct defined callback with one address-space-zero CD parameter and an i1 result
 ; FIND-CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native find requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FIND-INDEX-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native findIndex requires a CD dynamic-value array, a direct callback, and a double result
+; FIND-INDEX-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native findIndex requires a CD dynamic-value array, a direct callback, and a double result
+; FIND-INDEX-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native findIndex requires a CD dynamic-value array, a direct callback, and a double result
+; FIND-INDEX-POINTER-MACHINE: CD machine backend does not support llvm.cd.native findIndex requires a CD dynamic-value array, a direct callback, and a double result
+; FIND-INDEX-CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native findIndex requires a direct defined callback with one address-space-zero CD parameter and an i1 result
+; FIND-INDEX-CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native findIndex requires a direct defined callback with one address-space-zero CD parameter and an i1 result
 
 ;--- any-shape.ll
 @name = private unnamed_addr constant [4 x i8] c"any\00"
@@ -128,6 +140,48 @@ define i32 @main() {
 entry:
   %source = call ptr (i32, ...) @llvm.cd.array(i32 0)
   %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %source, ptr @returns_value)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" "cd.value.return" }
+
+;--- find-index-shape.ll
+@name = private unnamed_addr constant [10 x i8] c"findIndex\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, i64 1)
+  ret i32 0
+}
+
+;--- find-index-pointer.ll
+@name = private unnamed_addr constant [10 x i8] c"findIndex\00"
+declare double @llvm.cd.native(ptr, ...)
+define i1 @yes(ptr %value) #0 {
+entry:
+  ret i1 true
+}
+define i32 @main() {
+entry:
+  %source = inttoptr i64 1 to ptr
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %source, ptr @yes)
+  ret i32 0
+}
+attributes #0 = { "cd.value.params"="0" }
+
+;--- find-index-callback.ll
+@name = private unnamed_addr constant [10 x i8] c"findIndex\00"
+declare double @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+define ptr @returns_value(ptr %value) #0 {
+entry:
+  ret ptr %value
+}
+define i32 @main() {
+entry:
+  %source = call ptr (i32, ...) @llvm.cd.array(i32 0)
+  %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr %source, ptr @returns_value)
   ret i32 0
 }
