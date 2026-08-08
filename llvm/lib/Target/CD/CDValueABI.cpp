@@ -197,6 +197,11 @@ bool isCDValue(const Value &Value) {
     if (isCDValueParameter(*Argument))
       return true;
 
+  if (const auto *Select = dyn_cast<SelectInst>(&Value))
+    return isAddressSpaceZeroPointer(Select->getType()) &&
+           isCDValue(*Select->getTrueValue()) &&
+           isCDValue(*Select->getFalseValue());
+
   const auto *Call = dyn_cast<CallBase>(&Value);
   if (!Call)
     return false;

@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call, dynamic CD `select`, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -54,7 +54,7 @@ and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `cd_print`/`print`, defined-function calls, scalar function parameters and
 marked address-space-zero CD parameters/returns, single-slot scalar storage
 through `load_var` and `store_var`, conditional and unconditional branches,
-scalar PHI values, and scalar `select`. Conditional PHI edges use synthetic
+scalar PHI values, and scalar or dynamic CD `select`. Conditional PHI edges use synthetic
 machine edge blocks so each predecessor edge stores the correct incoming value
 before jumping to the successor; symbolic machine block targets are patched to
 artifact instruction offsets before validation.
@@ -70,6 +70,14 @@ The positive identity/mutation/nil fixture and malformed-interface fixture are
 `cdbc-function-values.ll` and `cdbc-function-value-errors.ll`; the former is
 a behavior parity case because its scalar branch has a machine-specific
 control-flow lowering shape.
+
+Dynamic CD `select` uses the same `CDValueABI` provenance rule in both paths:
+the condition is `i1`, both arms are proven address-space-zero CD tokens, and
+the result inherits that provenance. The direct path expands it to existing
+`jump_if_false`/`move`/`jump` instructions; the machine `CD_SELECT` pseudo
+bridges to the same artifact sequence. Foreign or ordinary pointer arms,
+mixed proven/unproven arms, PHI propagation, and dynamic local storage remain
+rejected.
 
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
@@ -328,6 +336,6 @@ machine path opt-in, and
 define collection/value construction separately from aggregate or
 ordinary-pointer lowering. Native calls beyond the allowlist above still
 require a separate name-specific capability matrix before new pseudos are
-implemented. Dynamic PHI/select propagation and dynamic local storage remain
+implemented. Dynamic PHI propagation and dynamic local storage remain
 separate ABI decisions; the function attributes do not authorize those machine
 shapes.

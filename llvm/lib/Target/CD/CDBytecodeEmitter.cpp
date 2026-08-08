@@ -286,7 +286,7 @@ class CDFunctionEmitter {
   void emitSelect(const Instruction &I) {
     const auto *Select = cast<SelectInst>(&I);
     if (!Select->getCondition()->getType()->isIntegerTy(1) ||
-        !isScalarType(Select->getType()) ||
+        !isSupportedOperand(Select) ||
         !isSupportedOperand(Select->getTrueValue()) ||
         !isSupportedOperand(Select->getFalseValue()))
       unsupportedInstruction(I);

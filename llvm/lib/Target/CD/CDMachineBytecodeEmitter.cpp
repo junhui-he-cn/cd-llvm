@@ -741,7 +741,7 @@ class CDMachineModuleEmitter {
   void lowerSelect(const SelectInst &Select, MachineRegisterInfo &MRI,
                    MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (!Select.getCondition()->getType()->isIntegerTy(1) ||
-        !isScalarType(Select.getType()) ||
+        !isSupportedValue(&Select) ||
         !isSupportedValue(Select.getTrueValue()) ||
         !isSupportedValue(Select.getFalseValue()))
       unsupported("an unsupported scalar select");
