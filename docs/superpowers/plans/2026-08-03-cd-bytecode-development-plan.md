@@ -4,8 +4,9 @@
 
 **Goal:** Re-sequence the remaining LLVM CD bytecode work into independently
 verifiable slices, close the M7 release gate, add the next bounded native string
-helpers, and stop at the explicit ABI decisions required for debugger queries,
-dynamic-value transport, and callback natives.
+helpers, then continue with selected callback-native predicate helpers while
+stopping at the explicit ABI decisions required for debugger queries and
+dynamic-value transport.
 
 **Architecture:** Keep the direct emitter as the compatibility path and the
 TableGen machine emitter as an opt-in path sharing `CDValueABI`,
@@ -98,7 +99,7 @@ clean and equals `origin/master`.
 - [ ] **Step 2: Rebuild the LLVM-only tools**
 
 ~~~
-ninja -C build-cd llc FileCheck
+ninja -C build-cd llc FileCheck count not
 ~~~
 
 Expected: exit status `0`; the build must not require `llvm-lit` as a Ninja
@@ -114,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `77 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `83 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -134,10 +135,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link.py \
 git -C cd-compiler status --short --branch
 ~~~
 
-Expected: the existing Rust groups pass (`73 + 3 + 8` in the recorded
-baseline), the direct/machine manifest passes all `52` entries in the current
-checkout, the module-link harness passes, and the nested checkout remains
-clean.
+Expected: the existing Rust groups pass (`73 + 3 + 8`), the direct/machine
+manifest passes all `58` entries in the current checkout, the module-link
+harness passes, and the nested checkout remains clean.
 
 - [ ] **Step 5: Check hosted workflow results without changing workflow scope**
 
@@ -148,9 +148,11 @@ gh run view "$latest_run" --json status,conclusion,jobs
 ~~~
 
 The latest run must contain successful `llvm-only` and `vm-integration` jobs.
-If either job fails, reproduce that job locally and fix only the CD workflow or
-its directly covered fixture/documentation; do not weaken the gate or absorb
-the nested VM checkout into the outer repository.
+Run `31103840045` for `749aef4ba` failed because the workflow omitted LLVM's
+`not` test utility from both build commands; the local fix adds `not` and must
+be published before rerunning. If a rerun fails, reproduce that job locally
+and fix only the CD workflow or its directly covered fixture/documentation; do
+not weaken the gate or absorb the nested VM checkout into the outer repository.
 
 - [ ] **Step 6: Record the release boundary and commit the gate**
 
@@ -306,7 +308,7 @@ diagnostics to match exactly.
 - [x] **Step 5: Run the focused and complete gates**
 
 ~~~
-ninja -C build-cd llc FileCheck
+ninja -C build-cd llc FileCheck count not
 build-cd/bin/llvm-lit -sv \
   llvm/test/CodeGen/CD/cdbc-native-string.ll \
   llvm/test/CodeGen/CD/cdbc-native-errors.ll \
@@ -595,13 +597,47 @@ full local gate passed with 80 lit tests (79 passed, 1 unsupported), parity
 The unchanged Rust VM callback budget test continues to cover instruction
 charging, and the nested checkout remains clean.
 
+## Task 6: Extend the predicate callback lane with `any` and `all`
+
+This follow-on reuses the completed function-value transport and `filter`
+predicate ABI. It adds no opcode, artifact field, `.cdbc 0.1` version, or
+nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-any-all.ll`,
+  `llvm/test/CodeGen/CD/cdbc-native-any-runtime.ll`,
+  `llvm/test/CodeGen/CD/cdbc-native-all-runtime.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-native-predicate-errors.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-machine-parity.list`, the ABI/machine/
+  README/verification documents, and the two roadmap records.
+- Modify: `.github/workflows/cd-bytecode.yml` so clean CI builds the lit
+  `not` utility used by CD diagnostics.
+
+- [x] Admit `any` and `all` only for a proven CD token, a direct defined
+  one-parameter predicate marked by `cd.value.params="0"`, and an exact `i1`
+  result; keep `cd.value.return` forbidden for the predicate.
+- [x] Reuse `make_function` and `native_call` in both direct and machine paths.
+- [x] Cover empty-array identities, positive predicate results, runtime
+  non-array failures, malformed shape/pointer/callback diagnostics, and
+  direct/machine parity.
+- [x] Keep `flatMap`, `count`, `find`, `findIndex`, and `reduce` rejected.
+
+Completed on 2026-08-07. Focused predicate lit passed `4/4`; the local CD
+suite passed `83` tests with `1` expected unsupported VM integration case;
+direct/machine parity passed `58/58`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and
+the nested checkout remained clean. Hosted CI remains pending publication of
+the `not` build fix.
+
 ## Completion and delivery gates
 
 A task is complete only when implementation, ABI docs, README, roadmap status,
 fixtures, and parity rules agree. The applicable checks are:
 
 ~~~
-ninja -C build-cd llc FileCheck
+ninja -C build-cd llc FileCheck count not
 env -u CD_COMPILER_ROOT build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity_test.py
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py

@@ -799,6 +799,23 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "any" || NativeName == "all") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !Call.getType()->isIntegerTy(1)) {
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires a CD dynamic-value array, a direct callback, and "
+               "an i1 result");
+      return false;
+    }
+    if (!isNativeCallback(*Call.getArgOperand(2), false)) {
+      Error = ("llvm.cd.native " + NativeName.str() +
+               " requires a direct defined callback with one "
+               "address-space-zero CD parameter and an i1 result");
+      return false;
+    }
+    return true;
+  }
+
   Error = ("llvm.cd.native native name is not supported by the bounded CD "
            "ABI: " +
            NativeName.str());

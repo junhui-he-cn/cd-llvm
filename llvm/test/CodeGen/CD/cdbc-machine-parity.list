@@ -42,6 +42,9 @@ behavior llvm/test/CodeGen/CD/cdbc-native-map.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-map-runtime.ll "map expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-filter.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-filter-runtime.ll "filter expects array as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-any-all.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-any-runtime.ll "any expects array as first argument"
+runtime-error llvm/test/CodeGen/CD/cdbc-native-all-runtime.ll "all expects array as first argument"
 artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # The range fixture uses fdiv; direct and machine constant materialization
 # order differs, so FileCheck asserts identical ranges and parity checks VM

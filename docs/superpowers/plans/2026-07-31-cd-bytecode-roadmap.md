@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Roadmap status at a glance (2026-08-04)
+## 0. Roadmap status at a glance (2026-08-07)
 
 This document is the high-level roadmap and implementation record.  The
 independently executable queue for the next slices lives in the
@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`any`/`all` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 80 lit (79 passed, 1 unsupported), parity 55/55, VM `73 + 3 + 8`, module-link direct/machine passed |
-| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Current `5b9aef658` run is still in progress; close only after both jobs finish successfully |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter` callbacks are selected and verified |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 84 lit (83 passed, 1 unsupported), parity 58/58, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31103840045` for `749aef4ba` failed because the workflow did not build LLVM's `not` tool; a local workflow fix is prepared and must be published before rerunning |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`any`/`all` callbacks are selected and verified |
 
 ### Active queue after M7-local
 
@@ -57,9 +57,10 @@ opcodes:
 3. Keep the completed function parameter/return transport slice as the ABI
    foundation; design PHI/select or one-slot storage as separate follow-on
    slices.
-4. Add callback native helpers one vertical slice at a time. The `map` and
-   `filter` slices now have explicit callback ABIs; keep the remaining names
-   rejected until their own matrices are defined.
+4. Add callback native helpers one vertical slice at a time. The `map`,
+   `filter`, `any`, and `all` slices now have explicit callback ABIs; keep
+   `flatMap`, `count`, `find`, `findIndex`, and `reduce` rejected until their
+   own matrices are defined.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
 callback support must not introduce an implicit function-value or ordinary
@@ -107,8 +108,8 @@ The outer repository contains the experimental target in:
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
 `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, `charAt`,
-and the selected `map`/`filter` callbacks use target-specific CD intrinsics and
-existing `cdbc 0.1` operations.
+and the selected `map`/`filter`/`any`/`all` callbacks use target-specific CD
+intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
 values.  The first marked function parameter/return boundary is implemented;
@@ -749,6 +750,42 @@ Verification on 2026-08-04: focused filter fixtures passed; the full local
 gate passed with 80 lit tests (79 passed, 1 unsupported), parity 55/55, parity
 unit 14/14, module-link unit 5/5, and Rust VM tests `73 + 3 + 8`; the nested
 checkout remains clean.
+
+### Narrow M4/M8 follow-up: predicate callbacks, `any` and `all` (2026-08-07)
+
+**Goal:** Admit the Rust VM's boolean predicate helpers `any` and `all`
+through the existing `native_call` artifact operation. This slice adds no
+callback opcode, artifact field, or nested VM change.
+
+**Callback ABI gate:**
+`llvm.cd.native(ptr name, ptr value, ptr predicate) -> i1` requires a proven
+CD token for `value` and a direct defined LLVM function with exactly one
+address-space-zero pointer parameter marked by `cd.value.params="0"`. The
+predicate returns exactly `i1` and must not carry `cd.value.return`.
+Declarations, casts, indirect function pointers, `@main`, ordinary pointer
+values, and `flatMap`, `count`, `find`, `findIndex`, and `reduce` remain
+rejected. The VM performs the runtime array/type, callback-arity, predicate
+result, budget, cancellation, and short-circuit checks.
+
+The Rust matrix used for this choice is: `any` returns `false` for an empty
+array and stops at the first true predicate result; `all` returns `true` for
+an empty array and stops at the first false predicate result. Both snapshot
+the input elements, invoke predicates left to right, and use the existing
+native checkpoint and callback frame behavior.
+
+- [x] Reuse the shared direct/machine callback validation and function-value
+  materialization path with exact `i1` native results.
+- [x] Add positive empty/matching/rejecting, malformed shape/pointer/callback,
+  runtime type-error, and direct/machine parity fixtures.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan without changing `cdbc 0.1` or the nested checkout.
+
+Verification on 2026-08-07: focused predicate lit passed `4/4`; the local
+suite passed `83` tests with `1` expected unsupported VM integration case;
+direct/machine parity passed `58/58`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and
+the nested checkout remained clean. The hosted gate remains pending the
+workflow fix that builds LLVM's `not` test utility.
 
 ## 9. M5 — Add source-backed debug metadata
 

@@ -6,7 +6,7 @@ the Rust VM remains an explicitly selected integration dependency.
 
 ## Recorded Environment
 
-Recorded on 2026-08-04 from the current checkout:
+Recorded on 2026-08-07 from the current checkout:
 
 | Component | Observed version |
 | --- | --- |
@@ -32,9 +32,10 @@ The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
 
-The current local LLVM-only run is `79 passed / 1 unsupported` across 80
-fixtures. The direct/machine parity manifest has 55 passing entries, including
-the selected `map` and `filter` callback behavior and runtime type-error cases.
+The current local LLVM-only run is `83 passed / 1 unsupported` across 84
+fixtures. The direct/machine parity manifest has 58 passing entries, including
+the selected `map`, `filter`, `any`, and `all` callback behavior and runtime
+type-error cases.
 
 ## Opt-In VM Gate
 
@@ -61,7 +62,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link.py --llc build-cd/bi
 `.github/workflows/cd-bytecode.yml` keeps the two dependency boundaries
 explicit:
 
-- `llvm-only` builds `llc`, `FileCheck`, and `llvm-lit`, then runs the CD lit
+- `llvm-only` builds `llc`, `FileCheck`, `count`, and `not`, then runs the CD lit
   directory with `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
 - `vm-integration` checks out `junhui-he-cn/cd-compiler` at the recorded
   commit `0295380ce3e29763949c09a815bda96cbed28ee2`, installs Rust 1.94.1,
@@ -77,7 +78,7 @@ job that sets `CD_COMPILER_ROOT`.
 Build the target tools before running the gates:
 
 ~~~sh
-ninja -C build-cd llc
+ninja -C build-cd llc FileCheck count not
 build-cd/bin/llvm-lit -q llvm/test/CodeGen/CD
 git diff --check
 ~~~
@@ -117,7 +118,7 @@ and `!cd.sources` metadata instead.
 | Driver options and output modes | cdbc-driver-options.ll and cdbc-optimization.ll | `-mtriple`, O0/O2, object rejection, and the upstream `-g` boundary passed |
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
-| Callback native `map` and `filter` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, and callback-shape diagnostics passed |
+| Callback native `map`, `filter`, `any`, and `all` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, short-circuit predicate ABI, and callback-shape diagnostics passed |
 | llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 
 The parity evidence can be rerun with an explicitly built VM binary:

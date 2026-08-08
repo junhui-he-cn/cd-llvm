@@ -198,18 +198,22 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`,
-`substr`, `charAt`, and the callback helpers `map` and `filter`. The name must be a
-private constant UTF-8 global; each name has an exact scalar/CD-value argument
+`substr`, `charAt`, and the callback helpers `map`, `filter`, `any`, and `all`.
+The name must be a private constant UTF-8 global; each name has an exact
+scalar/CD-value argument
 and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
 `charAt` accept explicit CD dynamic-value tokens and leave string type, Unicode
 scalar boundaries, integer-valuedness, and bounds errors to the Rust VM.
 `map` accepts one CD token and a direct defined callback with the explicit
 `cd.value.params="0"`/`cd.value.return` ABI markers; `filter` accepts one CD
 token and a direct defined predicate with `cd.value.params="0"` and an `i1`
-result. Both callback values are materialized with `make_function` before
-`native_call`. Direct and opt-in machine lowering share the `native_call`
-artifact bridge and parity coverage. The remaining callback helpers,
-unsupported names, and ordinary pointer arguments remain rejected.
+result. `any` and `all` accept the same direct predicate shape, return exact
+`i1`, and use the empty-array and short-circuit behavior owned by the Rust VM.
+All callback values are materialized with `make_function` before `native_call`.
+Direct and opt-in machine lowering share the `native_call` artifact bridge and
+parity coverage. The remaining callback helpers `flatMap`, `count`, `find`,
+`findIndex`, and `reduce`, unsupported names, and ordinary pointer arguments
+remain rejected.
 
 The M5A debug-source-table foundation accepts an explicit `!cd.sources` named
 metadata node with `path,text` or `module,path,text` string records. It validates
