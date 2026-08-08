@@ -24,8 +24,8 @@ independent `cd-compiler/vm-rs` Rust VM.
 
 ## Current state and operating rules
 
-The current outer checkout is `main`, ahead of `origin/main` by the local
-roadmap and contract commits. The independent, untracked `cd-compiler/`
+The current outer checkout is `main`, synchronized with `origin/main` at the
+last delivered boundary. The independent, untracked `cd-compiler/`
 checkout is not part
 of this repository and must remain clean unless a future ABI decision
 explicitly requires a separate VM change. The roadmap and this active plan may
@@ -115,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `92 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `95 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -136,7 +136,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8`), the direct/machine
-manifest passes all `66` entries in the current checkout, the module-link
+manifest passes all `68` entries in the current checkout, the module-link
 harness passes, and the nested checkout remains clean.
 
 - [ ] **Step 5: Check hosted workflow results without changing workflow scope**
@@ -149,8 +149,9 @@ gh run view "$latest_run" --json status,conclusion,jobs
 
 The latest run must contain successful `llvm-only` and `vm-integration` jobs.
 Run `31103840045` for `749aef4ba` failed because the workflow omitted LLVM's
-`not` test utility from both build commands; the local fix adds `not` and must
-be published before rerunning. If a rerun fails, reproduce that job locally
+`not` test utility from both build commands. The current workflow includes
+`not`, and run `31245584718` for `770542a7e` is the active hosted check. If it
+fails, reproduce that job locally
 and fix only the CD workflow or its directly covered fixture/documentation; do
 not weaken the gate or absorb the nested VM checkout into the outer repository.
 
@@ -659,8 +660,8 @@ Completed on 2026-08-08. Focused count/predicate lit passed `3/3`; the full
 local CD suite passed `85` tests with `1` expected unsupported VM integration
 case; direct/machine parity passed `60/60`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
-nested checkout remained clean. The hosted M7 gate remains pending publication
-of the workflow fix that builds LLVM's `not` test utility.
+nested checkout remained clean. The hosted M7 gate remains pending the result
+of run `31245584718`.
 
 ## Task 8: Extend the predicate callback lane with `find`
 
@@ -752,7 +753,7 @@ version, or nested VM change.
 - [x] Reuse `make_function` and `native_call` in both direct and machine paths.
 - [x] Cover empty/nested-array flattening, the non-array runtime failure,
   malformed shape/pointer/callback diagnostics, and direct/machine parity.
-- [x] Keep `reduce` rejected.
+- [x] Defer `reduce` to its own callback ABI slice.
 
 Completed on 2026-08-08. Focused flatMap lit passed `3/3`; the full local CD
 suite passed `92` tests with `1` expected unsupported VM integration case;
@@ -760,6 +761,52 @@ direct/machine parity passed `66/66`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
 nested checkout remained clean. The hosted M7 gate remains pending publication
 of the workflow fix that builds LLVM's `not` test utility.
+
+## Task 11: Extend the callback native lane with `reduce`
+
+This follow-on reuses the completed dynamic callback ABI and the existing
+`native_call` artifact operation. It adds no opcode, artifact field, `.cdbc 0.1`
+version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-reduce.ll`,
+  `llvm/test/CodeGen/CD/cdbc-native-reduce-runtime.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-native-reduce-errors.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, and two
+  roadmap documents.
+
+The source shape is:
+
+~~~llvm
+define ptr @combine(ptr %accumulator, ptr %item) #0 {
+entry:
+  ret ptr %item
+}
+
+%reduced = call ptr (ptr, ...) @llvm.cd.native(
+    ptr @reduce_name, ptr %array, double 0.0, ptr @combine)
+
+attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
+~~~
+
+- [x] Admit `reduce` only for a proven CD array token, a scalar or CD initial
+  value, a direct defined two-parameter callback marked by
+  `cd.value.params="0,1"`, an address-space-zero `cd.value.return` callback
+  result, and an exact address-space-zero `ptr` native result.
+- [x] Reuse `make_function` and `native_call` in both direct and machine paths.
+- [x] Cover empty/left-to-right accumulator behavior, the non-array runtime
+  failure, malformed shape/pointer/callback diagnostics, and direct/machine
+  parity.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  roadmap records without changing `cdbc 0.1` or the nested checkout.
+
+Completed on 2026-08-08. Focused reduce lit passed `4/4`; the full local CD and
+parity gates are refreshed by the final verification run. The hosted M7
+workflow run for the preceding baseline remains an external pending check.
 
 ## Completion and delivery gates
 

@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call, and `map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -122,7 +122,7 @@ aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
 `hash`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
-`flatMap`, `any`, `all`, `count`, `find`, and `findIndex`. Their
+`flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`. Their
 name-table index is an immediate machine operand, while arguments and the
 result remain in the `CDValue` virtual register class. The `CD_NATIVE_CALL`
 bridge emits the existing `native_call` artifact operation after shared
@@ -133,11 +133,17 @@ For `map`, the machine lowerer accepts only a direct defined callback with one
 address-space-zero CD parameter marked by `cd.value.params="0"` and a
 `cd.value.return` pointer result. It materializes that function with
 `CD_MAKE_FUNCTION` before `CD_NATIVE_CALL`; declarations, casts, indirect
-function pointers, `@main`, and the remaining callback names stay rejected.
+function pointers, `@main`, and unsupported callback shapes stay rejected.
 For `flatMap`, it accepts the same direct callback shape and pointer result,
 materializes the callback with `CD_MAKE_FUNCTION` before `CD_NATIVE_CALL`, and
 leaves snapshot iteration, one-level flattening, per-element checkpoints, and
 runtime callback-result checks to the VM.
+For `reduce`, it accepts a proven CD array token, a scalar or CD initial value,
+and a direct defined callback with two address-space-zero CD parameters marked
+by `cd.value.params="0,1"` plus a `cd.value.return` pointer result. It
+materializes the callback with `CD_MAKE_FUNCTION` before `CD_NATIVE_CALL`; the
+VM owns empty-input identity, left-to-right accumulator threading, callback
+frames, checkpoints, budget, cancellation, and runtime array checks.
 For `filter`, it accepts the same direct defined callback shape with one marked
 address-space-zero CD parameter, but requires an exact `i1` result and no
 `cd.value.return` marker. It also materializes the predicate with
@@ -164,8 +170,7 @@ zero-based first-match behavior, empty/no-match `-1`, runtime array and
 predicate checks, budget, cancellation, and callback failures.
 The array operand is only statically proven as a CD token; the VM owns the
 runtime array check, callback iteration, budget, and
-cancellation behavior. Unsupported names (`reduce`) and ordinary pointer
-arguments remain outside this
+cancellation behavior. Unsupported names and ordinary pointer arguments remain outside this
 boundary.
 
 The M5 source-table slice parses the same explicit `!cd.sources` named metadata
@@ -318,7 +323,7 @@ the pseudo-instruction model:
   `CDBytecodeFormat` validation.
 
 The current M4 map, record, enum-variant, bounded native-call, and selected
-`map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` callback slices retain the direct path, keep the
+`map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback slices retain the direct path, keep the
 machine path opt-in, and
 define collection/value construction separately from aggregate or
 ordinary-pointer lowering. Native calls beyond the allowlist above still

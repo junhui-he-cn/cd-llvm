@@ -92,7 +92,7 @@ static bool isSupportedNativeName(StringRef Name) {
          Name == "map" || Name == "filter" || Name == "flatMap" ||
          Name == "any" ||
          Name == "all" || Name == "count" || Name == "find" ||
-         Name == "findIndex";
+         Name == "findIndex" || Name == "reduce";
 }
 
 static bool validateRegister(const CDBody &Body, unsigned Register,

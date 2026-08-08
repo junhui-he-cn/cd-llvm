@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; other callback names stay rejected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | PHI/select and dynamic local storage remain separate ABI decisions; future callback names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 93 lit (92 passed, 1 unsupported), parity 66/66, VM `73 + 3 + 8`, module-link direct/machine passed |
-| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31103840045` for `749aef4ba` failed because the workflow did not build LLVM's `not` tool; a local workflow fix is prepared and must be published before rerunning |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` callbacks are selected and verified |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 96 lit (95 passed, 1 unsupported), parity 68/68, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` is in progress; the workflow now builds LLVM's `not`, while `31103840045` was the older pre-fix failure |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; PHI/select and dynamic storage remain deferred; `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks are selected and verified |
 
 ### Active queue after M7-local
 
@@ -58,9 +58,9 @@ opcodes:
    foundation; design PHI/select or one-slot storage as separate follow-on
    slices.
 4. Add callback native helpers one vertical slice at a time. The `map`,
-   `filter`, `flatMap`, `any`, `all`, `count`, `find`, and `findIndex` slices
-   now have explicit callback ABIs; keep `reduce` rejected until its own
-   matrix is defined.
+   `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
+   slices now have explicit callback ABIs; keep future callback names rejected
+   until their own matrices are defined.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
 callback support must not introduce an implicit function-value or ordinary
@@ -108,7 +108,7 @@ The outer repository contains the experimental target in:
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
 `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, `charAt`,
-and the selected `map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` callbacks use target-specific CD
+and the selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks use target-specific CD
 intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
@@ -930,6 +930,40 @@ direct/machine parity passed `66/66`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, Rust VM tests passed `73 + 3 + 8`, and the
 nested checkout remained clean. The hosted M7 gate remains pending publication
 of the workflow fix that builds LLVM's `not` test utility.
+
+### Narrow M4/M8 follow-up: callback native, `reduce` (2026-08-08)
+
+**Goal:** Admit the Rust VM's accumulator-threading helper `reduce` through the
+existing `native_call` artifact operation. This slice adds no callback opcode,
+artifact field, `.cdbc 0.1` version, or nested VM change.
+
+**Callback ABI gate:**
+`llvm.cd.native(ptr name, ptr array, value initial, ptr callback) -> ptr` requires
+a proven CD array token, a scalar or proven CD dynamic-value initial operand,
+and a direct defined LLVM function with exactly two address-space-zero pointer
+parameters marked by `cd.value.params="0,1"`. The callback returns an
+address-space-zero pointer marked by `cd.value.return`, and the native result is
+an exact address-space-zero `ptr`. Declarations, casts, indirect callbacks,
+`@main`, ordinary pointer operands, and incomplete parameter markers remain
+rejected.
+
+The Rust matrix used for this choice is: `reduce` snapshots the input array,
+returns the initial value for empty input, invokes the callback left to right
+with `(accumulator, item)`, and threads each callback result into the next
+iteration. Callback frames, native checkpoints, budget, cancellation, and
+runtime array checks remain VM-owned.
+
+- [x] Generalize shared callback validation to the two marked CD parameters and
+  reuse direct/machine function-value materialization.
+- [x] Add positive empty/left-to-right, malformed shape/pointer/callback,
+  non-array runtime-error, and direct/machine parity fixtures.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan without changing `cdbc 0.1` or the nested checkout.
+
+Verification on 2026-08-08: focused reduce lit passed `4/4`; the full local CD
+suite and parity counts are refreshed by the final gate for this slice. The
+hosted M7 workflow run for the preceding `flatMap` baseline remains an external
+pending check.
 
 ## 9. M5 — Add source-backed debug metadata
 

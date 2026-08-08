@@ -1,8 +1,6 @@
 ; RUN: split-file %s %t
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/unknown-name.ll -o - 2>&1 | FileCheck %s --check-prefix=UNKNOWN-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/unknown-name.ll -o - 2>&1 | FileCheck %s --check-prefix=UNKNOWN-MACHINE
-; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/callback-name.ll -o - 2>&1 | FileCheck %s --check-prefix=CALLBACK-DIRECT
-; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/callback-name.ll -o - 2>&1 | FileCheck %s --check-prefix=CALLBACK-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-SHAPE-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/map-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-SHAPE-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MAP-POINTER-DIRECT
@@ -64,8 +62,6 @@
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
-; CALLBACK-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: reduce
-; CALLBACK-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: reduce
 ; MAP-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
 ; MAP-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
 ; MAP-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native map requires a CD dynamic-value array, a direct callback, and a ptr result
@@ -127,15 +123,6 @@
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
-declare double @llvm.cd.native(ptr, ...)
-define i32 @main() {
-entry:
-  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, double 1.0)
-  ret i32 0
-}
-
-;--- callback-name.ll
-@name = private unnamed_addr constant [7 x i8] c"reduce\00"
 declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:

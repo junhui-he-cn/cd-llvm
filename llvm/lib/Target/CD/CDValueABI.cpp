@@ -292,7 +292,8 @@ bool validateFunctionABI(const Function &F, std::string &Error) {
   return true;
 }
 
-static bool isNativeCallback(const Value &Value, bool ReturnsCDValue) {
+static bool isNativeCallback(const Value &Value, bool ReturnsCDValue,
+                             unsigned ParameterCount = 1) {
   const auto *Callback = dyn_cast<Function>(&Value);
   if (!Callback || Callback->isDeclaration() || Callback->isIntrinsic() ||
       Callback->getName() == "main")
@@ -302,10 +303,14 @@ static bool isNativeCallback(const Value &Value, bool ReturnsCDValue) {
   SmallVector<unsigned, 8> Parameters;
   if (!validateFunctionABI(*Callback, Error) ||
       !parseCDValueParameterAttribute(*Callback, Parameters, Error) ||
-      Parameters.size() != 1 || Parameters.front() != 0 ||
-      Callback->arg_size() != 1 ||
-      !isAddressSpaceZeroPointer(Callback->getArg(0)->getType()))
+      Parameters.size() != ParameterCount ||
+      Callback->arg_size() != ParameterCount)
     return false;
+
+  for (unsigned Index = 0; Index < ParameterCount; ++Index)
+    if (Parameters[Index] != Index ||
+        !isAddressSpaceZeroPointer(Callback->getArg(Index)->getType()))
+      return false;
 
   if (ReturnsCDValue)
     return isAddressSpaceZeroPointer(Callback->getReturnType()) &&
@@ -781,6 +786,23 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
                " requires a direct defined callback with one "
                "address-space-zero CD parameter and a cd.value.return pointer "
                "result");
+      return false;
+    }
+    return true;
+  }
+
+  if (NativeName == "reduce") {
+    if (Call.arg_size() != 4 || !isCDValue(*Call.getArgOperand(1)) ||
+        !isArrayElement(*Call.getArgOperand(2)) || !HasCDPointerResult) {
+      Error = "llvm.cd.native reduce requires a CD dynamic-value array, a "
+              "scalar or CD dynamic-value initial value, a direct callback, "
+              "and a ptr result";
+      return false;
+    }
+    if (!isNativeCallback(*Call.getArgOperand(3), true, 2)) {
+      Error = "llvm.cd.native reduce requires a direct defined callback with "
+              "two address-space-zero CD parameters and a cd.value.return "
+              "pointer result";
       return false;
     }
     return true;

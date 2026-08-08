@@ -42,6 +42,8 @@ behavior llvm/test/CodeGen/CD/cdbc-native-map.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-map-runtime.ll "map expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-flat-map.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-flat-map-runtime.ll "flatMap expects array as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-reduce.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-reduce-runtime.ll "reduce expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-filter.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-filter-runtime.ll "filter expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-any-all.ll

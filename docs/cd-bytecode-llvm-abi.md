@@ -2,14 +2,14 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call, and `map` /
-`filter` / `flatMap` / `any` / `all` / `count` / `find` / `findIndex`
+`filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
 implemented; M6 module-envelope and opt-in linker integration implemented; the
 first M8 dynamic-value function parameter/return transport slice is
 implemented, 2026-08-08. PHI/select and dynamic local storage remain deferred;
-the other callback helper remains outside the selected
-`map`/`filter`/`flatMap`/`any`/`all`/`count`/`find`/`findIndex` slices.
+future callback helpers remain outside the selected
+`map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` slices.
 
 This document defines the boundary between LLVM IR values and the dynamic
 values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
@@ -568,7 +568,7 @@ parameters/returns, PHI/select, allocas, pointer operations, or external calls.
 The bounded allowlist below is implemented through the shared ABI validator,
 the typed artifact model, and both direct and opt-in machine emitters. The
 Rust VM remains the runtime oracle; only the explicitly documented `map`,
-`filter`, `flatMap`, `any`, `all`, `count`, `find`, and `findIndex` callback shapes are admitted in
+`filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex` callback shapes are admitted in
 addition to the non-callback helpers.
 
 ### Accepted source shape
@@ -600,6 +600,7 @@ for the selected native name. The first bounded capability matrix is:
 | `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
 | `map` | one CD dynamic-value token, one direct callback function value | address-space-zero `ptr` | fresh array of callback results |
 | `flatMap` | one CD dynamic-value token, one direct callback function value | address-space-zero `ptr` | fresh array with one-level callback-array flattening |
+| `reduce` | one CD dynamic-value array token, one scalar or CD dynamic-value initial value, one direct callback function value | address-space-zero `ptr` | left-to-right accumulator threading |
 | `filter` | one CD dynamic-value token, one direct predicate function value | address-space-zero `ptr` | fresh shallow array of matching source values |
 | `any` | one CD dynamic-value token, one direct predicate function value | `i1` | short-circuit true when any predicate result is true |
 | `all` | one CD dynamic-value token, one direct predicate function value | `i1` | short-circuit false when any predicate result is false |
@@ -618,7 +619,7 @@ Unicode scalar boundaries, and range checks. Both operations return a fresh
 string value and do not mutate or alias the source. Name-table metadata is not
 a CD string value, and arbitrary ordinary pointers are rejected.
 
-Unknown names and the not-yet-selected callback helper `reduce` remain
+Unknown names and callback helpers without a documented matrix remain
 compile-time target errors. This restriction prevents a
 native call from becoming an unbounded external-call
 escape hatch.
@@ -686,6 +687,39 @@ array's elements to a fresh one-level result. It checks the native checkpoint
 before each callback and before each flattened element; runtime array/result
 types, budget, cancellation, and callback failures remain VM-owned. Empty input
 returns a fresh empty array.
+
+### `reduce` callback boundary
+
+`reduce` carries both the initial accumulator and each array element through a
+two-parameter dynamic callback:
+
+```llvm
+@reduce_name = private unnamed_addr constant [7 x i8] c"reduce\00"
+
+define ptr @last(ptr %accumulator, ptr %item) #0 {
+entry:
+  ret ptr %item
+}
+
+%reduced = call ptr (ptr, ...) @llvm.cd.native(
+    ptr @reduce_name, ptr %array, double 0.0, ptr @last)
+
+attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
+```
+
+The array operand must be a proven address-space-zero CD array token, and the
+initial value may be a scalar or proven CD dynamic-value token. The callback
+must be a direct, defined LLVM function with exactly two address-space-zero
+pointer parameters marked by `cd.value.params="0,1"`, and an address-space-zero
+pointer return marked by `cd.value.return`. The native result is an exact
+address-space-zero `ptr`; declarations, casts, indirect callbacks, `@main`,
+ordinary pointer operands, and incomplete parameter markers remain rejected.
+
+Both emitters materialize the callback with `make_function` before emitting
+`native_call`. The Rust VM snapshots the input, returns the initial value for
+an empty array, and invokes the callback left to right with `(accumulator,
+item)`, threading each result into the next call. Callback frames, native
+checkpoints, budget, cancellation, and runtime array checks remain VM-owned.
 
 ### `filter` callback boundary
 
@@ -909,7 +943,7 @@ the name-specific matrix above, emits `native_call` through both backends,
 rejects unknown/not-yet-selected callback names and ordinary pointer
 substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
 plus shared runtime failures for numeric, string, `map`, `filter`, `flatMap`,
-`any`, `all`, `count`, `find`, and `findIndex` helpers.
+`reduce`, `any`, `all`, `count`, `find`, and `findIndex` helpers.
 The string-helper extension additionally requires UTF-8 scalar-boundary output
 and malformed shape diagnostics for both `substr` and `charAt`.
 
