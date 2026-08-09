@@ -27,8 +27,9 @@ artifact. Address-space-zero `ptr null` remains the CD `nil` value. Pointer
 function parameters and returns require the explicit `cd.value.params` and
 `cd.value.return` attributes described below; ordinary pointer interfaces remain
 unsupported. A dynamic CD `select` uses the same sequence when its `i1`
-condition selects between two proven address-space-zero CD tokens; PHI
-propagation and dynamic local storage remain unsupported.
+condition selects between two proven address-space-zero CD tokens. A dynamic
+CD PHI uses existing edge stores and block-entry loads when every incoming
+address-space-zero `ptr` is proven; dynamic local storage remains unsupported.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
@@ -133,10 +134,11 @@ wire operation or artifact version is needed.
 The Rust VM copies arguments into fresh parameter cells and copies return
 values into the caller register. Mutable array, map, and struct handles keep
 shared backing storage across the call, so explicit callee mutation is visible;
-rebinding a parameter is local. Dynamic CD `select` propagation is covered by
-`cdbc-dynamic-select.ll`; PHI propagation and dynamic local storage remain
-deferred ABI decisions. The positive and malformed function boundaries are
-covered by `cdbc-function-values.ll` and `cdbc-function-value-errors.ll`.
+rebinding a parameter is local. Dynamic CD `select` and PHI propagation are
+covered by `cdbc-dynamic-select.ll` and `cdbc-dynamic-phi.ll`; dynamic local
+storage remains a deferred ABI decision. The positive and malformed function
+boundaries are covered by `cdbc-function-values.ll` and
+`cdbc-function-value-errors.ll`.
 
 The first M4 collection operation is `llvm.cd.array(i32 count, ...)`. The
 immediate count must equal the number of following scalar, address-space-zero
@@ -144,8 +146,8 @@ immediate count must equal the number of following scalar, address-space-zero
 must be explicit (`call ptr (i32, ...) @llvm.cd.array(...)`). The target lowers
 the payload to the existing `array` instruction; array results may be printed
 or nested in another constructor, while ordinary pointer, aggregate, storage,
-function-parameter/return, and ordinary `select` uses remain rejected. A
-dynamic CD `select` is accepted only for proven address-space-zero tokens. The direct and
+function-parameter/return, and ordinary `select`/PHI uses remain rejected. A
+dynamic CD `select` or PHI is accepted only for proven address-space-zero tokens. The direct and
 machine paths validate the same capability matrix and share the same artifact
 bridge.
 
@@ -158,8 +160,8 @@ array elements can share one ABI; `len` returns a CD number as `double`.
 `assert.array` preserves the VM's runtime type/conversion behavior. The direct
 and machine paths share validation, artifact serialization, and Rust VM output
 parity. These results remain local and cannot yet cross ordinary function,
-pointer, or PHI boundaries; a dynamic CD `select` may choose between proven
-results.
+pointer, or dynamic local storage boundaries; dynamic CD `select` and PHI may
+choose or merge proven results.
 
 `llvm.cd.assign.index` is the explicit array/map mutation boundary. Its
 collection and index must be a CD dynamic-value token and `double`; its value

@@ -32,11 +32,11 @@ The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
 
-The current local LLVM-only run is `97 passed / 1 unsupported` across 98
-fixtures. The direct/machine parity manifest has 69 passing entries, including
+The current local LLVM-only run is `99 passed / 1 unsupported` across 100
+fixtures. The direct/machine parity manifest has 70 passing entries, including
 the selected `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
-callback behavior and runtime type-error cases, plus dynamic CD `select`
-behavior.
+callback behavior and runtime type-error cases, plus dynamic CD `select` and
+PHI behavior.
 
 ## Opt-In VM Gate
 
@@ -127,6 +127,7 @@ and `!cd.sources` metadata instead.
 | Object output rejection | cdbc-basic.ll and cdbc-machine-control-flow.ll | Stable rejection passed |
 | Invalid IR shape and CD ABI operations | cdbc-invalid-shape.ll, cdbc-array-errors.ll, cdbc-map-errors.ll, and related error fixtures | Direct/machine diagnostics passed |
 | Dynamic CD `select` propagation | cdbc-dynamic-select.ll and cdbc-dynamic-select-errors.ll | Proven address-space-zero arms pass direct/machine artifact and behavior parity; ordinary, foreign, and mixed pointer arms remain rejected |
+| Dynamic CD PHI propagation | cdbc-dynamic-phi.ll and cdbc-dynamic-phi-errors.ll | Proven address-space-zero incoming edges, including a loop-carried PHI, pass direct/machine artifact and behavior parity; ordinary, foreign, mixed, undef, and poison incoming values remain rejected |
 | Callback native `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-flat-map.ll, cdbc-native-flat-map-runtime.ll, cdbc-native-flat-map-errors.ll, cdbc-native-reduce.ll, cdbc-native-reduce-runtime.ll, cdbc-native-reduce-errors.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-count.ll, cdbc-native-count-runtime.ll, cdbc-native-find.ll, cdbc-native-find-runtime.ll, cdbc-native-find-index.ll, cdbc-native-find-index-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, one-level callback-array flattening, left-to-right accumulator threading, predicate ABI, full count traversal, first-match/no-match `find` behavior, zero-based first-match/no-match `findIndex` behavior, and callback-shape diagnostics passed |
 | llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 

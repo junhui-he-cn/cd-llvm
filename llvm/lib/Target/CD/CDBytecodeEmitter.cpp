@@ -750,7 +750,7 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
       }
 
       if (auto *Phi = dyn_cast<PHINode>(&I)) {
-        if (!isScalarType(Phi->getType()))
+        if (!isScalarType(Phi->getType()) && !cd::isCDValue(*Phi))
           unsupportedInstruction(I);
         const std::string Base = Phi->hasName()
                                      ? Phi->getName().str()

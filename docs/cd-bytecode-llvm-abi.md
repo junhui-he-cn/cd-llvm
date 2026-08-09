@@ -8,7 +8,8 @@ instruction-location, source-backed runtime-diagnostic, and debug-range slices
 implemented; M6 module-envelope and opt-in linker integration implemented; the
 first M8 dynamic-value function parameter/return transport slice is
 implemented, 2026-08-08; dynamic CD `select` propagation is implemented,
-2026-08-08. PHI propagation and dynamic local storage remain deferred;
+2026-08-08; dynamic CD PHI propagation is implemented, 2026-08-08. Dynamic
+local storage remains deferred;
 future callback helpers remain outside the selected
 `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` slices.
 
@@ -229,8 +230,8 @@ The resulting CD string token may currently be:
 
 Ordinary scalar operations, pointer comparisons, loads/stores, unmarked calls,
 and native calls do not accept this token. Marked function parameters and
-returns are covered by the function-boundary slice below; PHI propagation and
-dynamic local storage remain deferred.
+returns are covered by the function-boundary slice below; dynamic local storage
+remains deferred while the follow-on PHI slice below handles proven SSA merges.
 
 ## Function-boundary dynamic values: first transport slice
 
@@ -264,8 +265,9 @@ call validators before lowering.
 
 Mixed scalar and marked CD parameters are allowed. A marked parameter may be
 printed, consumed by an explicit CD intrinsic, passed to another marked
-function, or returned through a marked pointer-return ABI. The first slice does
-not infer CD provenance for PHI values or ordinary load/store results.
+function, or returned through a marked pointer-return ABI. The first boundary
+slice did not infer CD provenance for PHI values or ordinary load/store results;
+the follow-on PHI rule below now admits proven incoming edges.
 
 The artifact representation is unchanged:
 
@@ -295,9 +297,26 @@ explicit CD consumer.
 
 Both emitters lower the operation through existing artifact control flow and
 register moves: `jump_if_false`, a true-arm `move`, `jump`, and a false-arm
-`move`. No new `cdbc 0.1` opcode or field is introduced. PHI propagation,
-one-slot dynamic local storage, and function-value callback transport remain
-separate ABI decisions and are not inferred from this rule.
+`move`. No new `cdbc 0.1` opcode or field is introduced. Dynamic local storage
+and function-value callback transport remain separate ABI decisions and are
+not inferred from this rule.
+
+### Dynamic CD PHI propagation
+
+An LLVM `phi` may carry a dynamic CD token only when its result is a non-empty,
+address-space-zero `ptr` PHI and every incoming value has proven CD provenance.
+The incoming values may be CD nil, explicit intrinsic results, marked
+parameters, marked-return calls, dynamic `select` results, or other proven
+PHI values. Mixed nil and non-nil handles are valid; ordinary pointers,
+foreign address spaces, `undef`, poison, and pointer operations remain target
+errors. Loop-carried PHIs use the same rule, with recursive provenance walks
+tracking back-edges without treating an unproven terminal value as CD.
+
+Both emitters reuse the existing PHI edge `store_var` operations and block-entry
+`load_var` operation. This gives dynamic handles the VM's existing move and
+aliasing behavior without adding an opcode, artifact field, or `.cdbc 0.1`
+version. Dynamic local storage and function-value callback transport remain
+separate ABI decisions.
 
 ## Future ABI groups
 
@@ -398,7 +417,7 @@ runtime type/bounds failures remain VM errors and are never lowered to `nil`.
 The first LLVM access slice permits these results only as local dynamic values:
 they may be printed, used as array-constructor elements, or fed to another
 explicit access/assertion intrinsic. Ordinary pointer operations, external
-calls, function parameters/returns, and PHI propagation remain outside
+calls, unmarked function interfaces, and dynamic local storage remain outside
 this slice. Mutation is enabled only through the separate explicit
 `llvm.cd.assign.index` intrinsic below.
 
@@ -439,8 +458,8 @@ The LLVM target does not pre-evaluate these checks or convert failures to
 
 The mutation result is local in this slice. It may be printed, used as an
 array-constructor element, or passed to another explicit access/assertion
-intrinsic. It may not cross ordinary function parameters/returns, PHI,
-alloca, pointer operations, or external calls. Ordinary LLVM stores and
+intrinsic. It may not cross unmarked function parameters/returns, dynamic
+local storage, allocas, pointer operations, or external calls. Ordinary LLVM stores and
 aggregate operations never imply `assign_index`.
 
 ### Map constructor ABI gate
@@ -477,8 +496,8 @@ errors owned by the VM; lowering does not silently coerce a key or emit nil.
 
 The map token is local in the first slice. It may be printed, indexed, measured,
 asserted, used as an explicit `assign_index` collection, or nested as a value
-in another explicit constructor. It may not cross ordinary function
-parameters/returns, PHI, allocas, pointer operations, or external calls.
+in another explicit constructor. It may not cross unmarked function
+parameters/returns, dynamic local storage, allocas, pointer operations, or external calls.
 The intrinsic is the only proof that an LLVM `ptr` denotes a CD map.
 
 ## Record values: first field ABI group
@@ -526,8 +545,8 @@ diagnostic is `undefined field \`missing\``.
 
 The record results are local CD values in this slice. They may be printed,
 passed to another explicit field/collection intrinsic, or used as a supported
-dynamic-value operand. They may not cross ordinary function parameters/returns,
-PHI, allocas, pointer operations, or external calls. An arbitrary LLVM
+dynamic-value operand. They may not cross unmarked function parameters/returns,
+dynamic local storage, allocas, pointer operations, or external calls. An arbitrary LLVM
 pointer is never treated as a struct object.
 
 ## Enum variant values: explicit variant ABI
@@ -573,8 +592,8 @@ payload index produces `enum variant field index out of bounds`.
 
 Variant values are local CD values in this slice. They may be printed, used as
 payloads of another explicit constructor, or passed to another explicit
-variant/collection/field intrinsic. They may not cross ordinary function
-parameters/returns, PHI, allocas, pointer operations, or external calls.
+variant/collection/field intrinsic. They may not cross unmarked function
+parameters/returns, dynamic local storage, allocas, pointer operations, or external calls.
 
 ## Native calls: bounded stdlib ABI
 

@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call, dynamic CD `select`, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -54,7 +54,7 @@ and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `cd_print`/`print`, defined-function calls, scalar function parameters and
 marked address-space-zero CD parameters/returns, single-slot scalar storage
 through `load_var` and `store_var`, conditional and unconditional branches,
-scalar PHI values, and scalar or dynamic CD `select`. Conditional PHI edges use synthetic
+scalar or dynamic CD PHI values, and scalar or dynamic CD `select`. Conditional PHI edges use synthetic
 machine edge blocks so each predecessor edge stores the correct incoming value
 before jumping to the successor; symbolic machine block targets are patched to
 artifact instruction offsets before validation.
@@ -76,8 +76,15 @@ the condition is `i1`, both arms are proven address-space-zero CD tokens, and
 the result inherits that provenance. The direct path expands it to existing
 `jump_if_false`/`move`/`jump` instructions; the machine `CD_SELECT` pseudo
 bridges to the same artifact sequence. Foreign or ordinary pointer arms,
-mixed proven/unproven arms, PHI propagation, and dynamic local storage remain
-rejected.
+mixed proven/unproven arms, and dynamic local storage remain rejected.
+
+Dynamic CD PHI uses the same shared provenance rule: the result is a non-empty
+address-space-zero `ptr` PHI and every incoming edge is proven CD provenance.
+The direct path stores the incoming register on each edge and loads the PHI
+slot at block entry; the machine path uses the existing synthetic edge-block
+bridge for conditional predecessors. Loop-carried PHIs are accepted through
+the recursion-safe classifier. Ordinary, foreign, `undef`, poison, or mixed
+proven/unproven pointer incoming values remain rejected.
 
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
@@ -336,6 +343,5 @@ machine path opt-in, and
 define collection/value construction separately from aggregate or
 ordinary-pointer lowering. Native calls beyond the allowlist above still
 require a separate name-specific capability matrix before new pseudos are
-implemented. Dynamic PHI propagation and dynamic local storage remain
-separate ABI decisions; the function attributes do not authorize those machine
-shapes.
+implemented. Dynamic local storage remains a separate ABI decision; function
+attributes do not authorize arbitrary storage shapes.

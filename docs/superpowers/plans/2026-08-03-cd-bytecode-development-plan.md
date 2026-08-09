@@ -115,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `97 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `99 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -136,7 +136,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8`), the direct/machine
-manifest passes all `69` entries in the current checkout, the module-link
+manifest passes all `70` entries in the current checkout, the module-link
 harness passes, and the nested checkout remains clean.
 
 - [ ] **Step 5: Check hosted workflow results without changing workflow scope**
@@ -844,6 +844,44 @@ Completed on 2026-08-08. Focused dynamic-select lit passed `2/2`; the refreshed
 local gate is `98` lit fixtures (`97 passed`, `1 unsupported`) and parity is
 `69/69`. Hosted run `31245584718` remains the failed pre-fix baseline until the
 tool-closure workflow commit is published and rerun.
+
+## Task 13: Propagate proven dynamic CD values through `phi`
+
+This follow-on reuses the existing PHI edge `store_var` and block-entry
+`load_var` artifact operations. It adds no opcode, artifact field, `.cdbc 0.1`
+version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp`,
+  `llvm/lib/Target/CD/CDBytecodeEmitter.cpp`, and
+  `llvm/lib/Target/CD/CDMachineBytecodeEmitter.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-dynamic-phi.ll` and
+  `llvm/test/CodeGen/CD/cdbc-dynamic-phi-errors.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-machine-parity.list` and the ABI,
+  machine-backend, target README, verification, roadmap, and decision docs.
+
+The accepted shape is a non-empty address-space-zero `ptr` PHI whose every
+incoming value has proven CD provenance. CD nil, explicit intrinsic results,
+marked parameters, marked-return calls, dynamic `select` results, and
+loop-carried PHIs are valid. Ordinary pointers, foreign address spaces,
+`undef`, poison, and mixed proven/unproven incoming values remain rejected.
+The shared classifier tracks recursive PHI/select back-edges without accepting
+an unproven terminal value.
+
+- [x] Recognize dynamic PHI values in shared provenance validation with
+  recursion protection.
+- [x] Reuse direct and machine PHI edge stores and block-entry loads for
+  dynamic values.
+- [x] Cover branch and loop-carried positive behavior, malformed incoming
+  values, and direct/machine parity.
+- [x] Keep `cdbc 0.1`, the nested VM checkout, and existing PHI wire lowering
+  unchanged.
+
+Completed on 2026-08-08. Focused dynamic-PHI lit passed `2/2`; the full local
+gate passed `99/100` fixtures with one expected unsupported VM case; direct/
+machine parity passed `70/70`; Rust VM groups passed `73 + 3 + 8`; module-link
+direct/machine integration and `git diff --check` passed; and the nested VM
+checkout remained clean.
 
 ## Completion and delivery gates
 

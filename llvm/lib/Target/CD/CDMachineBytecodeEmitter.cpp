@@ -228,7 +228,7 @@ class CDMachineModuleEmitter {
         const auto *Phi = dyn_cast<PHINode>(&Instruction);
         if (!Phi)
           continue;
-        if (!isScalarType(Phi->getType()))
+        if (!isScalarType(Phi->getType()) && !cd::isCDValue(*Phi))
           unsupported("a non-scalar PHI node");
         const std::string Base = Phi->hasName()
                                      ? Phi->getName().str()

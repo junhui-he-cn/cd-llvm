@@ -8,6 +8,7 @@
 
 #include "CDValueABI.h"
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
@@ -189,43 +190,62 @@ bool isCDNil(const Value &Value) {
   return Null && isAddressSpaceZeroPointer(Null->getType());
 }
 
-bool isCDValue(const Value &Value) {
+static bool isCDValueImpl(
+    const Value &Value, SmallPtrSetImpl<const llvm::Value *> &Visiting) {
   if (isCDNil(Value))
     return true;
 
+  // Provenance is an all-incoming property. Treat a back-edge as provisionally
+  // valid while still rejecting any unproven terminal value on that cycle.
+  if (!Visiting.insert(&Value).second)
+    return true;
+
+  bool Result = false;
+
   if (const auto *Argument = dyn_cast<llvm::Argument>(&Value))
-    if (isCDValueParameter(*Argument))
-      return true;
+    Result = isCDValueParameter(*Argument);
+  else if (const auto *Select = dyn_cast<SelectInst>(&Value))
+    Result = Select->getCondition()->getType()->isIntegerTy(1) &&
+             isAddressSpaceZeroPointer(Select->getType()) &&
+             isCDValueImpl(*Select->getTrueValue(), Visiting) &&
+             isCDValueImpl(*Select->getFalseValue(), Visiting);
+  else if (const auto *Phi = dyn_cast<PHINode>(&Value)) {
+    Result = isAddressSpaceZeroPointer(Phi->getType()) &&
+             Phi->getNumIncomingValues() != 0;
+    for (unsigned Index = 0; Result && Index < Phi->getNumIncomingValues();
+         ++Index)
+      Result = isCDValueImpl(*Phi->getIncomingValue(Index), Visiting);
+  } else if (const auto *Call = dyn_cast<CallBase>(&Value)) {
+    if (const Function *Callee = Call->getCalledFunction())
+      Result = !Callee->isDeclaration() && !Callee->isIntrinsic() &&
+               Callee->hasFnAttribute(CDValueReturnAttribute) &&
+               isAddressSpaceZeroPointer(Call->getType());
 
-  if (const auto *Select = dyn_cast<SelectInst>(&Value))
-    return isAddressSpaceZeroPointer(Select->getType()) &&
-           isCDValue(*Select->getTrueValue()) &&
-           isCDValue(*Select->getFalseValue());
+    if (!Result)
+      Result = isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
+               isMapIntrinsic(*Call) || isStructIntrinsic(*Call) ||
+               (isVariantIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType())) ||
+               (isVariantFieldIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType())) ||
+               (isFieldIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType())) ||
+               (isAssignFieldIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType())) ||
+               isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
+               (isAssignIndexIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType())) ||
+               (isNativeIntrinsic(*Call) &&
+                isAddressSpaceZeroPointer(Call->getType()));
+  }
 
-  const auto *Call = dyn_cast<CallBase>(&Value);
-  if (!Call)
-    return false;
+  Visiting.erase(&Value);
+  return Result;
+}
 
-  if (const Function *Callee = Call->getCalledFunction())
-    if (!Callee->isDeclaration() && !Callee->isIntrinsic() &&
-        Callee->hasFnAttribute(CDValueReturnAttribute) &&
-        isAddressSpaceZeroPointer(Call->getType()))
-      return true;
-
-  return isStringIntrinsic(*Call) || isArrayIntrinsic(*Call) ||
-         isMapIntrinsic(*Call) || isStructIntrinsic(*Call) ||
-         (isVariantIntrinsic(*Call) &&
-          isAddressSpaceZeroPointer(Call->getType())) ||
-         (isVariantFieldIntrinsic(*Call) &&
-          isAddressSpaceZeroPointer(Call->getType())) ||
-         (isFieldIntrinsic(*Call) && isAddressSpaceZeroPointer(Call->getType())) ||
-         (isAssignFieldIntrinsic(*Call) &&
-          isAddressSpaceZeroPointer(Call->getType())) ||
-         isIndexIntrinsic(*Call) || isAssertArrayIntrinsic(*Call) ||
-         (isAssignIndexIntrinsic(*Call) &&
-          isAddressSpaceZeroPointer(Call->getType())) ||
-         (isNativeIntrinsic(*Call) &&
-          isAddressSpaceZeroPointer(Call->getType()));
+bool isCDValue(const Value &Value) {
+  SmallPtrSet<const llvm::Value *, 16> Visiting;
+  return isCDValueImpl(Value, Visiting);
 }
 
 bool validateFunctionABI(const Function &F, std::string &Error) {

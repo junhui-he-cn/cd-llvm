@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select` is supported through existing control flow; PHI propagation and dynamic local storage remain separate ABI decisions; future callback names stay rejected until separately selected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select` and PHI are supported through existing control flow; dynamic local storage remains a separate ABI decision; future callback names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 98 lit (97 passed, 1 unsupported), parity 69/69, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 100 lit (99 passed, 1 unsupported), parity 70/70, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` failed before the CD tests because the clean build omitted `llvm-config`, `llvm-readobj`, and `split-file`; the workflow now builds the complete tool set and needs publication/rerun |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select` is now proven through existing control flow; PHI propagation and dynamic storage remain deferred; all selected callback natives are verified |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select` and PHI are proven through existing control flow; dynamic storage remains deferred; all selected callback natives are verified |
 
 ### Active queue after M7-local
 
@@ -55,8 +55,8 @@ opcodes:
    fields, command markers, and synthetic-entry parity exception are now
    documented and tested.
 3. Keep the completed function parameter/return transport slice as the ABI
-   foundation; dynamic CD `select` now reuses existing control flow, while PHI
-   propagation and one-slot storage remain separate follow-on slices.
+   foundation; dynamic CD `select` and PHI now reuse existing control flow,
+   while one-slot storage remains a separate follow-on slice.
 4. Add callback native helpers one vertical slice at a time. The `map`,
    `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
    slices now have explicit callback ABIs; keep future callback names rejected
@@ -113,9 +113,9 @@ intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
 values.  The first marked function parameter/return boundary and dynamic CD
-`select` propagation are implemented; PHI propagation, dynamic local storage,
-the remaining callback function values, and richer debugger queries remain
-future design boundaries.
+`select` and PHI propagation are implemented; dynamic local storage, the
+remaining callback function values, and richer debugger queries remain future
+design boundaries.
 
 The current release gate is split deliberately:
 
@@ -993,6 +993,35 @@ local gate and parity manifest were refreshed to `98` lit fixtures (`97 passed,
 clean; hosted run `31245584718` remains a failed pre-fix baseline pending
 publication of the tool-closure workflow commit.
 
+### Narrow M8 follow-up: dynamic CD PHI (2026-08-08)
+
+**Goal:** Propagate proven dynamic CD tokens through LLVM SSA `phi` nodes while
+reusing the existing edge-store and block-entry-load artifact operations.
+
+The accepted shape is a non-empty address-space-zero `ptr` PHI whose every
+incoming value has proven CD provenance. This includes CD nil, explicit
+intrinsic results, marked parameters, marked-return calls, dynamic `select`
+results, and loop-carried PHIs. Ordinary pointers, foreign address spaces,
+`undef`, poison, and mixed proven/unproven incoming values remain target errors.
+The shared recursive classifier tracks back-edges without treating an
+unproven terminal value as a CD token.
+
+- [x] Extend shared provenance recognition to dynamic PHI values with
+  recursion protection for loop-carried edges.
+- [x] Allow direct and machine PHI allocation and edge lowering to carry proven
+  dynamic values through existing `store_var`/`load_var` operations.
+- [x] Add branch, loop-carried, ordinary, foreign, mixed, `undef`, and poison
+  direct/machine fixtures, plus behavior parity for the positive case.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan without changing `cdbc 0.1` or the nested VM.
+
+Verification on 2026-08-08: focused dynamic-PHI lit passed `2/2`; the full
+local gate passed `99/100` fixtures with one expected unsupported VM case;
+direct/machine parity passed `70/70`; the Rust VM groups passed `73 + 3 + 8`;
+module-link direct/machine integration passed; and the nested VM checkout
+remained clean. Hosted run `31245584718` remains the failed pre-fix baseline
+pending publication and rerun of the tool-closure workflow fix.
+
 ## 9. M5 — Add source-backed debug metadata
 
 **Purpose:** Preserve source locations and runtime diagnostics across LLVM lowering without fabricating source text that is not present in LLVM IR.
@@ -1186,8 +1215,9 @@ unmarked interfaces remain target errors.
 Verification on 2026-08-03: the focused function-value lit fixtures passed;
 direct and machine artifacts passed Rust `dump` and produced identical `7` /
 `nil` output; the expanded parity manifest passed `51/51`; and the nested VM
-checkout remained unchanged. PHI/select propagation, dynamic local storage,
-and function-value callback transport remain separate decisions.
+checkout remained unchanged. At that boundary, PHI/select propagation,
+dynamic local storage, and function-value callback transport remained separate
+decisions.
 
 ## 12. Recommended next execution order
 
@@ -1201,8 +1231,8 @@ The order is deliberately dependency-driven:
    contract; adding `list`, `where`, locals, or breakpoint queries requires a
    separate design and fixture.
 3. Keep the completed marked function parameter/return boundary as the base;
-   dynamic CD `select` now has a parity slice; define PHI propagation or
-   one-slot dynamic storage in separate decisions and parity slices.
+   dynamic CD `select` and PHI now have parity slices; define one-slot dynamic
+   storage in a separate decision and parity slice.
 4. Add callback native helpers one vertical slice at a time only after dynamic
    value and callback contracts have direct/machine/Rust parity.
 
