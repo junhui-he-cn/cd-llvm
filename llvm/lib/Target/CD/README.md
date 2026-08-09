@@ -15,8 +15,8 @@ materialize a function value with `make_function` before using `call`.
 
 The initial lowering supports scalar integer and floating-point constants,
 arithmetic, comparisons, scalar casts as `move`, direct single-slot `alloca`
-storage with `load`/`store`, direct calls to defined functions, conditional and
-unconditional branches, PHI edge stores, returns, and declarations named
+storage with scalar or proven dynamic-CD `load`/`store`, direct calls to defined
+functions, conditional and unconditional branches, PHI edge stores, returns, and declarations named
 `cd_print` or `print` with one argument.  `fneg` lowers to `negate`.  A scalar
 or dynamic CD `select` lowers to a small conditional control-flow sequence using
 `jump_if_false`, `move`, and `jump`.  The only supported `xor` form is boolean
@@ -29,7 +29,10 @@ function parameters and returns require the explicit `cd.value.params` and
 unsupported. A dynamic CD `select` uses the same sequence when its `i1`
 condition selects between two proven address-space-zero CD tokens. A dynamic
 CD PHI uses existing edge stores and block-entry loads when every incoming
-address-space-zero `ptr` is proven; dynamic local storage remains unsupported.
+address-space-zero `ptr` is proven. A dynamic storage slot is limited to one
+non-volatile, non-atomic `alloca ptr` with direct load/store users; every store
+must carry proven CD provenance and every load must follow a proven store on
+all control-flow paths.
 
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
@@ -134,20 +137,22 @@ wire operation or artifact version is needed.
 The Rust VM copies arguments into fresh parameter cells and copies return
 values into the caller register. Mutable array, map, and struct handles keep
 shared backing storage across the call, so explicit callee mutation is visible;
-rebinding a parameter is local. Dynamic CD `select` and PHI propagation are
-covered by `cdbc-dynamic-select.ll` and `cdbc-dynamic-phi.ll`; dynamic local
-storage remains a deferred ABI decision. The positive and malformed function
-boundaries are covered by `cdbc-function-values.ll` and
-`cdbc-function-value-errors.ll`.
+rebinding a parameter is local. Dynamic CD `select`, PHI propagation, and
+one-slot storage are covered by `cdbc-dynamic-select.ll`,
+`cdbc-dynamic-phi.ll`, and `cdbc-dynamic-storage.ll`; arbitrary pointer
+storage remains rejected. The positive and malformed function boundaries are
+covered by `cdbc-function-values.ll` and `cdbc-function-value-errors.ll`.
 
 The first M4 collection operation is `llvm.cd.array(i32 count, ...)`. The
 immediate count must equal the number of following scalar, address-space-zero
 `nil`, string-token, or array-token operands. The variadic textual IR call type
 must be explicit (`call ptr (i32, ...) @llvm.cd.array(...)`). The target lowers
 the payload to the existing `array` instruction; array results may be printed
-or nested in another constructor, while ordinary pointer, aggregate, storage,
-function-parameter/return, and ordinary `select`/PHI uses remain rejected. A
-dynamic CD `select` or PHI is accepted only for proven address-space-zero tokens. The direct and
+or nested in another constructor, while ordinary pointer, aggregate, and
+arbitrary storage,
+function-parameter/return, arbitrary storage, and ordinary `select`/PHI uses
+remain rejected. A dynamic CD `select` or PHI is accepted only for proven
+address-space-zero tokens. The direct and
 machine paths validate the same capability matrix and share the same artifact
 bridge.
 
@@ -159,9 +164,10 @@ instructions. Index results remain dynamic-value tokens so scalar and nested
 array elements can share one ABI; `len` returns a CD number as `double`.
 `assert.array` preserves the VM's runtime type/conversion behavior. The direct
 and machine paths share validation, artifact serialization, and Rust VM output
-parity. These results remain local and cannot yet cross ordinary function,
-pointer, or dynamic local storage boundaries; dynamic CD `select` and PHI may
-choose or merge proven results.
+parity. These results remain local and cannot cross ordinary function, pointer,
+or arbitrary storage boundaries; the supported one-slot dynamic storage rule
+may carry proven results through `load_var`/`store_var`. Dynamic CD `select` and
+PHI may choose or merge proven results.
 
 `llvm.cd.assign.index` is the explicit array/map mutation boundary. Its
 collection and index must be a CD dynamic-value token and `double`; its value

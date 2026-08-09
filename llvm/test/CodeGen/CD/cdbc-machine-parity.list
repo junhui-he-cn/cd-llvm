@@ -30,6 +30,7 @@ behavior llvm/test/CodeGen/CD/cdbc-machine-not.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-select.ll
 behavior llvm/test/CodeGen/CD/cdbc-dynamic-select.ll
 behavior llvm/test/CodeGen/CD/cdbc-dynamic-phi.ll
+behavior llvm/test/CodeGen/CD/cdbc-dynamic-storage.ll
 artifact llvm/test/CodeGen/CD/cdbc-variant.ll
 behavior llvm/test/CodeGen/CD/cdbc-variant-dynamic.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime.ll "enum variant field index out of bounds"

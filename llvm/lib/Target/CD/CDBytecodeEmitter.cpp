@@ -322,7 +322,7 @@ class CDFunctionEmitter {
 
   void emitLoad(const LoadInst &Load) {
     if (Load.isVolatile() || Load.isAtomic() ||
-        !isScalarType(Load.getType()))
+        (!isScalarType(Load.getType()) && !cd::isCDValue(Load)))
       unsupportedInstruction(Load);
 
     appendInstruction(CDInstruction::loadVar(
@@ -331,7 +331,7 @@ class CDFunctionEmitter {
 
   void emitStore(const StoreInst &Store) {
     if (Store.isVolatile() || Store.isAtomic() ||
-        !isSupportedScalarOperand(Store.getValueOperand()))
+        !isSupportedOperand(Store.getValueOperand()))
       unsupportedInstruction(Store);
 
     appendInstruction(CDInstruction::storeVar(
@@ -740,7 +740,8 @@ void CDFunctionEmitter::allocateValuesAndStorage() {
       if (auto *AI = dyn_cast<AllocaInst>(&I)) {
         const auto *ArraySize = dyn_cast<ConstantInt>(AI->getArraySize());
         if (!ArraySize || !ArraySize->isOne() ||
-            !isScalarType(AI->getAllocatedType()))
+            (!isScalarType(AI->getAllocatedType()) &&
+             !cd::isCDStorageAlloca(*AI)))
           unsupportedInstruction(I);
         const std::string Base = AI->hasName()
                                      ? AI->getName().str()

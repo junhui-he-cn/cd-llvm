@@ -115,7 +115,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
 git diff --check
 ~~~
 
-Expected at the current fixture set: `99 passed / 1 unsupported` for the CD
+Expected at the current fixture set: `101 passed / 1 unsupported` for the CD
 lit directory, `14/14` parity-harness unit tests, `5/5` module-link unit tests,
 and a clean whitespace check. The one unsupported case is the opt-in VM test
 with `CD_COMPILER_ROOT` unset.
@@ -136,7 +136,7 @@ git -C cd-compiler status --short --branch
 ~~~
 
 Expected: the existing Rust groups pass (`73 + 3 + 8`), the direct/machine
-manifest passes all `70` entries in the current checkout, the module-link
+manifest passes all `71` entries in the current checkout, the module-link
 harness passes, and the nested checkout remains clean.
 
 - [ ] **Step 5: Check hosted workflow results without changing workflow scope**
@@ -882,6 +882,43 @@ gate passed `99/100` fixtures with one expected unsupported VM case; direct/
 machine parity passed `70/70`; Rust VM groups passed `73 + 3 + 8`; module-link
 direct/machine integration and `git diff --check` passed; and the nested VM
 checkout remained clean.
+
+## Task 14: Propagate proven dynamic CD values through one-slot local storage
+
+This follow-on reuses the existing `load_var` and `store_var` artifact
+operations. It adds no opcode, artifact field, `.cdbc 0.1` version, or nested
+VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.h`,
+  `llvm/lib/Target/CD/CDValueABI.cpp`,
+  `llvm/lib/Target/CD/CDBytecodeEmitter.cpp`, and
+  `llvm/lib/Target/CD/CDMachineBytecodeEmitter.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-dynamic-storage.ll` and
+  `llvm/test/CodeGen/CD/cdbc-dynamic-storage-errors.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-machine-parity.list` and the ABI,
+  machine-backend, target README, verification, roadmap, and decision docs.
+
+The accepted shape is a single-element, address-space-zero `alloca ptr` with
+only direct non-volatile, non-atomic load/store users. Every store must carry
+proven CD provenance. A CFG definite-initialization walk must prove a proven
+store on every path to each load; the alloca address itself is storage, never a
+CD token. Branch-complete initialization and replacement with `ptr null` are
+valid. Escaped allocas, GEP/bitcast aliases, ordinary pointers, uninitialized
+or partially initialized loads, and volatile/atomic accesses remain rejected.
+
+- [x] Add shared storage-shape and definite-store provenance validation.
+- [x] Allow direct and machine dynamic pointer load/store lowering through
+  existing `load_var`/`store_var` operations.
+- [x] Cover positive straight-line, replacement, branch-complete, malformed
+  uninitialized, partial-init, unproven, escaped, self-address, and volatile
+  cases with direct/machine parity.
+- [x] Keep `cdbc 0.1`, the nested VM checkout, and scalar storage behavior
+  unchanged.
+
+Completed on 2026-08-09. Focused dynamic-storage lit passed `2/2`; the full
+local gate, parity, Rust VM, module-link, and whitespace gates are refreshed
+below.
 
 ## Completion and delivery gates
 

@@ -30,17 +30,18 @@ The first implementation slice is defined function parameter/return transport.
 It reuses the existing `Call` and `Return` artifact operations, the existing
 function parameter metadata, and the Rust VM's current `Value` call-frame
 behavior. It adds no `.cdbc 0.1` opcode, field, or version change. PHI/select
-are implemented as explicit follow-on slices using existing control flow;
-one-slot local storage and function-value callback transport remain separate
-decisions and implementation slices.
+and one-slot local storage are implemented as explicit follow-on slices using
+existing control flow and variable operations; function-value callback
+transport remains a separate decision and implementation slice.
 
 ## Why a boundary decision is required
 
 The current LLVM value ABI intentionally treats `ptr addrspace(0)` as an
-opaque token, not as a native address. `isCDValue` currently recognizes the
-address-space-zero nil token and results of explicit `llvm.cd.*` producers.
-Function arguments, ordinary call results, PHI/select results, loads, stores,
-allocas, and pointer operations are not implicit CD provenance.
+opaque token, not as a native address. `isCDValue` recognizes the
+address-space-zero nil token, explicit `llvm.cd.*` producers, proven
+PHI/select results, and loads from the documented one-slot storage shape.
+Function arguments, ordinary call results, allocas outside that shape, and
+pointer operations are not implicit CD provenance.
 
 Both emitters currently enforce the same conservative boundary:
 
@@ -48,7 +49,8 @@ Both emitters currently enforce the same conservative boundary:
 - non-scalar function returns are rejected except for an all-nil pointer
   return shape;
 - ordinary function calls accept scalar values and nil only;
-- one-slot storage is scalar-only;
+- one-slot storage accepts only proven dynamic CD values in the documented
+  direct `alloca ptr` shape;
 - explicit CD values can flow through local CD consumers and printing, but not
   through ordinary function boundaries.
 
@@ -71,7 +73,7 @@ the target or VM.
 | Explicit intrinsic result -> defined function parameter | A direct `ptr` result of a validated explicit CD intrinsic, a marked CD-return call result, a marked CD parameter, or an address-space-zero `ptr null` may be passed to a parameter listed by `cd.value.params`. Mixed scalar and CD parameters are allowed. | Address-space-zero `ptr null` is CD `nil`. Other address spaces are not nil for this ABI. | The call-site argument must have proven CD provenance. A global, alloca address, GEP, bitcast, addrspacecast, ordinary load, or other unproven pointer is rejected. | Passing a scalar copies it. Strings are immutable values. Array, map, and struct handles retain shared VM storage, so `assign_index`/`assign_field` in the callee is visible to the caller. Rebinding the parameter cell is local. | First slice |
 | Defined function return -> caller result | A function with `cd.value.return` may return `ptr null`, a marked CD parameter, an explicit CD producer, or a call result from another marked CD-return function. The return type must be address-space-zero `ptr`. | `ptr null` returns VM `nil`; a non-null CD handle is returned as the same dynamic value capability. | Every pointer return must be explicitly marked and proven. A non-CD pointer return is a target error, not a nil conversion. | The caller receives a cloned `Value`; mutable handle identity remains shared, so mutations remain observable across the return boundary. Strings remain immutable. | First slice |
 | Explicit value -> PHI/select | PHI/select propagation accepts only values with one common proven capability. A `select` condition remains scalar `i1`; pointer PHI/select values remain address-space-zero `ptr`. `ptr null` is one valid incoming capability. Non-empty PHIs require every incoming edge to be proven, including loop-carried back-edges. | A selected or merged nil remains VM `nil`. Mixed nil/non-nil CD values are valid when all inputs are proven CD values. | Every incoming edge must be proven. `undef`, poison, ordinary pointers, and pointer arithmetic are rejected. | The operation has `Move` semantics: scalar/string values copy, while mutable handles retain shared storage. A later mutation through either alias is observable. | Implemented in the dynamic `select` and PHI follow-on slices |
-| Explicit value -> one-slot local storage | Future storage support is limited to one direct, non-volatile, non-atomic alloca whose stored element is an address-space-zero `ptr`; only direct `load`/`store` use is admitted. Stores must carry a proven CD value, and a load becomes a CD token only when the slot's store history is proven. The alloca address is storage, never a CD token. | Storing/loading address-space-zero `ptr null` stores/loads VM `nil`. | Indirect pointer aliases, GEPs, escaped allocas, arbitrary globals, and unproven `load ptr` values are rejected. | A store replaces the slot's value. A loaded array/map/struct handle still shares VM storage with the source; mutating the handle is visible, replacing the slot is not a mutation of the old handle. | Deferred until parameter/return parity |
+| Explicit value -> one-slot local storage | Storage is limited to one direct, non-volatile, non-atomic alloca whose stored element is an address-space-zero `ptr`; only direct `load`/`store` use is admitted. Stores must carry a proven CD value, and a load becomes a CD token only when a CFG definite-initialization walk proves a proven store on every path. The alloca address is storage, never a CD token. | Storing/loading address-space-zero `ptr null` stores/loads VM `nil`. | Indirect pointer aliases, GEPs, escaped allocas, arbitrary globals, and unproven `load ptr` values are rejected. | A store replaces the slot's value. A loaded array/map/struct handle still shares VM storage with the source; mutating the handle is visible, replacing the slot is not a mutation of the old handle. | Implemented in the one-slot storage slice |
 | Function value -> callback native argument | A separate function-value ABI must explicitly materialize a VM `Value::Function` and declare its callback signature. An ordinary LLVM function pointer or opaque `ptr` is not such a value. | `ptr null` remains CD `nil` for the general value ABI, but is not a valid callback unless a future native capability explicitly admits an optional callback. | Current callback names and ordinary external calls remain rejected. No callback is inferred from a function symbol, `ptr`, or `llvm.cd.native` name alone. | The Rust VM's function identity and captured environment semantics must be audited per callback helper; callback transport is not implied by ordinary dynamic-value transport. | Separate ABI decision |
 
 The first slice therefore recognizes only these new provenance sources in
@@ -83,8 +85,9 @@ The first slice therefore recognizes only these new provenance sources in
 
 During the first function-boundary slice, PHI/select, load/store, and
 function-value classification were not added to this helper as incidental
-conveniences. Each follow-on gets its own source-shape rule, fixture, and parity
-gate.
+conveniences. The PHI/select and one-slot storage follow-ons now have their own
+source-shape rules, fixtures, and parity gates; function-value classification
+remains separate.
 
 ## Boundary mechanism comparison
 
@@ -234,13 +237,10 @@ direct defined-function results consistently, and feed the same capability
 checks into native/collection/record/variant consumers. Direct and machine
 fixtures must use the same positive and malformed IR.
 
-That implementation must not modify `CDBytecodeFormat`, the Rust VM, or the
-artifact version merely to represent the first function-boundary slice. The
-following remain explicitly out of scope until that slice has direct/machine
-artifact and behavior parity:
+The completed transport slices do not modify `CDBytecodeFormat`, the Rust VM,
+or the artifact version. The following remain explicitly out of scope after
+the proven PHI/select and one-slot storage slices:
 
-- PHI/select propagation;
-- one-slot dynamic local storage;
 - function-value materialization and callback natives;
 - arbitrary pointer or aggregate lowering; and
 - any new `.cdbc` opcode or static register-kind section.

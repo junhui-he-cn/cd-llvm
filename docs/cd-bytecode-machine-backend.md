@@ -52,8 +52,8 @@ then bridges those bodies to the typed artifact model.  The supported values
 and operations are scalar constants, arithmetic, comparisons, scalar casts as
 `move`, `fneg`, boolean inversion as `not`, `nil`/`ret void` returns,
 `cd_print`/`print`, defined-function calls, scalar function parameters and
-marked address-space-zero CD parameters/returns, single-slot scalar storage
-through `load_var` and `store_var`, conditional and unconditional branches,
+marked address-space-zero CD parameters/returns, single-slot scalar or
+proven-dynamic-CD storage through `load_var` and `store_var`, conditional and unconditional branches,
 scalar or dynamic CD PHI values, and scalar or dynamic CD `select`. Conditional PHI edges use synthetic
 machine edge blocks so each predecessor edge stores the correct incoming value
 before jumping to the successor; symbolic machine block targets are patched to
@@ -75,8 +75,8 @@ Dynamic CD `select` uses the same `CDValueABI` provenance rule in both paths:
 the condition is `i1`, both arms are proven address-space-zero CD tokens, and
 the result inherits that provenance. The direct path expands it to existing
 `jump_if_false`/`move`/`jump` instructions; the machine `CD_SELECT` pseudo
-bridges to the same artifact sequence. Foreign or ordinary pointer arms,
-mixed proven/unproven arms, and dynamic local storage remain rejected.
+bridges to the same artifact sequence. Foreign or ordinary pointer arms and
+mixed proven/unproven arms remain rejected.
 
 Dynamic CD PHI uses the same shared provenance rule: the result is a non-empty
 address-space-zero `ptr` PHI and every incoming edge is proven CD provenance.
@@ -85,6 +85,15 @@ slot at block entry; the machine path uses the existing synthetic edge-block
 bridge for conditional predecessors. Loop-carried PHIs are accepted through
 the recursion-safe classifier. Ordinary, foreign, `undef`, poison, or mixed
 proven/unproven pointer incoming values remain rejected.
+
+Dynamic CD storage uses the same shared provenance rule for one direct,
+non-volatile, non-atomic `alloca ptr` slot. The alloca may only be used directly
+by loads and stores; every store value must be proven CD provenance, and a load
+is admitted only after the shared CFG analysis proves a preceding store on all
+paths. Both paths lower the slot through the existing `load_var` and
+`store_var` operations. Escaped allocas, GEP/bitcast aliases, uninitialized or
+partially initialized loads, ordinary pointer values, and volatile/atomic
+accesses remain rejected.
 
 Constants and function values are materialized at each use site.  This keeps
 their VM registers defined on every control-flow path instead of allowing a
@@ -343,5 +352,5 @@ machine path opt-in, and
 define collection/value construction separately from aggregate or
 ordinary-pointer lowering. Native calls beyond the allowlist above still
 require a separate name-specific capability matrix before new pseudos are
-implemented. Dynamic local storage remains a separate ABI decision; function
-attributes do not authorize arbitrary storage shapes.
+implemented. Function attributes do not authorize arbitrary storage shapes;
+only the documented one-slot dynamic storage rule is admitted.

@@ -8,12 +8,15 @@
 
 #include "CDValueABI.h"
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/CFG.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Type.h"
@@ -190,6 +193,37 @@ bool isCDNil(const Value &Value) {
   return Null && isAddressSpaceZeroPointer(Null->getType());
 }
 
+bool isCDStorageAlloca(const AllocaInst &Alloca) {
+  const auto *ArraySize = dyn_cast<ConstantInt>(Alloca.getArraySize());
+  if (!ArraySize || !ArraySize->isOne() ||
+      !isAddressSpaceZeroPointer(Alloca.getAllocatedType()))
+    return false;
+
+  for (const User *User : Alloca.users()) {
+    if (isa<DbgInfoIntrinsic>(User))
+      continue;
+    if (const auto *Load = dyn_cast<LoadInst>(User)) {
+      if (Load->getPointerOperand() != &Alloca ||
+          !isAddressSpaceZeroPointer(Load->getType()))
+        return false;
+      continue;
+    }
+    if (const auto *Store = dyn_cast<StoreInst>(User)) {
+      if (Store->getPointerOperand() != &Alloca)
+        return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+static bool isCDValueImpl(
+    const Value &Value, SmallPtrSetImpl<const llvm::Value *> &Visiting);
+
+static bool isCDStorageLoad(
+    const LoadInst &Load, SmallPtrSetImpl<const llvm::Value *> &Visiting);
+
 static bool isCDValueImpl(
     const Value &Value, SmallPtrSetImpl<const llvm::Value *> &Visiting) {
   if (isCDNil(Value))
@@ -215,6 +249,8 @@ static bool isCDValueImpl(
     for (unsigned Index = 0; Result && Index < Phi->getNumIncomingValues();
          ++Index)
       Result = isCDValueImpl(*Phi->getIncomingValue(Index), Visiting);
+  } else if (const auto *Load = dyn_cast<LoadInst>(&Value)) {
+    Result = isCDStorageLoad(*Load, Visiting);
   } else if (const auto *Call = dyn_cast<CallBase>(&Value)) {
     if (const Function *Callee = Call->getCalledFunction())
       Result = !Callee->isDeclaration() && !Callee->isIntrinsic() &&
@@ -241,6 +277,78 @@ static bool isCDValueImpl(
 
   Visiting.erase(&Value);
   return Result;
+}
+
+static bool isCDStorageLoad(
+    const LoadInst &Load, SmallPtrSetImpl<const llvm::Value *> &Visiting) {
+  if (Load.isVolatile() || Load.isAtomic() ||
+      !isAddressSpaceZeroPointer(Load.getType()))
+    return false;
+
+  const auto *Alloca = dyn_cast<AllocaInst>(Load.getPointerOperand());
+  if (!Alloca || !isCDStorageAlloca(*Alloca))
+    return false;
+
+  const Function *Parent = Alloca->getFunction();
+  SmallVector<const StoreInst *, 8> Stores;
+  for (const User *User : Alloca->users()) {
+    if (isa<DbgInfoIntrinsic>(User))
+      continue;
+    if (const auto *Store = dyn_cast<StoreInst>(User)) {
+      if (Store->isVolatile() || Store->isAtomic() ||
+          !isCDValueImpl(*Store->getValueOperand(), Visiting))
+        return false;
+      Stores.push_back(Store);
+    }
+  }
+  if (Stores.empty())
+    return false;
+
+  DenseMap<const BasicBlock *, bool> In;
+  DenseMap<const BasicBlock *, bool> Out;
+  for (const BasicBlock &BB : *Parent) {
+    In[&BB] = false;
+    Out[&BB] = false;
+  }
+
+  bool Changed = false;
+  do {
+    Changed = false;
+    for (const BasicBlock &BB : *Parent) {
+      bool NewIn = false;
+      if (&BB != &Parent->getEntryBlock() && !pred_empty(&BB)) {
+        NewIn = true;
+        for (const BasicBlock *Pred : predecessors(&BB))
+          NewIn = NewIn && Out.lookup(Pred);
+      }
+
+      bool NewOut = NewIn;
+      for (const Instruction &Instruction : BB)
+        if (const auto *Store = dyn_cast<StoreInst>(&Instruction))
+          if (Store->getPointerOperand() == Alloca)
+            NewOut = true;
+
+      if (In.lookup(&BB) != NewIn || Out.lookup(&BB) != NewOut) {
+        In[&BB] = NewIn;
+        Out[&BB] = NewOut;
+        Changed = true;
+      }
+    }
+  } while (Changed);
+
+  for (const BasicBlock &BB : *Parent) {
+    bool Initialized = In.lookup(&BB);
+    for (const Instruction &Instruction : BB) {
+      if (const auto *LoadInBlock = dyn_cast<LoadInst>(&Instruction)) {
+        if (LoadInBlock->getPointerOperand() == Alloca && !Initialized)
+          return false;
+      } else if (const auto *Store = dyn_cast<StoreInst>(&Instruction)) {
+        if (Store->getPointerOperand() == Alloca)
+          Initialized = true;
+      }
+    }
+  }
+  return true;
 }
 
 bool isCDValue(const Value &Value) {

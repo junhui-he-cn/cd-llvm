@@ -217,7 +217,8 @@ class CDMachineModuleEmitter {
           const auto *ArraySize =
               dyn_cast<ConstantInt>(Alloca->getArraySize());
           if (!ArraySize || !ArraySize->isOne() ||
-              !isScalarType(Alloca->getAllocatedType()))
+              (!isScalarType(Alloca->getAllocatedType()) &&
+               !cd::isCDStorageAlloca(*Alloca)))
             unsupported("an unsupported alloca shape");
           const std::string Name = uniqueStorageName(
               Alloca->hasName() ? Alloca->getName() : StringRef());
@@ -635,7 +636,7 @@ class CDMachineModuleEmitter {
   void lowerLoad(const LoadInst &Load, MachineRegisterInfo &MRI,
                  MachineBasicBlock &MBB, const TargetInstrInfo &TII) {
     if (Load.isVolatile() || Load.isAtomic() ||
-        !isScalarType(Load.getType()))
+        (!isScalarType(Load.getType()) && !cd::isCDValue(Load)))
       unsupported("an unsupported load");
 
     Register Result = createValueRegister(MRI, &Load);

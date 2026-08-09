@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Roadmap status at a glance (2026-08-08)
+## 0. Roadmap status at a glance (2026-08-09)
 
 This document is the high-level roadmap and implementation record.  The
 independently executable queue for the next slices lives in the
@@ -36,12 +36,12 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select` and PHI are supported through existing control flow; dynamic local storage remains a separate ABI decision; future callback names stay rejected until separately selected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future callback names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 100 lit (99 passed, 1 unsupported), parity 70/70, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 102 lit (101 passed, 1 unsupported), parity 71/71, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` failed before the CD tests because the clean build omitted `llvm-config`, `llvm-readobj`, and `split-file`; the workflow now builds the complete tool set and needs publication/rerun |
-| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select` and PHI are proven through existing control flow; dynamic storage remains deferred; all selected callback natives are verified |
+| M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select`, PHI, and one-slot storage are proven through existing control-flow and variable operations; all selected callback natives are verified |
 
 ### Active queue after M7-local
 
@@ -55,8 +55,8 @@ opcodes:
    fields, command markers, and synthetic-entry parity exception are now
    documented and tested.
 3. Keep the completed function parameter/return transport slice as the ABI
-   foundation; dynamic CD `select` and PHI now reuse existing control flow,
-   while one-slot storage remains a separate follow-on slice.
+   foundation; dynamic CD `select`, PHI, and one-slot storage now reuse
+   existing control-flow and variable operations.
 4. Add callback native helpers one vertical slice at a time. The `map`,
    `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
    slices now have explicit callback ABIs; keep future callback names rejected
@@ -112,10 +112,10 @@ and the selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`f
 intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
 aggregates, globals, allocas, and external calls are not inferred to be CD
-values.  The first marked function parameter/return boundary and dynamic CD
-`select` and PHI propagation are implemented; dynamic local storage, the
-remaining callback function values, and richer debugger queries remain future
-design boundaries.
+values.  The first marked function parameter/return boundary, dynamic CD
+`select` and PHI propagation, and the one-slot dynamic storage rule are
+implemented; the remaining callback function values and richer debugger
+queries remain future design boundaries.
 
 The current release gate is split deliberately:
 
@@ -1022,6 +1022,37 @@ module-link direct/machine integration passed; and the nested VM checkout
 remained clean. Hosted run `31245584718` remains the failed pre-fix baseline
 pending publication and rerun of the tool-closure workflow fix.
 
+### Narrow M8 follow-up: dynamic CD one-slot local storage (2026-08-09)
+
+**Goal:** Carry proven dynamic CD values through one explicitly bounded LLVM
+`alloca` slot using the existing `load_var` and `store_var` artifact operations.
+
+The accepted shape is a single-element, address-space-zero `alloca ptr` with
+only direct non-volatile, non-atomic load/store users. Every store value must
+have proven CD provenance. A CFG definite-initialization walk must prove that
+each load follows a proven store on every path; the alloca address itself is
+storage and never a CD token. Branch-complete initialization is accepted while
+uninitialized and partially initialized loads remain rejected. Escaped
+allocas, GEP/bitcast aliases, ordinary pointers, and unsupported access modes
+remain target errors.
+
+- [x] Add shared storage-shape and definite-store provenance validation.
+- [x] Allow direct and machine dynamic pointer load/store lowering through the
+  existing `load_var`/`store_var` operations.
+- [x] Add straight-line, replacement, branch-complete, uninitialized,
+  partial-init, unproven, escaped, self-address, and volatile fixtures plus
+  direct/machine behavior parity.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development/decision records without changing `cdbc 0.1` or the
+  nested VM.
+
+Verification on 2026-08-09: focused dynamic-storage lit passed `2/2`;
+direct/machine parity passed `71/71`; the Rust VM groups remained `73 + 3 + 8`;
+and the nested VM checkout remained clean. The full local gate and module-link
+integration are refreshed by the final gate for this slice. Hosted run
+`31245584718` remains the failed pre-fix baseline pending publication and rerun
+of the tool-closure workflow fix.
+
 ## 9. M5 — Add source-backed debug metadata
 
 **Purpose:** Preserve source locations and runtime diagnostics across LLVM lowering without fabricating source text that is not present in LLVM IR.
@@ -1231,8 +1262,8 @@ The order is deliberately dependency-driven:
    contract; adding `list`, `where`, locals, or breakpoint queries requires a
    separate design and fixture.
 3. Keep the completed marked function parameter/return boundary as the base;
-   dynamic CD `select` and PHI now have parity slices; define one-slot dynamic
-   storage in a separate decision and parity slice.
+   dynamic CD `select`, PHI, and one-slot dynamic storage now have parity
+   slices; define any broader storage or pointer ABI separately.
 4. Add callback native helpers one vertical slice at a time only after dynamic
    value and callback contracts have direct/machine/Rust parity.
 

@@ -15,6 +15,7 @@
 #include <string>
 
 namespace llvm {
+class AllocaInst;
 class CallBase;
 class Function;
 class Value;
@@ -54,6 +55,9 @@ bool isCDNil(const Value &Value);
 
 /// Return whether a value is an opaque CD dynamic-value token.
 bool isCDValue(const Value &Value);
+
+/// Return whether an alloca is a supported one-slot CD storage location.
+bool isCDStorageAlloca(const AllocaInst &Alloca);
 
 /// Validate the function attributes and pointer-value return boundary used by
 /// the first dynamic-value transport slice.
