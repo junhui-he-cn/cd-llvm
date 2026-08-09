@@ -131,7 +131,10 @@ diagnostic when run normally.
 ## Deferred boundary
 
 Adding `list`, `where`, local inspection, breakpoint listing, or other query
-commands requires a follow-on public design and fixture. Dynamic-value
+commands requires a follow-on public design and fixture. The first query design
+is recorded in `docs/cd-bytecode-debugger-query-design.md`; the commands remain
+unimplemented and invalid until a separate implementation slice passes the
+specified parity gates. Dynamic-value
 transport across function parameters/returns, PHI/select, local storage, or
 callback native arguments is a separate ABI decision and is not implied by
 this debugger contract.
