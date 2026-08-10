@@ -1,5 +1,10 @@
 # CD Bytecode LLVM Development Plan 2026-08-03 Implementation Plan
 
+> **状态（2026-08-10）：已冻结。** 近期不再安排新功能开发，本计划仅作历史档案；
+> 当前状态与边界见
+> [Roadmap（现状与边界）](2026-07-31-cd-bytecode-roadmap.md)，
+> 当前功能清单见 [docs/cd-bytecode-features.md](../../cd-bytecode-features.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Re-sequence the remaining LLVM CD bytecode work into independently

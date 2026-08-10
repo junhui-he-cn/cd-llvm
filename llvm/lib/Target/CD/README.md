@@ -9,7 +9,9 @@ llc -mtriple=cd-unknown-unknown input.ll -o output.cdbc
 
 The target emits the text `cdbc 0.1` artifact format consumed by the Rust VM in
 the sibling `cd-compiler` project.  The output contains deterministic constant
-and name tables, a `main` body, and function bodies.  LLVM function arguments
+and name tables, a `main` body, and function bodies.  The current capability
+reference is [docs/cd-bytecode-features.md](../../../../docs/cd-bytecode-features.md).
+LLVM function arguments
 are represented by `param` metadata and an initial `load_var`; direct calls
 materialize a function value with `make_function` before using `call`.
 
