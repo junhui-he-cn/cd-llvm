@@ -899,6 +899,16 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "concat") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !isCDValue(*Call.getArgOperand(2)) || !HasCDPointerResult) {
+      Error = "llvm.cd.native concat requires two CD dynamic-value arrays "
+              "and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "range") {
     if (Call.arg_size() < 2 || Call.arg_size() > 4 ||
         !HasCDPointerResult) {

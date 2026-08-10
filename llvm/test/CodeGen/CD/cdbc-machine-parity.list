@@ -64,6 +64,8 @@ behavior llvm/test/CodeGen/CD/cdbc-native-slice.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-slice-runtime.ll "slice expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-copy.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-copy-runtime.ll "copy expects array as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-concat.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-concat-runtime.ll "concat expects array as first argument"
 artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # The range fixture uses fdiv; direct and machine constant materialization
 # order differs, so FileCheck asserts identical ranges and parity checks VM

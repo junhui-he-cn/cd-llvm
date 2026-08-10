@@ -83,6 +83,14 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/copy-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-COLLECTION-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/copy-result.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/copy-result.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-left-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-LEFT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-left-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-LEFT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RIGHT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RIGHT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-MACHINE
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
@@ -168,6 +176,14 @@
 ; COPY-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native copy requires a CD dynamic-value array and a ptr result
 ; COPY-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native copy requires a CD dynamic-value array and a ptr result
 ; COPY-RESULT-MACHINE: CD machine backend does not support llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; CONCAT-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-ARITY-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-LEFT-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-LEFT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-RIGHT-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-RIGHT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; CONCAT-RESULT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
@@ -686,5 +702,46 @@ declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
+  ret i32 0
+}
+
+;--- concat-arity.ll
+@name = private unnamed_addr constant [7 x i8] c"concat\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
+  ret i32 0
+}
+
+;--- concat-left-pointer.ll
+@name = private unnamed_addr constant [7 x i8] c"concat\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %left = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %left, ptr null)
+  ret i32 0
+}
+
+;--- concat-right-pointer.ll
+@name = private unnamed_addr constant [7 x i8] c"concat\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %right = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, ptr %right)
+  ret i32 0
+}
+
+;--- concat-result.ll
+@name = private unnamed_addr constant [7 x i8] c"concat\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, ptr null)
   ret i32 0
 }
