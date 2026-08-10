@@ -99,6 +99,12 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-key-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-KEY-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/remove-result.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-result.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/clear-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/clear-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/clear-map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-MAP-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/clear-map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-MAP-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/clear-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/clear-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-RESULT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
@@ -212,6 +218,12 @@
 ; REMOVE-KEY-POINTER-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
 ; REMOVE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
 ; REMOVE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; CLEAR-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; CLEAR-ARITY-MACHINE: CD machine backend does not support llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; CLEAR-MAP-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; CLEAR-MAP-POINTER-MACHINE: CD machine backend does not support llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; CLEAR-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; CLEAR-RESULT-MACHINE: CD machine backend does not support llvm.cd.native clear requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
@@ -884,5 +896,33 @@ define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, i64 1)
+  ret i32 0
+}
+
+;--- clear-arity.ll
+@name = private unnamed_addr constant [6 x i8] c"clear\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- clear-map-pointer.ll
+@name = private unnamed_addr constant [6 x i8] c"clear\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %map = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name, ptr %map)
+  ret i32 0
+}
+
+;--- clear-result.ll
+@name = private unnamed_addr constant [6 x i8] c"clear\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
   ret i32 0
 }

@@ -1184,6 +1184,44 @@ case; direct/machine parity passed `85/85`; parity unit tests passed `14/14`;
 module-link unit tests passed `5/5`; module-link direct/machine integration
 passed; Rust VM tests passed `73 + 3 + 8`; and `git diff --check` passed.
 
+## Task 22: Extend the bounded native lane with `clear`
+
+This outer-only follow-on reuses the existing `native_call` artifact operation
+and the Rust VM's already-supported map mutation helper. It adds no opcode,
+artifact field, `.cdbc 0.1` version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-clear.ll` and
+  `llvm/test/CodeGen/CD/cdbc-native-clear-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, roadmap, and
+  active-plan documents.
+
+The accepted shape is:
+
+~~~llvm
+llvm.cd.native(ptr name, ptr map) -> ptr
+~~~
+
+The map operand must have proven CD provenance. The Rust VM owns the runtime
+map check, shared map mutation, and nil result.
+
+- [x] Admit `clear` only for a proven CD dynamic-value map and an exact
+  address-space-zero `ptr` result.
+- [x] Reuse the existing `native_call` bridge in both direct and machine paths.
+- [x] Cover in-place map clearing, nil result, runtime non-map failure,
+  malformed arity/result/pointer diagnostics, and parity.
+- [x] Keep future native names rejected and the nested VM checkout unchanged.
+
+Completed on 2026-08-10. Focused clear/error lit passed `3/3`; the full local
+CD suite passed `118` tests with `117` passed and `1` expected unsupported VM
+case; direct/machine parity passed `87/87`; parity unit tests passed `14/14`;
+module-link unit tests passed `5/5`; module-link direct/machine integration
+passed; Rust VM tests passed `73 + 3 + 8`; and `git diff --check` passed.
+
 ## Completion and delivery gates
 
 A task is complete only when implementation, ABI docs, README, roadmap status,

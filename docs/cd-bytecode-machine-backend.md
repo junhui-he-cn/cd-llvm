@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call including `contains`, `slice`, `copy`, `concat`, `remove`, `keys`, and `values`, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call including `contains`, `slice`, `copy`, `concat`, `remove`, `clear`, `keys`, and `values`, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -145,7 +145,7 @@ CD constructors retain definition-before-use ordering. Ordinary pointers and
 aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
-`hash`, `contains`, `slice`, `copy`, `concat`, `remove`, `keys`, `values`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
+`hash`, `contains`, `slice`, `copy`, `concat`, `remove`, `clear`, `keys`, `values`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
 `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`. Their
 name-table index is an immediate machine operand, while arguments and the
 result remain in the `CDValue` virtual register class. The `CD_NATIVE_CALL`
@@ -178,6 +178,11 @@ scalar or proven CD dynamic-value key, and an exact address-space-zero `ptr`
 result. The Rust VM owns map/key validation, first-match mutation,
 removed-value return, and missing-key errors; ordinary pointer substitutes
 remain rejected.
+
+For `clear`, the machine lowerer accepts a proven CD dynamic-value map and an
+exact address-space-zero `ptr` result. The Rust VM owns the runtime map check,
+shared map mutation, and nil result; ordinary pointer substitutes remain
+rejected.
 
 For `keys`, the machine lowerer accepts a proven CD dynamic-value token and an
 exact address-space-zero `ptr` result. The Rust VM owns the runtime map check,
