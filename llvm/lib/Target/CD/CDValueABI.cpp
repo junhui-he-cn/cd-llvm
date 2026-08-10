@@ -909,6 +909,16 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "push") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !isArrayElement(*Call.getArgOperand(2)) || !HasCDPointerResult) {
+      Error = "llvm.cd.native push requires a CD dynamic-value array, a "
+              "scalar or CD dynamic-value value, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "remove") {
     if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
         !isArrayElement(*Call.getArgOperand(2)) || !HasCDPointerResult) {

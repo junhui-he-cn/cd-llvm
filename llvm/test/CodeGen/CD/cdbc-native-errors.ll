@@ -113,6 +113,14 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RIGHT-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/merge-result.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-result.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/push-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/push-array-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-ARRAY-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-array-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-ARRAY-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/push-value-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-VALUE-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-value-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-VALUE-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/push-result.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-result.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-RESULT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
@@ -240,6 +248,14 @@
 ; MERGE-RIGHT-POINTER-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
 ; MERGE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
 ; MERGE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; PUSH-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-ARITY-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-ARRAY-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-ARRAY-POINTER-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-VALUE-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-VALUE-POINTER-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; PUSH-RESULT-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
 ; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
@@ -983,5 +999,48 @@ define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, ptr null)
+  ret i32 0
+}
+
+;--- push-arity.ll
+@name = private unnamed_addr constant [5 x i8] c"push\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- push-array-pointer.ll
+@name = private unnamed_addr constant [5 x i8] c"push\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %array = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, i64 1)
+  ret i32 0
+}
+
+;--- push-value-pointer.ll
+@name = private unnamed_addr constant [5 x i8] c"push\00"
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 0)
+  %value = inttoptr i64 1 to ptr
+  %result = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr %value)
+  ret i32 0
+}
+
+;--- push-result.ll
+@name = private unnamed_addr constant [5 x i8] c"push\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, i64 1)
   ret i32 0
 }

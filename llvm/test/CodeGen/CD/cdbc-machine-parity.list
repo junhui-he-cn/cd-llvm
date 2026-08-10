@@ -73,6 +73,8 @@ runtime-error llvm/test/CodeGen/CD/cdbc-native-clear-runtime.ll "clear expects m
 behavior llvm/test/CodeGen/CD/cdbc-native-merge.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-merge-left-runtime.ll "merge expects map as first argument"
 runtime-error llvm/test/CodeGen/CD/cdbc-native-merge-right-runtime.ll "merge expects map as second argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-push.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-push-runtime.ll "push expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-keys.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-keys-runtime.ll "keys expects map as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-map-values.ll
