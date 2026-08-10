@@ -36,10 +36,10 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives including `contains`/`slice`/`copy`/`concat`/`keys`, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future native names stay rejected until separately selected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives including `contains`/`slice`/`copy`/`concat`/`keys`/`values`, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future native names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 112 lit (111 passed, 1 unsupported), parity 81/81, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 114 lit (113 passed, 1 unsupported), parity 83/83, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | External, non-blocking | The complete eight-tool workflow fix is published in `18a6063fd`; hosted execution is not used as a prerequisite for the locally accepted boundary |
 | M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select`, PHI, and one-slot storage are proven through existing control-flow and variable operations; all selected callback natives are verified |
 
@@ -1381,6 +1381,33 @@ case; direct/machine parity passed `81/81`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, module-link direct/machine integration
 passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
 clean.
+
+### Narrow M4 follow-up: bounded native `values` (2026-08-10)
+
+**Goal:** Admit the Rust VM's existing `values` helper through the shared
+`llvm.cd.native` ABI without adding a wire operation, artifact field, or
+changing the nested VM.
+
+The accepted shape is a proven CD dynamic-value token and an exact
+address-space-zero `ptr` result. The VM owns the runtime map check,
+insertion-order snapshot, and fresh array allocation; ordinary LLVM pointers
+remain rejected by shared provenance validation.
+
+- [x] Add the name-specific capability matrix to `CDValueABI` and the typed
+  artifact native-name allowlist.
+- [x] Add positive empty/non-empty insertion-ordered value arrays, runtime
+  non-map, and malformed direct/machine fixtures.
+- [x] Add behavior/runtime-error entries to the direct/machine parity manifest.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan.
+
+The positive fixture is `cdbc-native-map-values.ll` because the existing
+`cdbc-native-values.ll` artifact fixture continues to cover `str`, `typeOf`,
+and `range` native lowering. Focused values/error lit passed `3/3`; the full
+local CD suite passed `114` tests with `113` passed and `1` expected unsupported
+VM case; direct/machine parity passed `83/83`; parity unit tests passed `14/14`;
+module-link unit tests passed `5/5`; module-link direct/machine integration
+passed; Rust VM tests passed `73 + 3 + 8`; and `git diff --check` passed.
 
 ## 12. Recommended next execution order
 

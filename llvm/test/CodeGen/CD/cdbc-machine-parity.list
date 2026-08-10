@@ -68,6 +68,8 @@ behavior llvm/test/CodeGen/CD/cdbc-native-concat.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-concat-runtime.ll "concat expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-keys.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-keys-runtime.ll "keys expects map as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-map-values.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-values-runtime.ll "values expects map as first argument"
 artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # The range fixture uses fdiv; direct and machine constant materialization
 # order differs, so FileCheck asserts identical ranges and parity checks VM
