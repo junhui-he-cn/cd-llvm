@@ -2,7 +2,7 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call including
-`contains`, `slice`, `copy`, `concat`, `push`, `remove`, `clear`, `merge`, `keys`, and `values`, and `map` /
+`contains`, `slice`, `copy`, `concat`, `push`, `pop`, `remove`, `clear`, `merge`, `keys`, and `values`, and `map` /
 `filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
@@ -652,6 +652,7 @@ for the selected native name. The first bounded capability matrix is:
 | `copy` | one CD dynamic-value array token | address-space-zero `ptr` | fresh shallow array copy |
 | `concat` | two CD dynamic-value array tokens | address-space-zero `ptr` | fresh shallow concatenated array |
 | `push` | one CD dynamic-value array token, one scalar or CD dynamic-value value | address-space-zero `ptr` | appends in place; returns `nil` |
+| `pop` | one CD dynamic-value array token | address-space-zero `ptr` | removes and returns the final element |
 | `remove` | one CD dynamic-value map token, one scalar or CD dynamic-value key | address-space-zero `ptr` | removed map value; mutates the map |
 | `clear` | one CD dynamic-value map token | address-space-zero `ptr` | nil result; clears the map in place |
 | `merge` | two CD dynamic-value map tokens | address-space-zero `ptr` | fresh ordered map; right-side duplicate values win |
@@ -684,7 +685,9 @@ snapshot, and fresh shallow-array allocation. `concat` requires two proven CD
 dynamic-value tokens; the VM owns both runtime array checks, snapshot order,
 and fresh shallow-array allocation. `push` requires a proven array token and a
 scalar or proven CD dynamic-value value; the VM owns the runtime array check,
-append mutation, resource checkpoint, and nil result. `keys` requires a proven
+append mutation, resource checkpoint, and nil result. `pop` requires a proven
+array token; the VM owns the runtime array check, last-element mutation,
+removed-value return, and empty-array diagnostic. `keys` requires a proven
 CD dynamic-value
 token; the VM owns the runtime map check, insertion-order snapshot, and fresh
 array allocation. `remove` requires a proven map token and a scalar or proven
@@ -1028,7 +1031,7 @@ The bounded native-call group is complete only when `llvm.cd.native` enforces
 the name-specific matrix above, emits `native_call` through both backends,
 rejects unknown/not-yet-selected callback names and ordinary pointer
 substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
-plus shared runtime failures for numeric, string, `contains`, `map`, `filter`, `flatMap`,
+plus shared runtime failures for numeric, string, `contains`, `push`, `pop`, `map`, `filter`, `flatMap`,
 `reduce`, `any`, `all`, `count`, `find`, and `findIndex` helpers.
 The string-helper extension additionally requires UTF-8 scalar-boundary output
 and malformed shape diagnostics for both `substr` and `charAt`.

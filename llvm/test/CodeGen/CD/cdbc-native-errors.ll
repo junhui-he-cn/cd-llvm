@@ -121,6 +121,12 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-value-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-VALUE-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/push-result.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/push-result.ll -o - 2>&1 | FileCheck %s --check-prefix=PUSH-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/pop-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/pop-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/pop-array-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-ARRAY-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/pop-array-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-ARRAY-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/pop-result.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/pop-result.ll -o - 2>&1 | FileCheck %s --check-prefix=POP-RESULT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
@@ -256,6 +262,12 @@
 ; PUSH-VALUE-POINTER-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
 ; PUSH-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
 ; PUSH-RESULT-MACHINE: CD machine backend does not support llvm.cd.native push requires a CD dynamic-value array, a scalar or CD dynamic-value value, and a ptr result
+; POP-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native pop requires a CD dynamic-value array and a ptr result
+; POP-ARITY-MACHINE: CD machine backend does not support llvm.cd.native pop requires a CD dynamic-value array and a ptr result
+; POP-ARRAY-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native pop requires a CD dynamic-value array and a ptr result
+; POP-ARRAY-POINTER-MACHINE: CD machine backend does not support llvm.cd.native pop requires a CD dynamic-value array and a ptr result
+; POP-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native pop requires a CD dynamic-value array and a ptr result
+; POP-RESULT-MACHINE: CD machine backend does not support llvm.cd.native pop requires a CD dynamic-value array and a ptr result
 ; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
@@ -1042,5 +1054,33 @@ define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, i64 1)
+  ret i32 0
+}
+
+;--- pop-arity.ll
+@name = private unnamed_addr constant [4 x i8] c"pop\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- pop-array-pointer.ll
+@name = private unnamed_addr constant [4 x i8] c"pop\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %array = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name, ptr %array)
+  ret i32 0
+}
+
+;--- pop-result.ll
+@name = private unnamed_addr constant [4 x i8] c"pop\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
   ret i32 0
 }

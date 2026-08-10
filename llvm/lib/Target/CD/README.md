@@ -211,7 +211,7 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`,
-`slice`, `copy`, `concat`, `push`, `remove`, `clear`, `merge`, `keys`, `values`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
+`slice`, `copy`, `concat`, `push`, `pop`, `remove`, `clear`, `merge`, `keys`, `values`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
 `any`, `all`, `count`, `find`, and `findIndex`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
@@ -234,6 +234,9 @@ shallow-array semantics.
 `push` accepts a proven CD dynamic-value array, a scalar or proven CD
 dynamic-value value, and an address-space-zero `ptr` result; the VM owns the
 runtime array check, append mutation, resource checkpoint, and nil result.
+`pop` accepts a proven CD dynamic-value array and an address-space-zero `ptr`
+result; the VM owns the runtime array check, last-element mutation, removed
+value return, and empty-array diagnostic.
 `remove` accepts a proven CD dynamic-value map, a scalar or proven CD
 dynamic-value key, and an address-space-zero `ptr` result; the VM owns map/key
 validation, first-match mutation, removed-value return, and missing-key errors.

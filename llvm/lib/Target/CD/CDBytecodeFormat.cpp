@@ -89,7 +89,8 @@ static bool isSupportedNativeName(StringRef Name) {
   return Name == "floor" || Name == "ceil" || Name == "sqrt" ||
          Name == "str" || Name == "typeOf" || Name == "hash" ||
          Name == "contains" || Name == "slice" || Name == "copy" ||
-         Name == "concat" || Name == "push" || Name == "remove" ||
+         Name == "concat" || Name == "push" || Name == "pop" ||
+         Name == "remove" ||
          Name == "clear" ||
          Name == "merge" || Name == "keys" ||
          Name == "values" ||
