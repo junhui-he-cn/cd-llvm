@@ -10,7 +10,7 @@
 
 ---
 
-## 0. Roadmap status at a glance (2026-08-09)
+## 0. Roadmap status at a glance (2026-08-10)
 
 This document is the high-level roadmap and implementation record.  The
 independently executable queue for the next slices lives in the
@@ -36,11 +36,11 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future callback names stay rejected until separately selected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives including `contains`, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future native names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 102 lit (101 passed, 1 unsupported), parity 71/71, VM `73 + 3 + 8`, module-link direct/machine passed |
-| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31312424006` for `4704d3668` passed VM integration but the LLVM-only job failed `cdbc-optimization.ll` because the clean build omitted `opt`; the workflow now builds the complete eight-tool closure and needs publication/rerun |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 104 lit (103 passed, 1 unsupported), parity 73/73, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | External, non-blocking | The complete eight-tool workflow fix is published in `18a6063fd`; hosted execution is not used as a prerequisite for the locally accepted boundary |
 | M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select`, PHI, and one-slot storage are proven through existing control-flow and variable operations; all selected callback natives are verified |
 
 ### Active queue after M7-local
@@ -48,8 +48,9 @@ independent VM oracle and is not absorbed into this repository.
 Work is intentionally ordered by dependency rather than by adding more
 opcodes:
 
-1. Close the hosted M7 gate and record the observed result.  Keep the LLVM 24
-   upstream `llc -g` rejection as an explicit driver boundary.
+1. Treat the locally verified M7 gate as the release boundary; hosted execution
+   remains an external check. Keep the LLVM 24 upstream `llc -g` rejection as
+   an explicit driver boundary.
 2. Keep the public debugger state/query contract frozen before adding commands
    such as `list`, `where`, locals, or breakpoint queries. The current pause
    fields, command markers, and synthetic-entry parity exception are now
@@ -57,10 +58,10 @@ opcodes:
 3. Keep the completed function parameter/return transport slice as the ABI
    foundation; dynamic CD `select`, PHI, and one-slot storage now reuse
    existing control-flow and variable operations.
-4. Add callback native helpers one vertical slice at a time. The `map`,
-   `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
-   slices now have explicit callback ABIs; keep future callback names rejected
-   until their own matrices are defined.
+4. Add bounded native helpers one vertical slice at a time. `contains` and the
+   `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and
+   `findIndex` slices now have explicit matrices; keep future native names
+   rejected until their own contracts are defined.
 
 Do not combine items 2-5 in one implementation commit.  In particular,
 callback support must not introduce an implicit function-value or ordinary
@@ -107,7 +108,7 @@ The outer repository contains the experimental target in:
 
 The implemented value boundary is deliberately explicit.  Strings, arrays,
 maps, records, enum variants, indexing/mutation, and the bounded native names
-`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`, `substr`, `charAt`,
+`floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`, `range`, `substr`, `charAt`,
 and the selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks use target-specific CD
 intrinsics and existing `cdbc 0.1` operations.
 Ordinary LLVM pointers,
@@ -1249,6 +1250,32 @@ direct and machine artifacts passed Rust `dump` and produced identical `7` /
 checkout remained unchanged. At that boundary, PHI/select propagation,
 dynamic local storage, and function-value callback transport remained separate
 decisions.
+
+### Narrow M4 follow-up: bounded native `contains` (2026-08-10)
+
+**Goal:** Admit the Rust VM's existing `contains` helper through the shared
+`llvm.cd.native` ABI without adding a wire operation, artifact field, or
+changing the nested VM.
+
+The accepted shape is a proven CD dynamic-value collection, a scalar or proven
+CD dynamic-value needle, and an exact `i1` result. The VM owns array element,
+map key, and integer range membership semantics; ordinary LLVM pointers remain
+rejected by shared provenance validation.
+
+- [x] Add the name-specific capability matrix to `CDValueABI` and the typed
+  artifact native-name allowlist.
+- [x] Add positive array/map membership, runtime non-collection, and malformed
+  ordinary-pointer fixtures for both direct and machine paths.
+- [x] Add behavior/runtime-error entries to the direct/machine parity manifest.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan.
+
+Verification on 2026-08-10: focused lit passed `3/3`; the full local CD suite
+passed `104` tests with `103` passed and `1` expected unsupported VM case;
+direct/machine parity passed `73/73`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, module-link direct/machine integration
+passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
+clean.
 
 ## 12. Recommended next execution order
 

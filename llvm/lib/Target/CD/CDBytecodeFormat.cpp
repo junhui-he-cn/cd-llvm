@@ -88,7 +88,8 @@ static bool fail(std::string &Error, Twine Message) {
 static bool isSupportedNativeName(StringRef Name) {
   return Name == "floor" || Name == "ceil" || Name == "sqrt" ||
          Name == "str" || Name == "typeOf" || Name == "hash" ||
-         Name == "range" || Name == "substr" || Name == "charAt" ||
+         Name == "contains" || Name == "range" || Name == "substr" ||
+         Name == "charAt" ||
          Name == "map" || Name == "filter" || Name == "flatMap" ||
          Name == "any" ||
          Name == "all" || Name == "count" || Name == "find" ||

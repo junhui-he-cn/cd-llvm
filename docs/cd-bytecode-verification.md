@@ -6,7 +6,7 @@ the Rust VM remains an explicitly selected integration dependency.
 
 ## Recorded Environment
 
-Recorded on 2026-08-09 from the current checkout:
+Recorded on 2026-08-10 from the current checkout:
 
 | Component | Observed version |
 | --- | --- |
@@ -32,11 +32,11 @@ The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
 
-The current local LLVM-only run is `101 passed / 1 unsupported` across 102
-fixtures. The direct/machine parity manifest has 71 passing entries, including
-the selected `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`
-callback behavior and runtime type-error cases, plus dynamic CD `select`, PHI,
-and one-slot storage behavior.
+The current local LLVM-only run is `103 passed / 1 unsupported` across 104
+fixtures. The direct/machine parity manifest has 73 passing entries, including
+the `contains` behavior, selected `map`, `filter`, `flatMap`, `reduce`, `any`,
+`all`, `count`, `find`, and `findIndex` callback behavior and runtime type-error
+cases, plus dynamic CD `select`, PHI, and one-slot storage behavior.
 
 ## Opt-In VM Gate
 
@@ -132,6 +132,7 @@ and `!cd.sources` metadata instead.
 | Dynamic CD `select` propagation | cdbc-dynamic-select.ll and cdbc-dynamic-select-errors.ll | Proven address-space-zero arms pass direct/machine artifact and behavior parity; ordinary, foreign, and mixed pointer arms remain rejected |
 | Dynamic CD PHI propagation | cdbc-dynamic-phi.ll and cdbc-dynamic-phi-errors.ll | Proven address-space-zero incoming edges, including a loop-carried PHI, pass direct/machine artifact and behavior parity; ordinary, foreign, mixed, undef, and poison incoming values remain rejected |
 | Dynamic CD one-slot storage | cdbc-dynamic-storage.ll and cdbc-dynamic-storage-errors.ll | Direct/machine load/store parity for straight-line replacement and branch-complete initialization; uninitialized, partially initialized, escaped, self-address, and volatile storage remain rejected |
+| Native `contains` | cdbc-native-contains.ll, cdbc-native-contains-runtime.ll, and contains cases in cdbc-native-errors.ll | Array and map membership, scalar/CD needle capability, runtime non-collection error, and ordinary-pointer diagnostics pass direct/machine parity |
 | Callback native `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-flat-map.ll, cdbc-native-flat-map-runtime.ll, cdbc-native-flat-map-errors.ll, cdbc-native-reduce.ll, cdbc-native-reduce-runtime.ll, cdbc-native-reduce-errors.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-count.ll, cdbc-native-count-runtime.ll, cdbc-native-find.ll, cdbc-native-find-runtime.ll, cdbc-native-find-index.ll, cdbc-native-find-index-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, one-level callback-array flattening, left-to-right accumulator threading, predicate ABI, full count traversal, first-match/no-match `find` behavior, zero-based first-match/no-match `findIndex` behavior, and callback-shape diagnostics passed |
 | llc -g | cdbc-driver-options.ll | Explicitly rejected by the upstream llc driver; target-side `-g` semantics remain open |
 

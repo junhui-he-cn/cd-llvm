@@ -865,6 +865,18 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "contains") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !isArrayElement(*Call.getArgOperand(2)) ||
+        !Call.getType()->isIntegerTy(1)) {
+      Error = "llvm.cd.native contains requires a CD dynamic-value "
+              "collection, a scalar or CD dynamic-value needle, and an i1 "
+              "result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "range") {
     if (Call.arg_size() < 2 || Call.arg_size() > 4 ||
         !HasCDPointerResult) {

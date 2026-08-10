@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call including `contains`, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -145,13 +145,18 @@ CD constructors retain definition-before-use ordering. Ordinary pointers and
 aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
-`hash`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
+`hash`, `contains`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
 `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`. Their
 name-table index is an immediate machine operand, while arguments and the
 result remain in the `CDValue` virtual register class. The `CD_NATIVE_CALL`
 bridge emits the existing `native_call` artifact operation after shared
 name-specific validation; `substr` and `charAt` reuse that bridge and keep
 Unicode scalar, runtime type, and bounds semantics in the Rust VM.
+
+For `contains`, the machine lowerer accepts a proven CD dynamic-value
+collection, a scalar or proven CD dynamic-value needle, and an exact `i1`
+result. The VM owns array element, map key, and range membership checks;
+ordinary pointer operands remain rejected by the shared ABI validator.
 
 For `map`, the machine lowerer accepts only a direct defined callback with one
 address-space-zero CD parameter marked by `cd.value.params="0"` and a

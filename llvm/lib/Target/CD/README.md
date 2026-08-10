@@ -210,14 +210,18 @@ name-table metadata, ordinary pointers and aggregates remain unsupported, and
 variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
-the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `range`,
-`substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
+the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`,
+`range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
 `any`, `all`, `count`, `find`, and `findIndex`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
 and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
 `charAt` accept explicit CD dynamic-value tokens and leave string type, Unicode
 scalar boundaries, integer-valuedness, and bounds errors to the Rust VM.
+`contains` accepts a proven CD dynamic-value collection and a scalar or proven
+CD dynamic-value needle, returns exact `i1`, and leaves array membership, map
+key validation, range integer membership, and runtime type errors to the Rust
+VM. Ordinary pointer substitutes remain rejected.
 `map` accepts one CD token and a direct defined callback with the explicit
 `cd.value.params="0"`/`cd.value.return` ABI markers; `filter` accepts one CD
 token and a direct defined predicate with `cd.value.params="0"` and an `i1`

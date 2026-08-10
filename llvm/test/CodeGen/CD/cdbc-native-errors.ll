@@ -59,6 +59,14 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/char-at-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CHAR-AT-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/char-at-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CHAR-AT-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/char-at-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CHAR-AT-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/contains-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-SHAPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-shape.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-SHAPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/contains-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-COLLECTION-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-COLLECTION-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/contains-needle-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-NEEDLE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-needle-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-NEEDLE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/contains-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-RESULT-MACHINE
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
@@ -120,6 +128,14 @@
 ; CHAR-AT-POINTER-MACHINE: CD machine backend does not support llvm.cd.native charAt requires a CD string value, one double argument, and a ptr result
 ; CHAR-AT-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native charAt requires a CD string value, one double argument, and a ptr result
 ; CHAR-AT-RESULT-MACHINE: CD machine backend does not support llvm.cd.native charAt requires a CD string value, one double argument, and a ptr result
+; CONTAINS-SHAPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-SHAPE-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-NEEDLE-DIRECT: CD target does not support LLVM operation: llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-NEEDLE-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; CONTAINS-RESULT-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
@@ -512,5 +528,51 @@ define i32 @main() {
 entry:
   %source = call ptr @llvm.cd.string(ptr @message)
   %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr %source, double 1.0)
+  ret i32 0
+}
+
+;--- contains-shape.ll
+@name = private unnamed_addr constant [9 x i8] c"contains\00"
+declare i1 @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call i1 (ptr, ...) @llvm.cd.native(ptr @name, i64 1)
+  ret i32 0
+}
+
+;--- contains-collection-pointer.ll
+@name = private unnamed_addr constant [9 x i8] c"contains\00"
+declare i1 @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %collection = inttoptr i64 1 to ptr
+  %value = call i1 (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %collection, i64 1)
+  ret i32 0
+}
+
+;--- contains-needle-pointer.ll
+@name = private unnamed_addr constant [9 x i8] c"contains\00"
+@item = private unnamed_addr constant [5 x i8] c"item\00"
+declare i1 @llvm.cd.native(ptr, ...)
+declare ptr @llvm.cd.array(i32, ...)
+declare ptr @llvm.cd.string(ptr)
+define i32 @main() {
+entry:
+  %item_value = call ptr @llvm.cd.string(ptr @item)
+  %array = call ptr (i32, ...) @llvm.cd.array(i32 1, ptr %item_value)
+  %slot = alloca i8
+  %value = call i1 (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %array, ptr %slot)
+  ret i32 0
+}
+
+;--- contains-result.ll
+@name = private unnamed_addr constant [9 x i8] c"contains\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, i64 1)
   ret i32 0
 }

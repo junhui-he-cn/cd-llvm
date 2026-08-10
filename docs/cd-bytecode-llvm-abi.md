@@ -1,7 +1,8 @@
 # LLVM CD value ABI
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
-map-constructor, record-value, enum-variant, bounded native-call, and `map` /
+map-constructor, record-value, enum-variant, bounded native-call including
+`contains`, and `map` /
 `filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
@@ -646,6 +647,7 @@ for the selected native name. The first bounded capability matrix is:
 | `str` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | string conversion |
 | `typeOf` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | runtime type name |
 | `hash` | exactly one scalar or CD dynamic value | `double` | runtime hash number |
+| `contains` | one CD dynamic-value collection, one scalar or CD dynamic-value needle | `i1` | array, map, or range membership |
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
 | `substr` | one CD dynamic value, two `double` values | address-space-zero `ptr` | Unicode-scalar string slice |
 | `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
@@ -660,9 +662,13 @@ for the selected native name. The first bounded capability matrix is:
 | `findIndex` | one CD dynamic-value token, one direct predicate function value | `double` | zero-based index of the first match, or `-1` when there is no match |
 
 The `str`, `typeOf`, and `hash` operands may be scalar, CD nil, or a value
-produced by an explicit CD intrinsic. The `range` result is a CD dynamic-value
-token and may be consumed by the existing `len`, `index`, and `assert_array`
-intrinsics. `substr` and `charAt` require an explicit CD dynamic-value token;
+produced by an explicit CD intrinsic. `contains` requires a proven CD
+dynamic-value collection, accepts a scalar or proven CD dynamic-value needle,
+and returns exact `i1`; the Rust VM owns array element, map key, and integer
+range membership semantics. The `range` result is a CD dynamic-value token
+and may be consumed by the existing `len`, `index`, `assert_array`, and
+`contains` operations. `substr` and `charAt` require an explicit CD
+dynamic-value token;
 the target cannot prove its runtime string tag, so non-string values remain a
 valid compile-time token shape and receive the Rust VM's runtime type error.
 Their numeric operands must be `double`; the VM owns integer-valuedness,
@@ -993,7 +999,7 @@ The bounded native-call group is complete only when `llvm.cd.native` enforces
 the name-specific matrix above, emits `native_call` through both backends,
 rejects unknown/not-yet-selected callback names and ordinary pointer
 substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
-plus shared runtime failures for numeric, string, `map`, `filter`, `flatMap`,
+plus shared runtime failures for numeric, string, `contains`, `map`, `filter`, `flatMap`,
 `reduce`, `any`, `all`, `count`, `find`, and `findIndex` helpers.
 The string-helper extension additionally requires UTF-8 scalar-boundary output
 and malformed shape diagnostics for both `substr` and `charAt`.

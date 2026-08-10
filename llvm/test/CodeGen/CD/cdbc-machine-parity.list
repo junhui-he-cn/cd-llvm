@@ -58,6 +58,8 @@ behavior llvm/test/CodeGen/CD/cdbc-native-find.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-find-runtime.ll "find expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-find-index.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-find-index-runtime.ll "findIndex expects array as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-contains.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-contains-runtime.ll "contains expects array, map, or range as first argument"
 artifact llvm/test/CodeGen/CD/cdbc-debug-sources.ll
 # The range fixture uses fdiv; direct and machine constant materialization
 # order differs, so FileCheck asserts identical ranges and parity checks VM
