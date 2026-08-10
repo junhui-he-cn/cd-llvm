@@ -48,7 +48,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_TARGETS_TO_BUILD=Native \
             -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=CD
-          ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+          ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 
       - name: Run LLVM-only CD suite
         run: |
@@ -91,7 +91,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DLLVM_TARGETS_TO_BUILD=Native \
             -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=CD
-          ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+          ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 
       - name: Run Rust VM, parity, and linked integration
         env:

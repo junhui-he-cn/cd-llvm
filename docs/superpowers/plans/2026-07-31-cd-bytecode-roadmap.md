@@ -40,7 +40,7 @@ independent VM oracle and is not absorbed into this repository.
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
 | M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 102 lit (101 passed, 1 unsupported), parity 71/71, VM `73 + 3 + 8`, module-link direct/machine passed |
-| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31245584718` for `770542a7e` failed before the CD tests because the clean build omitted `llvm-config`, `llvm-readobj`, and `split-file`; the workflow now builds the complete tool set and needs publication/rerun |
+| M7-hosted | GitHub Actions execution of the two-job release matrix | In progress | Run `31312424006` for `4704d3668` passed VM integration but the LLVM-only job failed `cdbc-optimization.ll` because the clean build omitted `opt`; the workflow now builds the complete eight-tool closure and needs publication/rerun |
 | M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select`, PHI, and one-slot storage are proven through existing control-flow and variable operations; all selected callback natives are verified |
 
 ### Active queue after M7-local

@@ -63,7 +63,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link.py --llc build-cd/bi
 `.github/workflows/cd-bytecode.yml` keeps the two dependency boundaries
 explicit:
 
-- `llvm-only` builds `llc`, `FileCheck`, `count`, `not`, `llvm-config`,
+- `llvm-only` builds `llc`, `FileCheck`, `count`, `not`, `opt`, `llvm-config`,
   `llvm-readobj`, and `split-file`, then runs the CD lit directory with
   `CD_COMPILER_ROOT` unset. It does not check out the Rust VM.
 - `vm-integration` checks out `junhui-he-cn/cd-compiler` at the recorded
@@ -79,14 +79,17 @@ Run `31245584718` for committed baseline `770542a7e` completed with both jobs
 failing during test setup: the clean runner had built `llc`, `FileCheck`,
 `count`, and `not`, but `llvm-lit` could not invoke missing `llvm-config` and
 reported missing `llvm-readobj`. The workflow now builds those tools plus
-`split-file`; a hosted rerun remains pending publication.
+`split-file`. Hosted run `31312424006` for `4704d3668` then built that closure
+successfully and passed the VM integration job, but the LLVM-only job failed
+only `cdbc-optimization.ll` because its `default<O2>` RUN line also requires
+`opt`. The workflow now builds `opt` as well; a hosted rerun remains pending.
 
 ## LLVM Build And Checks
 
 Build the target tools before running the gates:
 
 ~~~sh
-ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 build-cd/bin/llvm-lit -q llvm/test/CodeGen/CD
 git diff --check
 ~~~

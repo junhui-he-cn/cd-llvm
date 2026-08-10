@@ -99,7 +99,7 @@ clean and equals `origin/master`.
 - [ ] **Step 2: Rebuild the LLVM-only tools**
 
 ~~~
-ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 ~~~
 
 Expected: exit status `0`; the build must not require `llvm-lit` as a Ninja
@@ -151,10 +151,12 @@ The latest run must contain successful `llvm-only` and `vm-integration` jobs.
 Run `31103840045` for `749aef4ba` failed because the workflow omitted LLVM's
 `not` test utility from both build commands. Run `31245584718` for `770542a7e`
 then built `not` successfully but failed before the CD tests because a clean
-runner also needed `llvm-config`, `llvm-readobj`, and `split-file`. The current
-workflow builds all seven required tools; reproduce the job locally and rerun
-the hosted gate after publication. Do not weaken the gate or absorb the nested
-VM checkout into the outer repository.
+runner also needed `llvm-config`, `llvm-readobj`, and `split-file`. Run
+`31312424006` for `4704d3668` built those tools and passed VM integration, but
+the LLVM-only lit suite exposed one more missing dependency: `opt`, required by
+`cdbc-optimization.ll`. The current workflow builds all eight required tools;
+reproduce the job locally and rerun the hosted gate after publication. Do not
+weaken the gate or absorb the nested VM checkout into the outer repository.
 
 - [ ] **Step 6: Record the release boundary and commit the gate**
 
@@ -310,7 +312,7 @@ diagnostics to match exactly.
 - [x] **Step 5: Run the focused and complete gates**
 
 ~~~
-ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 build-cd/bin/llvm-lit -sv \
   llvm/test/CodeGen/CD/cdbc-native-string.ll \
   llvm/test/CodeGen/CD/cdbc-native-errors.ll \
@@ -926,7 +928,7 @@ A task is complete only when implementation, ABI docs, README, roadmap status,
 fixtures, and parity rules agree. The applicable checks are:
 
 ~~~
-ninja -C build-cd llc FileCheck count not llvm-config llvm-readobj split-file
+ninja -C build-cd llc FileCheck count not opt llvm-config llvm-readobj split-file
 env -u CD_COMPILER_ROOT build-cd/bin/llvm-lit -sv llvm/test/CodeGen/CD
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity_test.py
 PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_module_link_test.py
