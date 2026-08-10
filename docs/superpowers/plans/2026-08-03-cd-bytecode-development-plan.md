@@ -1222,6 +1222,46 @@ case; direct/machine parity passed `87/87`; parity unit tests passed `14/14`;
 module-link unit tests passed `5/5`; module-link direct/machine integration
 passed; Rust VM tests passed `73 + 3 + 8`; and `git diff --check` passed.
 
+## Task 23: Extend the bounded native lane with `merge`
+
+This outer-only follow-on reuses the existing `native_call` artifact operation
+and the Rust VM's already-supported fresh map helper. It adds no opcode,
+artifact field, `.cdbc 0.1` version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-merge.ll`,
+  `llvm/test/CodeGen/CD/cdbc-native-merge-left-runtime.ll`, and
+  `llvm/test/CodeGen/CD/cdbc-native-merge-right-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, roadmap, and
+  active-plan documents.
+
+The accepted shape is:
+
+~~~llvm
+llvm.cd.native(ptr name, ptr left, ptr right) -> ptr
+~~~
+
+Both map operands must have proven CD provenance. The Rust VM owns fresh
+allocation, left-to-right insertion order, and right-side duplicate
+replacement while retaining the first key position.
+
+- [x] Admit `merge` only for two proven CD dynamic-value maps and an exact
+  address-space-zero `ptr` result.
+- [x] Reuse the existing `native_call` bridge in both direct and machine paths.
+- [x] Cover fresh ordered-map behavior, duplicate-key replacement, both
+  runtime map failures, malformed arity/result/pointer diagnostics, and parity.
+- [x] Keep future native names rejected and the nested VM checkout unchanged.
+
+Completed on 2026-08-10. Focused merge/error lit passed `4/4`; the full local
+CD suite passed `121` tests with `120` passed and `1` expected unsupported VM
+case; direct/machine parity passed `90/90`; parity unit tests passed `14/14`;
+module-link unit tests passed `5/5`; module-link direct/machine integration
+passed; Rust VM tests passed `73 + 3 + 8`; and `git diff --check` passed.
+
 ## Completion and delivery gates
 
 A task is complete only when implementation, ABI docs, README, roadmap status,

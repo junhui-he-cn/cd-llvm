@@ -105,6 +105,14 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/clear-map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-MAP-POINTER-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/clear-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/clear-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CLEAR-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/merge-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/merge-left-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-LEFT-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-left-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-LEFT-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/merge-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RIGHT-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RIGHT-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/merge-result.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/merge-result.ll -o - 2>&1 | FileCheck %s --check-prefix=MERGE-RESULT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
@@ -224,6 +232,14 @@
 ; CLEAR-MAP-POINTER-MACHINE: CD machine backend does not support llvm.cd.native clear requires a CD dynamic-value map and a ptr result
 ; CLEAR-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native clear requires a CD dynamic-value map and a ptr result
 ; CLEAR-RESULT-MACHINE: CD machine backend does not support llvm.cd.native clear requires a CD dynamic-value map and a ptr result
+; MERGE-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-ARITY-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-LEFT-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-LEFT-POINTER-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-RIGHT-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-RIGHT-POINTER-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
+; MERGE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native merge requires two CD dynamic-value maps and a ptr result
 ; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
@@ -924,5 +940,48 @@ declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
+  ret i32 0
+}
+
+;--- merge-arity.ll
+@name = private unnamed_addr constant [6 x i8] c"merge\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- merge-left-pointer.ll
+@name = private unnamed_addr constant [6 x i8] c"merge\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %left = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %left, ptr null)
+  ret i32 0
+}
+
+;--- merge-right-pointer.ll
+@name = private unnamed_addr constant [6 x i8] c"merge\00"
+declare ptr @llvm.cd.map(i32, ...)
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %left = call ptr (i32, ...) @llvm.cd.map(i32 0)
+  %right = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %left, ptr %right)
+  ret i32 0
+}
+
+;--- merge-result.ll
+@name = private unnamed_addr constant [6 x i8] c"merge\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, ptr null)
   ret i32 0
 }

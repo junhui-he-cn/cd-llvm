@@ -90,7 +90,7 @@ static bool isSupportedNativeName(StringRef Name) {
          Name == "str" || Name == "typeOf" || Name == "hash" ||
          Name == "contains" || Name == "slice" || Name == "copy" ||
          Name == "concat" || Name == "remove" || Name == "clear" ||
-         Name == "keys" ||
+         Name == "merge" || Name == "keys" ||
          Name == "values" ||
          Name == "range" ||
          Name == "substr" ||

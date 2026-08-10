@@ -32,9 +32,9 @@ The CD directory includes the VM integration file, but it is reported
 unsupported when the cd-vm feature is unavailable. All LLVM-only tests remain
 executable in that mode.
 
-The current local LLVM-only run is `117 passed / 1 unsupported` across 118
-fixtures. The direct/machine parity manifest has 87 passing entries, including
-the `contains`, `slice`, `copy`, `concat`, `remove`, `clear`, `keys`, and `values` behavior, selected `map`, `filter`, `flatMap`, `reduce`, `any`,
+The current local LLVM-only run is `120 passed / 1 unsupported` across 121
+fixtures. The direct/machine parity manifest has 90 passing entries, including
+the `contains`, `slice`, `copy`, `concat`, `remove`, `clear`, `merge`, `keys`, and `values` behavior, selected `map`, `filter`, `flatMap`, `reduce`, `any`,
 `all`, `count`, `find`, and `findIndex` callback behavior and runtime type-error
 cases, plus dynamic CD `select`, PHI, and one-slot storage behavior.
 
@@ -138,6 +138,7 @@ and `!cd.sources` metadata instead.
 | Native `concat` | cdbc-native-concat.ll, cdbc-native-concat-runtime.ll, and concat cases in cdbc-native-errors.ll | Empty/non-empty ordered concatenation, runtime non-array error, arity/result/pointer diagnostics, and direct/machine parity pass |
 | Native `remove` | cdbc-native-remove.ll, cdbc-native-remove-runtime.ll, and remove cases in cdbc-native-errors.ll | Scalar/CD key removal, shared-map mutation, removed-value return, runtime non-map error, arity/result/pointer diagnostics, and direct/machine parity pass |
 | Native `clear` | cdbc-native-clear.ll, cdbc-native-clear-runtime.ll, and clear cases in cdbc-native-errors.ll | In-place map clearing, nil result, runtime non-map error, arity/result/pointer diagnostics, and direct/machine parity pass |
+| Native `merge` | cdbc-native-merge.ll, cdbc-native-merge-left-runtime.ll, cdbc-native-merge-right-runtime.ll, and merge cases in cdbc-native-errors.ll | Fresh ordered map, right-side duplicate replacement, both runtime map errors, arity/result/pointer diagnostics, and direct/machine parity pass |
 | Native `keys` | cdbc-native-keys.ll, cdbc-native-keys-runtime.ll, and keys cases in cdbc-native-errors.ll | Empty/non-empty insertion-ordered key arrays, runtime non-map error, arity/result/pointer diagnostics, and direct/machine parity pass |
 | Native `values` | cdbc-native-map-values.ll, cdbc-native-values-runtime.ll, and values cases in cdbc-native-errors.ll | Empty/non-empty insertion-ordered value arrays, runtime non-map error, arity/result/pointer diagnostics, and direct/machine parity pass |
 | Callback native `map`, `filter`, `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex` | cdbc-native-map.ll, cdbc-native-map-runtime.ll, cdbc-native-flat-map.ll, cdbc-native-flat-map-runtime.ll, cdbc-native-flat-map-errors.ll, cdbc-native-reduce.ll, cdbc-native-reduce-runtime.ll, cdbc-native-reduce-errors.ll, cdbc-native-filter.ll, cdbc-native-filter-runtime.ll, cdbc-native-any-all.ll, cdbc-native-any-runtime.ll, cdbc-native-all-runtime.ll, cdbc-native-count.ll, cdbc-native-count-runtime.ll, cdbc-native-find.ll, cdbc-native-find-runtime.ll, cdbc-native-find-index.ll, cdbc-native-find-index-runtime.ll, cdbc-native-predicate-errors.ll, and callback cases in cdbc-native-errors.ll | Direct/machine output, runtime type errors, empty-array identities, one-level callback-array flattening, left-to-right accumulator threading, predicate ABI, full count traversal, first-match/no-match `find` behavior, zero-based first-match/no-match `findIndex` behavior, and callback-shape diagnostics passed |
