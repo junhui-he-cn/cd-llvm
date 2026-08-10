@@ -877,6 +877,18 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "slice") {
+    if (Call.arg_size() != 4 || !isCDValue(*Call.getArgOperand(1)) ||
+        !Call.getArgOperand(2)->getType()->isDoubleTy() ||
+        !Call.getArgOperand(3)->getType()->isDoubleTy() ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native slice requires a CD dynamic-value array, two "
+              "double arguments, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "range") {
     if (Call.arg_size() < 2 || Call.arg_size() > 4 ||
         !HasCDPointerResult) {

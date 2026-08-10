@@ -36,10 +36,10 @@ independent VM oracle and is not absorbed into this repository.
 | M0-M1 | Target bootstrap, typed artifact model, canonical serializer, structural validation | Complete | LLVM target and `cdbc 0.1` boundary are stable |
 | M2 | Scalar semantics, control flow, PHI/select, `-O0`/`-O2` behavior | Complete | Unsupported integer semantics fail with target diagnostics |
 | M3 | Opt-in TableGen/machine path and direct/machine parity | Complete for the supported subset | Machine path remains opt-in and text-only |
-| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives including `contains`, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future native names stay rejected until separately selected |
+| M4 | Explicit CD values: strings, arrays, maps, records, variants, indexing/mutation, bounded natives including `contains`/`slice`, selected `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callbacks | Complete for the implemented bounded ABI | Dynamic CD `select`, PHI, and one-slot storage are supported through existing control-flow and variable operations; future native names stay rejected until separately selected |
 | M5 | Source tables, locations/ranges, runtime diagnostics, trace/profile/debug observability | Complete for the current surface; pause-state contract frozen | New query commands and richer debugger state require a follow-on public design |
 | M6 | Module envelopes, dependency metadata, linking, linked diagnostics | Complete | Program and module artifacts remain distinct |
-| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 104 lit (103 passed, 1 unsupported), parity 73/73, VM `73 + 3 + 8`, module-link direct/machine passed |
+| M7-local | Reproducible LLVM-only, VM, parity, and module-link verification | Complete | Latest local gate: 106 lit (105 passed, 1 unsupported), parity 75/75, VM `73 + 3 + 8`, module-link direct/machine passed |
 | M7-hosted | GitHub Actions execution of the two-job release matrix | External, non-blocking | The complete eight-tool workflow fix is published in `18a6063fd`; hosted execution is not used as a prerequisite for the locally accepted boundary |
 | M8-first | Function-boundary dynamic-value transport for marked parameters and returns | Complete | `cd.value.params`/`cd.value.return` share provenance validation; dynamic CD `select`, PHI, and one-slot storage are proven through existing control-flow and variable operations; all selected callback natives are verified |
 
@@ -1273,6 +1273,33 @@ rejected by shared provenance validation.
 Verification on 2026-08-10: focused lit passed `3/3`; the full local CD suite
 passed `104` tests with `103` passed and `1` expected unsupported VM case;
 direct/machine parity passed `73/73`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, module-link direct/machine integration
+passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
+clean.
+
+### Narrow M4 follow-up: bounded native `slice` (2026-08-10)
+
+**Goal:** Admit the Rust VM's existing `slice` helper through the shared
+`llvm.cd.native` ABI without adding a wire operation, artifact field, or
+changing the nested VM.
+
+The accepted shape is a proven CD dynamic-value token, two `double` start and
+length operands, and an exact address-space-zero `ptr` result. The VM owns the
+runtime array check, integer-valuedness, start/length bounds, snapshot, and
+fresh shallow-array allocation; ordinary LLVM pointers remain rejected by
+shared provenance validation.
+
+- [x] Add the name-specific capability matrix to `CDValueABI` and the typed
+  artifact native-name allowlist.
+- [x] Add positive empty/middle/tail slices, runtime non-array, and malformed
+  direct/machine fixtures.
+- [x] Add behavior/runtime-error entries to the direct/machine parity manifest.
+- [x] Update the ABI, machine-backend, target README, verification matrix, and
+  active development plan.
+
+Verification on 2026-08-10: focused slice/error lit passed `5/5`; the full local
+CD suite passed `106` tests with `105` passed and `1` expected unsupported VM
+case; direct/machine parity passed `75/75`; parity unit tests passed `14/14`,
 module-link unit tests passed `5/5`, module-link direct/machine integration
 passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
 clean.

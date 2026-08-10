@@ -2,7 +2,7 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call including
-`contains`, and `map` /
+`contains` and `slice`, and `map` /
 `filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
@@ -648,6 +648,7 @@ for the selected native name. The first bounded capability matrix is:
 | `typeOf` | exactly one scalar or CD dynamic value | address-space-zero `ptr` | runtime type name |
 | `hash` | exactly one scalar or CD dynamic value | `double` | runtime hash number |
 | `contains` | one CD dynamic-value collection, one scalar or CD dynamic-value needle | `i1` | array, map, or range membership |
+| `slice` | one CD dynamic-value array token, two `double` values | address-space-zero `ptr` | fresh shallow array slice |
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
 | `substr` | one CD dynamic value, two `double` values | address-space-zero `ptr` | Unicode-scalar string slice |
 | `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
@@ -667,7 +668,10 @@ dynamic-value collection, accepts a scalar or proven CD dynamic-value needle,
 and returns exact `i1`; the Rust VM owns array element, map key, and integer
 range membership semantics. The `range` result is a CD dynamic-value token
 and may be consumed by the existing `len`, `index`, `assert_array`, and
-`contains` operations. `substr` and `charAt` require an explicit CD
+`contains` operations. `slice` requires a proven CD dynamic-value token and
+two `double` operands; the VM owns the runtime array check, integer-valuedness,
+start/length bounds, snapshot, and fresh shallow-array allocation. `substr` and
+`charAt` require an explicit CD
 dynamic-value token;
 the target cannot prove its runtime string tag, so non-string values remain a
 valid compile-time token shape and receive the Rust VM's runtime type error.

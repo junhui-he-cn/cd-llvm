@@ -211,7 +211,7 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`,
-`range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
+`slice`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
 `any`, `all`, `count`, `find`, and `findIndex`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
@@ -221,7 +221,10 @@ scalar boundaries, integer-valuedness, and bounds errors to the Rust VM.
 `contains` accepts a proven CD dynamic-value collection and a scalar or proven
 CD dynamic-value needle, returns exact `i1`, and leaves array membership, map
 key validation, range integer membership, and runtime type errors to the Rust
-VM. Ordinary pointer substitutes remain rejected.
+VM. Ordinary pointer substitutes remain rejected. `slice` accepts a proven CD
+dynamic-value token, two `double` operands, and an address-space-zero `ptr`
+result; the VM owns the runtime array check, integer-valuedness, start/length
+bounds, snapshot, and fresh shallow-array semantics.
 `map` accepts one CD token and a direct defined callback with the explicit
 `cd.value.params="0"`/`cd.value.return` ABI markers; `filter` accepts one CD
 token and a direct defined predicate with `cd.value.params="0"` and an `i1`

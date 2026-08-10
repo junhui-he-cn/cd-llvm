@@ -67,6 +67,16 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-needle-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-NEEDLE-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/contains-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/contains-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONTAINS-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-start-type.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-START-TYPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-start-type.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-START-TYPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-length-type.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-LENGTH-TYPE-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-length-type.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-LENGTH-TYPE-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-COLLECTION-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-COLLECTION-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-result.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-result.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-RESULT-MACHINE
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
@@ -136,6 +146,16 @@
 ; CONTAINS-NEEDLE-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
 ; CONTAINS-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
 ; CONTAINS-RESULT-MACHINE: CD machine backend does not support llvm.cd.native contains requires a CD dynamic-value collection, a scalar or CD dynamic-value needle, and an i1 result
+; SLICE-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-ARITY-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-START-TYPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-START-TYPE-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-LENGTH-TYPE-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-LENGTH-TYPE-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; SLICE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
@@ -574,5 +594,56 @@ define i32 @main() {
 entry:
   %value = call ptr (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, i64 1)
+  ret i32 0
+}
+
+;--- slice-arity.ll
+@name = private unnamed_addr constant [6 x i8] c"slice\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, double 0.0)
+  ret i32 0
+}
+
+;--- slice-start-type.ll
+@name = private unnamed_addr constant [6 x i8] c"slice\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, i64 0, double 1.0)
+  ret i32 0
+}
+
+;--- slice-length-type.ll
+@name = private unnamed_addr constant [6 x i8] c"slice\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, double 0.0, i64 1)
+  ret i32 0
+}
+
+;--- slice-collection-pointer.ll
+@name = private unnamed_addr constant [6 x i8] c"slice\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %collection = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %collection, double 0.0, double 1.0)
+  ret i32 0
+}
+
+;--- slice-result.ll
+@name = private unnamed_addr constant [6 x i8] c"slice\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, double 0.0, double 1.0)
   ret i32 0
 }

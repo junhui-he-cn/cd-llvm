@@ -950,6 +950,46 @@ module-link unit tests passed `5/5`, module-link direct/machine integration
 passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
 clean.
 
+## Task 16: Extend the bounded native lane with `slice`
+
+This outer-only follow-on reuses the existing `native_call` artifact operation
+and the Rust VM's already-supported `slice` helper. It adds no opcode,
+artifact field, `.cdbc 0.1` version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-slice.ll` and
+  `llvm/test/CodeGen/CD/cdbc-native-slice-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, roadmap, and
+  active-plan documents.
+
+The accepted shape is:
+
+~~~llvm
+llvm.cd.native(ptr name, ptr array, double start, double length) -> ptr
+~~~
+
+The collection operand must have proven CD provenance. The Rust VM owns the
+runtime array check, integer-valuedness, start/length bounds, snapshot, and
+fresh shallow-array result semantics.
+
+- [x] Admit `slice` only for a proven CD dynamic-value token, two `double`
+  operands, and an exact address-space-zero `ptr` result.
+- [x] Reuse the existing `native_call` bridge in both direct and machine paths.
+- [x] Cover positive empty/middle/tail slices, runtime non-array failure,
+  malformed arity/type/result/pointer diagnostics, and direct/machine parity.
+- [x] Keep future native names rejected and the nested VM checkout unchanged.
+
+Completed on 2026-08-10. Focused slice/error lit passed `5/5`; the full local
+CD suite passed `106` tests with `105` passed and `1` expected unsupported VM
+case; direct/machine parity passed `75/75`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, module-link direct/machine integration
+passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
+clean.
+
 ## Completion and delivery gates
 
 A task is complete only when implementation, ABI docs, README, roadmap status,
