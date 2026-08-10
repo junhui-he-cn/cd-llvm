@@ -77,6 +77,12 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-COLLECTION-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/slice-result.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/slice-result.ll -o - 2>&1 | FileCheck %s --check-prefix=SLICE-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/copy-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/copy-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/copy-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-COLLECTION-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/copy-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-COLLECTION-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/copy-result.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/copy-result.ll -o - 2>&1 | FileCheck %s --check-prefix=COPY-RESULT-MACHINE
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
@@ -156,6 +162,12 @@
 ; SLICE-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
 ; SLICE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
 ; SLICE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native slice requires a CD dynamic-value array, two double arguments, and a ptr result
+; COPY-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; COPY-ARITY-MACHINE: CD machine backend does not support llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; COPY-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; COPY-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; COPY-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native copy requires a CD dynamic-value array and a ptr result
+; COPY-RESULT-MACHINE: CD machine backend does not support llvm.cd.native copy requires a CD dynamic-value array and a ptr result
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
@@ -645,5 +657,34 @@ define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, double 0.0, double 1.0)
+  ret i32 0
+}
+
+;--- copy-arity.ll
+@name = private unnamed_addr constant [5 x i8] c"copy\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- copy-collection-pointer.ll
+@name = private unnamed_addr constant [5 x i8] c"copy\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %collection = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %collection)
+  ret i32 0
+}
+
+;--- copy-result.ll
+@name = private unnamed_addr constant [5 x i8] c"copy\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
   ret i32 0
 }

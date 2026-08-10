@@ -2,7 +2,7 @@
 
 Status: M3 complete for the supported scalar/control-flow subset; M4 string,
 array-constructor, array-access, array-mutation, map-constructor, record-value,
-enum-variant, bounded native-call including `contains` and `slice`, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
+enum-variant, bounded native-call including `contains`, `slice`, and `copy`, dynamic CD `select`/PHI, and `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` callback-native slices share the
 machine artifact bridge;
 the M5 explicit debug-source-table, instruction-location, source-backed
 runtime-diagnostic, debug-range, scripted debugger, and pause-state contract
@@ -145,7 +145,7 @@ CD constructors retain definition-before-use ordering. Ordinary pointers and
 aggregates remain rejected by the shared ABI validator.
 
 The bounded native-call slice covers `floor`, `ceil`, `sqrt`, `str`, `typeOf`,
-`hash`, `contains`, `slice`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
+`hash`, `contains`, `slice`, `copy`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`,
 `flatMap`, `reduce`, `any`, `all`, `count`, `find`, and `findIndex`. Their
 name-table index is an immediate machine operand, while arguments and the
 result remain in the `CDValue` virtual register class. The `CD_NATIVE_CALL`
@@ -162,6 +162,11 @@ For `slice`, the machine lowerer accepts a proven CD dynamic-value token, two
 `double` operands, and an exact address-space-zero `ptr` result. The Rust VM
 owns the runtime array check, integer-valuedness, bounds, snapshot, and fresh
 shallow-array semantics; ordinary pointer substitutes remain rejected.
+
+For `copy`, the machine lowerer accepts a proven CD dynamic-value token and an
+exact address-space-zero `ptr` result. The Rust VM owns the runtime array
+check, snapshot, and fresh shallow-array semantics; ordinary pointer
+substitutes remain rejected.
 
 For `map`, the machine lowerer accepts only a direct defined callback with one
 address-space-zero CD parameter marked by `cd.value.params="0"` and a

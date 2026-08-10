@@ -990,6 +990,45 @@ module-link unit tests passed `5/5`, module-link direct/machine integration
 passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
 clean.
 
+## Task 17: Extend the bounded native lane with `copy`
+
+This outer-only follow-on reuses the existing `native_call` artifact operation
+and the Rust VM's already-supported `copy` helper. It adds no opcode, artifact
+field, `.cdbc 0.1` version, or nested VM change.
+
+**Files:**
+- Modify: `llvm/lib/Target/CD/CDValueABI.cpp` and
+  `llvm/lib/Target/CD/CDBytecodeFormat.cpp`.
+- Create: `llvm/test/CodeGen/CD/cdbc-native-copy.ll` and
+  `llvm/test/CodeGen/CD/cdbc-native-copy-runtime.ll`.
+- Modify: `llvm/test/CodeGen/CD/cdbc-native-errors.ll` and
+  `llvm/test/CodeGen/CD/cdbc-machine-parity.list`.
+- Modify: the ABI, machine-backend, target README, verification, roadmap, and
+  active-plan documents.
+
+The accepted shape is:
+
+~~~llvm
+llvm.cd.native(ptr name, ptr array) -> ptr
+~~~
+
+The collection operand must have proven CD provenance. The Rust VM owns the
+runtime array check, snapshot, and fresh shallow-array result semantics.
+
+- [x] Admit `copy` only for a proven CD dynamic-value token and an exact
+  address-space-zero `ptr` result.
+- [x] Reuse the existing `native_call` bridge in both direct and machine paths.
+- [x] Cover positive empty/non-empty copies, runtime non-array failure,
+  malformed arity/result/pointer diagnostics, and direct/machine parity.
+- [x] Keep future native names rejected and the nested VM checkout unchanged.
+
+Completed on 2026-08-10. Focused copy/error lit passed `3/3`; the full local CD
+suite passed `108` tests with `107` passed and `1` expected unsupported VM case;
+direct/machine parity passed `77/77`; parity unit tests passed `14/14`,
+module-link unit tests passed `5/5`, module-link direct/machine integration
+passed, Rust VM tests passed `73 + 3 + 8`, and the nested checkout remained
+clean.
+
 ## Completion and delivery gates
 
 A task is complete only when implementation, ABI docs, README, roadmap status,
