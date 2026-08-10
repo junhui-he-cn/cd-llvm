@@ -909,6 +909,16 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "keys") {
+    if (Call.arg_size() != 2 || !isCDValue(*Call.getArgOperand(1)) ||
+        !HasCDPointerResult) {
+      Error = "llvm.cd.native keys requires a CD dynamic-value map and a ptr "
+              "result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "range") {
     if (Call.arg_size() < 2 || Call.arg_size() > 4 ||
         !HasCDPointerResult) {

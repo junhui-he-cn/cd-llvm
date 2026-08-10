@@ -2,7 +2,7 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call including
-`contains`, `slice`, `copy`, and `concat`, and `map` /
+`contains`, `slice`, `copy`, `concat`, and `keys`, and `map` /
 `filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
@@ -651,6 +651,7 @@ for the selected native name. The first bounded capability matrix is:
 | `slice` | one CD dynamic-value array token, two `double` values | address-space-zero `ptr` | fresh shallow array slice |
 | `copy` | one CD dynamic-value array token | address-space-zero `ptr` | fresh shallow array copy |
 | `concat` | two CD dynamic-value array tokens | address-space-zero `ptr` | fresh shallow concatenated array |
+| `keys` | one CD dynamic-value map token | address-space-zero `ptr` | fresh array of map keys in insertion order |
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
 | `substr` | one CD dynamic value, two `double` values | address-space-zero `ptr` | Unicode-scalar string slice |
 | `charAt` | one CD dynamic value, one `double` value | address-space-zero `ptr` | Unicode-scalar character extraction |
@@ -676,7 +677,9 @@ start/length bounds, snapshot, and fresh shallow-array allocation. `copy`
 requires a proven CD dynamic-value token; the VM owns the runtime array check,
 snapshot, and fresh shallow-array allocation. `concat` requires two proven CD
 dynamic-value tokens; the VM owns both runtime array checks, snapshot order,
-and fresh shallow-array allocation. `substr` and
+and fresh shallow-array allocation. `keys` requires a proven CD dynamic-value
+token; the VM owns the runtime map check, insertion-order snapshot, and fresh
+array allocation. `substr` and
 `charAt` require an explicit CD
 dynamic-value token;
 the target cannot prove its runtime string tag, so non-string values remain a

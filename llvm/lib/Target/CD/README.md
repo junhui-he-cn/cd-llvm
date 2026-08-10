@@ -211,7 +211,7 @@ variant values stay local to explicit CD intrinsic consumers in this slice.
 
 The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`,
-`slice`, `copy`, `concat`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
+`slice`, `copy`, `concat`, `keys`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
 `any`, `all`, `count`, `find`, and `findIndex`.
 The name must be a private constant UTF-8 global; each name has an exact
 scalar/CD-value argument
@@ -231,6 +231,9 @@ semantics.
 `concat` accepts two proven CD dynamic-value tokens and an address-space-zero
 `ptr` result; the VM owns both runtime array checks, snapshot order, and fresh
 shallow-array semantics.
+`keys` accepts a proven CD dynamic-value token and an address-space-zero `ptr`
+result; the VM owns the runtime map check, insertion-order snapshot, and fresh
+array semantics.
 `map` accepts one CD token and a direct defined callback with the explicit
 `cd.value.params="0"`/`cd.value.return` ABI markers; `filter` accepts one CD
 token and a direct defined predicate with `cd.value.params="0"` and an `i1`

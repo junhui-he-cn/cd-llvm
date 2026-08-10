@@ -91,6 +91,12 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RIGHT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-result.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-result.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-RESULT-MACHINE
 
 ; UNKNOWN-DIRECT: CD target does not support LLVM operation: llvm.cd.native native name is not supported by the bounded CD ABI: mystery
 ; UNKNOWN-MACHINE: CD machine backend does not support llvm.cd.native native name is not supported by the bounded CD ABI: mystery
@@ -184,6 +190,12 @@
 ; CONCAT-RIGHT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
 ; CONCAT-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
 ; CONCAT-RESULT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
+; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
+; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
+; KEYS-COLLECTION-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
+; KEYS-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
+; KEYS-RESULT-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 
 ;--- unknown-name.ll
 @name = private unnamed_addr constant [8 x i8] c"mystery\00"
@@ -743,5 +755,34 @@ define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(
       ptr @name, ptr null, ptr null)
+  ret i32 0
+}
+
+;--- keys-arity.ll
+@name = private unnamed_addr constant [5 x i8] c"keys\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- keys-collection-pointer.ll
+@name = private unnamed_addr constant [5 x i8] c"keys\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %collection = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %collection)
+  ret i32 0
+}
+
+;--- keys-result.ll
+@name = private unnamed_addr constant [5 x i8] c"keys\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
   ret i32 0
 }
