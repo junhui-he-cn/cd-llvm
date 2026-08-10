@@ -2,7 +2,7 @@
 
 Status: M4 string-constant, array-constructor, array-access, array-mutation,
 map-constructor, record-value, enum-variant, bounded native-call including
-`contains`, `slice`, `copy`, `concat`, `keys`, and `values`, and `map` /
+`contains`, `slice`, `copy`, `concat`, `remove`, `keys`, and `values`, and `map` /
 `filter` / `flatMap` / `reduce` / `any` / `all` / `count` / `find` / `findIndex`
 callback-native slices implemented; M5 explicit debug-source-table,
 instruction-location, source-backed runtime-diagnostic, and debug-range slices
@@ -651,6 +651,7 @@ for the selected native name. The first bounded capability matrix is:
 | `slice` | one CD dynamic-value array token, two `double` values | address-space-zero `ptr` | fresh shallow array slice |
 | `copy` | one CD dynamic-value array token | address-space-zero `ptr` | fresh shallow array copy |
 | `concat` | two CD dynamic-value array tokens | address-space-zero `ptr` | fresh shallow concatenated array |
+| `remove` | one CD dynamic-value map token, one scalar or CD dynamic-value key | address-space-zero `ptr` | removed map value; mutates the map |
 | `keys` | one CD dynamic-value map token | address-space-zero `ptr` | fresh array of map keys in insertion order |
 | `values` | one CD dynamic-value map token | address-space-zero `ptr` | fresh array of map values in insertion order |
 | `range` | one to three `double` values | address-space-zero `ptr` | range producer for existing access ops |
@@ -680,8 +681,11 @@ snapshot, and fresh shallow-array allocation. `concat` requires two proven CD
 dynamic-value tokens; the VM owns both runtime array checks, snapshot order,
 and fresh shallow-array allocation. `keys` requires a proven CD dynamic-value
 token; the VM owns the runtime map check, insertion-order snapshot, and fresh
-array allocation. `values` has the same map-token boundary and returns the
-corresponding insertion-ordered value snapshot. `substr` and
+array allocation. `remove` requires a proven map token and a scalar or proven
+CD dynamic-value key; the VM owns map/key validation, first-match mutation,
+removed-value return, and missing-key errors. `values` has the same map-token
+boundary and returns the corresponding insertion-ordered value snapshot.
+`substr` and
 `charAt` require an explicit CD
 dynamic-value token;
 the target cannot prove its runtime string tag, so non-string values remain a

@@ -909,6 +909,16 @@ bool validateNativeCall(const CallBase &Call, std::string &Error) {
     return true;
   }
 
+  if (NativeName == "remove") {
+    if (Call.arg_size() != 3 || !isCDValue(*Call.getArgOperand(1)) ||
+        !isArrayElement(*Call.getArgOperand(2)) || !HasCDPointerResult) {
+      Error = "llvm.cd.native remove requires a CD dynamic-value map, a "
+              "scalar or CD dynamic-value key, and a ptr result";
+      return false;
+    }
+    return true;
+  }
+
   if (NativeName == "keys") {
     if (Call.arg_size() != 2 || !isCDValue(*Call.getArgOperand(1)) ||
         !HasCDPointerResult) {

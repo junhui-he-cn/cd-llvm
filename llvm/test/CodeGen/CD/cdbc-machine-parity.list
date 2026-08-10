@@ -66,6 +66,8 @@ behavior llvm/test/CodeGen/CD/cdbc-native-copy.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-copy-runtime.ll "copy expects array as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-concat.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-concat-runtime.ll "concat expects array as first argument"
+behavior llvm/test/CodeGen/CD/cdbc-native-remove.ll
+runtime-error llvm/test/CodeGen/CD/cdbc-native-remove-runtime.ll "remove expects map as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-keys.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-keys-runtime.ll "keys expects map as first argument"
 behavior llvm/test/CodeGen/CD/cdbc-native-map-values.ll

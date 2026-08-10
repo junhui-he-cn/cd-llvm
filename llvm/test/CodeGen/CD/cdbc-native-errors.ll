@@ -91,6 +91,14 @@
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-right-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RIGHT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/concat-result.ll -o - 2>&1 | FileCheck %s --check-prefix=CONCAT-RESULT-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/remove-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-ARITY-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-ARITY-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/remove-map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-MAP-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-map-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-MAP-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/remove-key-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-KEY-POINTER-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-key-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-KEY-POINTER-MACHINE
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/remove-result.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-RESULT-DIRECT
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/remove-result.ll -o - 2>&1 | FileCheck %s --check-prefix=REMOVE-RESULT-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-DIRECT
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %t/keys-arity.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-ARITY-MACHINE
 ; RUN: not --crash llc -mtriple=cd-unknown-unknown %t/keys-collection-pointer.ll -o - 2>&1 | FileCheck %s --check-prefix=KEYS-COLLECTION-DIRECT
@@ -196,6 +204,14 @@
 ; CONCAT-RIGHT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
 ; CONCAT-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
 ; CONCAT-RESULT-MACHINE: CD machine backend does not support llvm.cd.native concat requires two CD dynamic-value arrays and a ptr result
+; REMOVE-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-ARITY-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-MAP-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-MAP-POINTER-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-KEY-POINTER-DIRECT: CD target does not support LLVM operation: llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-KEY-POINTER-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-RESULT-DIRECT: CD target does not support LLVM operation: llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
+; REMOVE-RESULT-MACHINE: CD machine backend does not support llvm.cd.native remove requires a CD dynamic-value map, a scalar or CD dynamic-value key, and a ptr result
 ; KEYS-ARITY-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-ARITY-MACHINE: CD machine backend does not support llvm.cd.native keys requires a CD dynamic-value map and a ptr result
 ; KEYS-COLLECTION-DIRECT: CD target does not support LLVM operation: llvm.cd.native keys requires a CD dynamic-value map and a ptr result
@@ -825,5 +841,48 @@ declare double @llvm.cd.native(ptr, ...)
 define i32 @main() {
 entry:
   %value = call double (ptr, ...) @llvm.cd.native(ptr @name, ptr null)
+  ret i32 0
+}
+
+;--- remove-arity.ll
+@name = private unnamed_addr constant [7 x i8] c"remove\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call ptr (ptr, ...) @llvm.cd.native(ptr @name)
+  ret i32 0
+}
+
+;--- remove-map-pointer.ll
+@name = private unnamed_addr constant [7 x i8] c"remove\00"
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %map = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %map, i64 1)
+  ret i32 0
+}
+
+;--- remove-key-pointer.ll
+@name = private unnamed_addr constant [7 x i8] c"remove\00"
+declare ptr @llvm.cd.map(i32, ...)
+declare ptr @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %map = call ptr (i32, ...) @llvm.cd.map(i32 0)
+  %key = inttoptr i64 1 to ptr
+  %value = call ptr (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr %map, ptr %key)
+  ret i32 0
+}
+
+;--- remove-result.ll
+@name = private unnamed_addr constant [7 x i8] c"remove\00"
+declare double @llvm.cd.native(ptr, ...)
+define i32 @main() {
+entry:
+  %value = call double (ptr, ...) @llvm.cd.native(
+      ptr @name, ptr null, i64 1)
   ret i32 0
 }
