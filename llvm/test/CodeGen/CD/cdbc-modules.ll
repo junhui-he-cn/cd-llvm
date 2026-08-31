@@ -15,7 +15,7 @@ entry:
 !cd.dependencies = !{!1}
 !1 = !{!"import", !"/workspace/lib.cd", i64 1, !"./lib.cd"}
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: artifact: module
 ; DIRECT: module:
 ; DIRECT: identity = "entry"
@@ -24,12 +24,12 @@ entry:
 ; DIRECT: entry = true
 ; DIRECT: entry_order = 0
 ; DIRECT: dependencies:
-; DIRECT: d0 target="/workspace/lib.cd" kind=import at=1 requested="./lib.cd"
+; DIRECT: d0 target="/workspace/lib.cd" kind=import requested="./lib.cd"
 ; DIRECT: constants:
 ; DIRECT: main registers=
-; DIRECT: return r{{[0-9]+}}
+; DIRECT: return_nil
 
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: artifact: module
 ; MACHINE: module:
 ; MACHINE: identity = "entry"
@@ -38,10 +38,10 @@ entry:
 ; MACHINE: entry = true
 ; MACHINE: entry_order = 0
 ; MACHINE: dependencies:
-; MACHINE: d0 target="/workspace/lib.cd" kind=import at=1 requested="./lib.cd"
+; MACHINE: d0 target="/workspace/lib.cd" kind=import requested="./lib.cd"
 ; MACHINE: constants:
 ; MACHINE: main registers=
-; MACHINE: return r{{[0-9]+}}
+; MACHINE: return_nil
 
 ; PROGRAM-DIRECT: CD target does not support LLVM operation: module metadata requires -cd-artifact=module
 ; PROGRAM-MACHINE: CD machine backend does not support module metadata requires -cd-artifact=module

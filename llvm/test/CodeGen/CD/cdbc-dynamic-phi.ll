@@ -60,45 +60,45 @@ entry:
 attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
 attributes #1 = { "cd.value.params"="0" "cd.value.return" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: function f0 name="choose_phi" arity=3
-; DIRECT: jump_if_false
-; DIRECT: store_var
-; DIRECT: jump
-; DIRECT: store_var
-; DIRECT: jump
-; DIRECT: load_var
+; DIRECT: br_if
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: br
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: br
+; DIRECT: {{(load_local|load_global)}}
 ; DIRECT: return
 ; DIRECT: function f1 name="loop_phi" arity=2
-; DIRECT: load_var
-; DIRECT: load_var
-; DIRECT: store_var
-; DIRECT: jump
-; DIRECT: load_var
-; DIRECT: load_var
-; DIRECT: jump_if_false
-; DIRECT: store_var
-; DIRECT: store_var
-; DIRECT: jump
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: br
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: br_if
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: br
 ; DIRECT: return
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: function f0 name="choose_phi" arity=3
-; MACHINE: jump_if_false
-; MACHINE: store_var
-; MACHINE: jump
-; MACHINE: store_var
-; MACHINE: jump
-; MACHINE: load_var
+; MACHINE: br_if
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: br
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: br
+; MACHINE: {{(load_local|load_global)}}
 ; MACHINE: return
 ; MACHINE: function f1 name="loop_phi" arity=2
-; MACHINE: load_var
-; MACHINE: load_var
-; MACHINE: store_var
-; MACHINE: jump
-; MACHINE: load_var
-; MACHINE: load_var
-; MACHINE: jump_if_false
-; MACHINE: store_var
-; MACHINE: store_var
-; MACHINE: jump
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: br
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: br_if
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: br
 ; MACHINE: return

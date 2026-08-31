@@ -15,7 +15,7 @@ future callback helpers remain outside the selected
 `map`/`filter`/`flatMap`/`reduce`/`any`/`all`/`count`/`find`/`findIndex` slices.
 
 This document defines the boundary between LLVM IR values and the dynamic
-values consumed by the `cdbc 0.1` Rust VM.  It is intentionally target-specific:
+values consumed by the `cdbc 0.2` Rust VM.  It is intentionally target-specific:
 ordinary LLVM aggregates, pointers, globals, and calls are not silently
 reinterpreted as CD arrays, maps, structs, or native values.
 
@@ -24,7 +24,7 @@ reinterpreted as CD arrays, maps, structs, or native values.
 The supported pipeline remains:
 
 ```text
-LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.1 --> Rust VM
+LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.2 --> Rust VM
 ```
 
 The direct `ModulePass` emitter remains the compatibility path and the
@@ -50,7 +50,7 @@ The ABI follows these rules:
 4. Intrinsic validation is performed during LLVM lowering.  Invalid ABI shapes
    are compile-time target errors; they are never emitted as a best-effort
    `nil`, number, or native pointer.
-5. The Rust VM's `cdbc 0.1` parser, validator, and executor remain the runtime
+5. The Rust VM's `cdbc 0.2` parser, validator, and executor remain the runtime
    oracle.  An intrinsic is not enabled until `dump` and `run` accept its
    artifact and direct/machine parity covers it.
 
@@ -93,18 +93,17 @@ The first array-access operations use these signatures:
 def int_cd_index : DefaultAttrsIntrinsic<[llvm_ptr_ty],
                                          [llvm_ptr_ty, llvm_double_ty]>;
 def int_cd_len : DefaultAttrsIntrinsic<[llvm_double_ty], [llvm_ptr_ty]>;
-def int_cd_assert_array : DefaultAttrsIntrinsic<[llvm_ptr_ty], [llvm_ptr_ty]>;
 ```
 
 `llvm.cd.index` takes a CD dynamic-value token and a CD number index. Its
 result is another dynamic-value token because an array slot may contain any
 value capability admitted by `llvm.cd.array`. `llvm.cd.len` returns the CD
-number representation as `double`. `llvm.cd.assert.array` preserves the
-existing VM assertion/conversion operation: it returns an array-compatible
-dynamic value or raises the VM's normal runtime error. These operations are
-not pure in the LLVM sense; their declarations intentionally retain the
-default memory/side-effect properties so an optimizer cannot erase a bounds
-or type failure or duplicate a mutable-value observation.
+number representation as `double`. The legacy `llvm.cd.assert.array` call
+shape is recognized only to issue a target diagnostic; it is not part of the
+0.2 ABI and has no emitted operation. These operations are not pure in the
+LLVM sense; their declarations intentionally retain the default memory/side-
+effect properties so an optimizer cannot erase a bounds or type failure or
+duplicate a mutable-value observation.
 
 The first record-value group uses these signatures:
 
@@ -160,8 +159,8 @@ def int_cd_native : DefaultAttrsIntrinsic<
 Its first operand is a private, constant, non-empty UTF-8 name global. The
 remaining operands and result are checked against the name-specific capability
 matrix in the native-call section below. This intrinsic is the only LLVM
-boundary that can emit a `native_call`; ordinary external declarations remain
-unsupported.
+boundary that can emit a 0.2 `call_native iN`; ordinary external declarations
+remain unsupported.
 
 Each operation must use its registered intrinsic declaration and declared
 signature. A manually declared function with a similar name is not a CD ABI
@@ -216,7 +215,7 @@ instruction.  Identical UTF-8 payloads share one constant-table entry across
 all functions.  The value is immutable; no intrinsic in this group mutates or
 aliases the LLVM global.  The Rust VM treats it as its existing immutable
 string value, and `cd_print`/`print` observes the same escaped text used by the
-`cdbc 0.1` formatter.
+`cdbc 0.2` formatter.
 
 The direct and machine paths may assign different VM register numbers, but
 they must emit the same string constant payload and produce identical `dump`
@@ -299,9 +298,9 @@ inherits CD provenance and may cross a marked function return or another
 explicit CD consumer.
 
 Both emitters lower the operation through existing artifact control flow and
-register moves: `jump_if_false`, a true-arm `move`, `jump`, and a false-arm
-`move`. No new `cdbc 0.1` opcode or field is introduced. Function-value callback
-transport remains a separate ABI decision and is not inferred from this rule.
+register moves: `br_if`, a true-arm `move`, `br`, and a false-arm `move`. No
+new `cdbc 0.2` opcode or field is introduced. Function-value callback transport
+remains a separate ABI decision and is not inferred from this rule.
 
 ### Dynamic CD PHI propagation
 
@@ -314,10 +313,12 @@ foreign address spaces, `undef`, poison, and pointer operations remain target
 errors. Loop-carried PHIs use the same rule, with recursive provenance walks
 tracking back-edges without treating an unproven terminal value as CD.
 
-Both emitters reuse the existing PHI edge `store_var` operations and block-entry
-`load_var` operation. This gives dynamic handles the VM's existing move and
-aliasing behavior without adding an opcode, artifact field, or `.cdbc 0.1`
-version. Function-value callback transport remains a separate ABI decision.
+Both emitters reuse numeric local/global cell operations for PHI edge writes and
+block-entry loads. Function bodies use `bind_local`/`set_local` plus
+`load_local`; top-level bodies use the corresponding global operations. This
+gives dynamic handles the VM's existing move and aliasing behavior without
+adding an opcode or artifact field. Function-value callback transport remains a
+separate ABI decision.
 
 ### Dynamic CD one-slot local storage
 
@@ -330,7 +331,7 @@ a proven store has executed on every path to the load. This accepts straight-
 line replacement and branch-complete initialization while rejecting
 uninitialized or partially initialized reads.
 
-Both emitters reuse the existing `store_var` and `load_var` operations. Storing
+Both emitters reuse the existing numeric local/global cell operations. Storing
 or loading address-space-zero `ptr null` preserves VM `nil`; storing a mutable
 array, map, or struct handle preserves the VM's shared backing identity when it
 is loaded again. Escaped allocas, GEP/bitcast aliases, arbitrary globals,
@@ -346,11 +347,11 @@ reserved for separate ABI decisions:
 
 | Group | Required operation shape | Wire operations | Design dependency |
 | --- | --- | --- | --- |
-| Broader native calls | allowlisted name-table identity and typed capability matrix | `native_call` | separate Rust VM capability and argument/result validation |
+| Broader native calls | allowlisted native-import identity and typed capability matrix | `call_native iN` | separate Rust VM capability and argument/result validation |
 
 Each future group requires its own intrinsic signatures, malformed-input
 fixtures, Rust parser/validator coverage, and direct/machine parity before it
-can be implemented. Existing `cdbc 0.1` opcodes are not permission to map
+can be implemented. Existing `cdbc 0.2` opcodes are not permission to map
 arbitrary LLVM IR instructions to those operations.
 
 ## Array constructor: first collection ABI group
@@ -375,8 +376,10 @@ The result is local to the call in this first slice.  It may be passed to
 `cd_print`/`print`, or used as an element of another `llvm.cd.array` call.  It
 may not yet be returned from a function, passed to an ordinary function,
 stored in an ordinary alloca, selected by `select`, or used by pointer
-operations.  `index`, `assign_index`, `len`, and `assert_array` are separate
-intrinsics and are not inferred from ordinary LLVM operations.
+operations.  `index`, `assign_index`, and `len` are separate intrinsics and
+are not inferred from ordinary LLVM operations. The old
+`llvm.cd.assert_array` intrinsic has no 0.2 opcode and is rejected during
+lowering.
 
 ### Ownership, aliasing, and failure behavior
 
@@ -409,12 +412,11 @@ the Rust VM's existing array formatting, including nested values.
 
 ### Array access and assertion
 
-The access group maps directly to existing `cdbc 0.1` operations:
+The access group maps directly to existing `cdbc 0.2` operations:
 
 ```text
 rD = index rArray, rIndex
 rD = len rArray
-rD = assert_array rValue
 ```
 
 The collection operand must be a CD dynamic-value token produced by an
@@ -423,20 +425,18 @@ LLVM pointer, alloca, global, aggregate, or pointer operation is rejected
 during lowering. `index` uses the Rust VM's array index rules: the index must
 be a finite, non-negative integer-valued number and the position must be in
 range. The VM owns the exact runtime error text. `len` observes the current
-length of an array-compatible value and returns a number. `assert_array`
-passes arrays through and applies the VM's existing iterable-to-array
-conversion for future map/range producers; a nil or other incompatible value
-is a runtime error rather than a compile-time reinterpretation.
+length of an array-compatible value and returns a number. The old
+`llvm.cd.assert_array` operation is not emitted because 0.2 has no equivalent
+opcode; callers must use a typed or dynamic access operation instead.
 
 Array handles retain the existing ownership contract: `index` returns a value
-handle, and `assert_array` returns either the original array handle or a fresh
-conversion-owned array as defined by the VM. Neither operation mutates the
-source array. `len` is an observation only. Resource-budget failures and
-runtime type/bounds failures remain VM errors and are never lowered to `nil`.
+handle and does not mutate the source array. `len` is an observation only.
+Resource-budget failures and runtime type/bounds failures remain VM errors and
+are never lowered to `nil`.
 
 The first LLVM access slice permits these results only as local dynamic values:
 they may be printed, used as array-constructor elements, or fed to another
-explicit access/assertion intrinsic. Ordinary pointer operations, external
+explicit access intrinsic. Ordinary pointer operations, external
 calls, unmarked function interfaces, and arbitrary storage remain outside
 this slice. Mutation is enabled only through the separate explicit
 `llvm.cd.assign.index` intrinsic below.
@@ -603,9 +603,10 @@ declare ptr @llvm.cd.variant.field(ptr, i32)
 ```
 
 `variant` emits an owned fresh VM value with the enum name, variant name, and
-payload values in source order. `variant_tag` compares both names and returns
+payload values in source order. The 0.2 artifact spells these operations
+`make_variant`, `is_variant`, and `variant_get`; `is_variant` compares both IDs and returns
 `false` for a non-matching value, including a value that is not an enum
-variant. `variant_field` reads a positional payload without mutating the
+variant. `variant_get` reads a positional payload without mutating the
 variant. The Rust VM remains authoritative for runtime failures: accessing a
 non-variant produces `can only access fields on enum variants`, and an invalid
 payload index produces `enum variant field index out of bounds`.
@@ -676,8 +677,8 @@ produced by an explicit CD intrinsic. `contains` requires a proven CD
 dynamic-value collection, accepts a scalar or proven CD dynamic-value needle,
 and returns exact `i1`; the Rust VM owns array element, map key, and integer
 range membership semantics. The `range` result is a CD dynamic-value token
-and may be consumed by the existing `len`, `index`, `assert_array`, and
-`contains` operations. `slice` requires a proven CD dynamic-value token and
+and may be consumed by the existing `len`, `index`, and `contains` operations.
+`slice` requires a proven CD dynamic-value token and
 two `double` operands; the VM owns the runtime array check, integer-valuedness,
 start/length bounds, snapshot, and fresh shallow-array allocation. `copy`
 requires a proven CD dynamic-value token; the VM owns the runtime array check,
@@ -741,8 +742,8 @@ return marked by `cd.value.return`. The callback may return any CD dynamic
 value, including nil.
 
 Both emitters materialize the direct callback with the existing
-`make_function` operation before emitting `native_call`; no new intrinsic,
-artifact opcode, or `.cdbc 0.1` field is introduced. The Rust VM requires
+`make_function` operation before emitting `call_native`; no new intrinsic,
+artifact opcode, or `.cdbc 0.2` field is introduced. The Rust VM requires
 exactly two arguments and callback arity one. It snapshots the input elements,
 returns a fresh array, preserves shared handles passed to the callback, checks
 the instruction budget before each callback iteration, and charges the output
@@ -805,7 +806,7 @@ address-space-zero `ptr`; declarations, casts, indirect callbacks, `@main`,
 ordinary pointer operands, and incomplete parameter markers remain rejected.
 
 Both emitters materialize the callback with `make_function` before emitting
-`native_call`. The Rust VM snapshots the input, returns the initial value for
+`call_native`. The Rust VM snapshots the input, returns the initial value for
 an empty array, and invokes the callback left to right with `(accumulator,
 item)`, threading each result into the next call. Callback frames, native
 checkpoints, budget, cancellation, and runtime array checks remain VM-owned.
@@ -837,7 +838,7 @@ parameter marked by `cd.value.params="0"` and return exactly `i1`; it does not
 use `cd.value.return`.
 
 Both emitters materialize the predicate with `make_function` before
-`native_call`. The Rust VM requires exactly two arguments and callback arity
+`call_native`. The Rust VM requires exactly two arguments and callback arity
 one, snapshots the input array, invokes the predicate from left to right, and
 returns a fresh shallow array containing the original elements whose predicate
 result is `true`. Predicate result typing, resource-budget, cancellation, and
@@ -865,7 +866,7 @@ attributes #0 = { "cd.value.params"="0" }
 The array operand must be a proven address-space-zero CD token, and the
 predicate must be a direct defined function with one marked CD parameter and
 no `cd.value.return` marker. Both emitters materialize the predicate with
-`make_function` before `native_call`. The Rust VM snapshots the input, invokes
+`make_function` before `call_native`. The Rust VM snapshots the input, invokes
 the predicate left to right, checks the native checkpoint before each callback,
 and short-circuits: `any` returns `true` on the first true result and `false`
 for an empty array, while `all` returns `false` on the first false result and
@@ -894,7 +895,7 @@ attributes #0 = { "cd.value.params"="0" }
 
 The array operand and predicate have the same provenance and direct-defined
 function requirements as `any` and `all`. Both emitters materialize the
-predicate with `make_function` before `native_call`. The Rust VM snapshots the
+predicate with `make_function` before `call_native`. The Rust VM snapshots the
 input, invokes the predicate left to right for every element, checks the native
 checkpoint before each callback, and returns a numeric count; an empty array
 returns `0`. The result type is exactly `double`, while callback arity,
@@ -923,7 +924,7 @@ attributes #0 = { "cd.value.params"="0" }
 The array operand and predicate have the same provenance and direct-defined
 function requirements as `any`, `all`, and `count`. The predicate must return
 exactly `i1` and must not carry `cd.value.return`. Both emitters materialize the
-predicate with `make_function` before `native_call`. The Rust VM snapshots the
+predicate with `make_function` before `call_native`. The Rust VM snapshots the
 input, invokes the predicate from left to right, checks the native checkpoint
 before each callback, and returns the first matching element. Empty arrays and
 arrays with no match return `nil`; a non-array input retains the VM diagnostic
@@ -952,7 +953,7 @@ attributes #0 = { "cd.value.params"="0" }
 The array operand and predicate have the same provenance and direct-defined
 function requirements as `any`, `all`, `count`, and `find`. The predicate must
 return exactly `i1` and must not carry `cd.value.return`. Both emitters
-materialize the predicate with `make_function` before `native_call`. The Rust VM
+materialize the predicate with `make_function` before `call_native`. The Rust VM
 snapshots the input, invokes the predicate from left to right, checks the native
 checkpoint before each callback, and returns the zero-based index of the first
 matching element. Empty arrays and arrays with no match return `-1`; a non-array
@@ -963,10 +964,11 @@ failures remain VM-owned behavior.
 The wire operation is:
 
 ```text
-rD = native_call nName [rArg0, rArg1, ...]
+rD = call_native iImport [rArg0, rArg1, ...]
 ```
 
-The Rust VM owns native arity, runtime type, resource-budget, cancellation,
+`iImport` indexes the `native_imports` table; the serialized name is resolved
+once by the VM before execution. The Rust VM owns native arity, runtime type, resource-budget, cancellation,
 and failure behavior. For example, `sqrt` preserves the runtime error
 `sqrt expects non-negative number` for a negative input, while representative
 string failures include `substr length out of bounds` and
@@ -992,13 +994,14 @@ documented operand capabilities, emits `array`, rejects ordinary pointer and
 aggregate substitutes, passes Rust `dump` and `run`, and has direct/machine
 artifact and runtime parity for empty, mixed, and nested values.
 
-The array-access group is complete only when `llvm.cd.index`, `llvm.cd.len`,
-and `llvm.cd.assert.array` have exact intrinsic signatures, reject ordinary
-pointer substitutes in both backends, emit the existing `index`, `len`, and
-`assert_array` operations, and pass Rust `dump`/`run` plus direct/machine
-behavior parity. The positive path must cover a scalar array element, a nested
-array handle, length observation, and assertion; a separate runtime check must
-preserve the VM's bounds/type errors.
+The array-access group is complete only when `llvm.cd.index` and
+`llvm.cd.len` have exact intrinsic signatures, reject ordinary pointer
+substitutes in both backends, emit the 0.2 `index` and `len` operations, and
+pass Rust `dump`/`run` plus direct/machine behavior parity. The old
+`llvm.cd.assert.array` shape must be rejected because 0.2 has no equivalent
+opcode. The positive path must cover a scalar array element, a nested array
+handle, and length observation; a separate runtime check must preserve the
+VM's bounds/type errors.
 
 The array-mutation group is complete only when the overloaded
 `llvm.cd.assign.index` intrinsic preserves scalar and CD-token result types,
@@ -1022,13 +1025,13 @@ parity.
 
 The enum-variant group is complete only when `llvm.cd.variant`,
 `llvm.cd.variant.tag`, and `llvm.cd.variant.field` enforce the name/count,
-payload capability, and overloaded result contracts, emit `variant`,
-`variant_tag`, and `variant_field` through both backends, reject ordinary
+payload capability, and overloaded result contracts, emit `make_variant`,
+`is_variant`, and `variant_get` through both backends, reject ordinary
 pointer substitutes, pass Rust `dump`/`run`, and cover direct/machine artifact,
 dynamic-value, non-variant, and out-of-bounds runtime parity.
 
 The bounded native-call group is complete only when `llvm.cd.native` enforces
-the name-specific matrix above, emits `native_call` through both backends,
+the name-specific matrix above, emits `call_native` through both backends,
 rejects unknown/not-yet-selected callback names and ordinary pointer
 substitutes, passes Rust `dump`/`run`, and covers direct/machine artifact parity
 plus shared runtime failures for numeric, string, `contains`, `push`, `pop`, `map`, `filter`, `flatMap`,
@@ -1037,7 +1040,7 @@ The string-helper extension additionally requires UTF-8 scalar-boundary output
 and malformed shape diagnostics for both `substr` and `charAt`.
 
 The sibling `cd-compiler` checkout already defines the string, collection,
-record, and enum-variant operations in the `cdbc 0.1` parser, formatter, and
+record, and enum-variant operations in the `cdbc 0.2` parser, formatter, and
 VM. These M4 slices therefore change the LLVM artifact model and lowering only;
 they do not add a new Rust opcode or alter the artifact version.
 
@@ -1046,7 +1049,7 @@ they do not add a new Rust opcode or alter the artifact version.
 Program mode remains the default for `llc -mtriple=cd-unknown-unknown` and emits
 the existing linked-program envelope. The opt-in `-cd-artifact=module` mode
 emits the Rust VM's existing `artifact: module` envelope; it never changes the
-`cdbc 0.1` version or the ordinary constants, names, function, body, and debug
+`cdbc 0.2` version or the ordinary constants, names, function, body, and debug
 sections.
 
 Module mode consumes exactly one `!cd.module` record. Its positional shape is
@@ -1063,32 +1066,35 @@ have an order, and a non-entry module must omit it. All strings are UTF-8 and
 all identities and paths are non-empty.
 
 Dependencies are an optional ordered `!cd.dependencies` named-metadata list.
-Each record has four operands: dependency kind (`import` or `re_export`),
-target module identity, non-negative 64-bit local main-instruction offset, and
-requested source path:
+Each LLVM input record has four operands: dependency kind (`import` or
+`re_export`), target module identity, non-negative 64-bit local main-instruction
+anchor, and requested source path:
 
 ```llvm
 !cd.dependencies = !{!1}
 !1 = !{!"import", !"/workspace/lib.cd", i64 1, !"./lib.cd"}
 ```
 
-Offsets are serialized as the existing `dN target=... kind=... at=...
-requested=...` records and must be nondecreasing and no greater than the
-lowered main instruction count. A non-entry module is a fall-through product:
-module mode omits the LLVM terminal return from its `main` body so the Rust
-linker can insert that body at a dependency offset. Entry modules retain their
-terminal return. If `llvm-link` combines input modules, LLVM concatenates their
-named-metadata records; the resulting multiple `!cd.module` records are
-rejected rather than synthesized into one module product. Module products are
-linked by the Rust VM's module-aware linker. Supplying module metadata without
-`-cd-artifact=module` is also an error, so the default program path cannot
-silently discard it.
+The anchor is used only while lowering LLVM IR: the initializer receives an
+`init_module mN` marker at the corresponding source position. It is not
+serialized in the 0.2 artifact. Module dependency records are emitted as
+`dN target=... kind=... requested=...`; the anchors must still be nondecreasing
+and no greater than the LLVM main instruction count. Module products keep an
+empty `main` and place top-level work in the initializer function, so the Rust
+linker follows the recorded dependency order and the initializer's markers
+without splicing bodies by a wire-level offset. If `llvm-link` combines input
+modules, LLVM concatenates their named-metadata records; the resulting multiple
+`!cd.module` records are rejected rather than synthesized into one module
+product. Module products are linked by the Rust VM's module-aware linker.
+Supplying module metadata without `-cd-artifact=module` is also an error, so the
+default program path cannot silently discard it.
 
 The opt-in `llvm/utils/cd_module_link.py` harness emits entry and dependency
 products through both LLVM paths, then checks Rust `dump`, unlinked `run`
 rejection, `link`, linked `dump`, and linked `run`. It also checks missing
-dependencies, dependency cycles, duplicate identities, non-contiguous entry
-orders, and invalid insertion offsets without changing the nested VM checkout.
+dependencies, runtime rejection of dependency cycles, duplicate identities,
+non-contiguous entry orders, and invalid initializer references without
+changing the nested VM checkout.
 Its source-backed diagnostic pair additionally compares direct and machine
 `run` stderr, source caret/call-stack rendering, and the `debug` error pause's
 module identity after linking.

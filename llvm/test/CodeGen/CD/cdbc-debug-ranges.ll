@@ -47,14 +47,14 @@ entry:
 !30 = !{i32 2, !"Debug Info Version", i32 3}
 
 ; DIRECT: debug_ranges:
-; DIRECT: main 2 = s0:6:11
-; DIRECT: main 3 = s0:0:12
-; DIRECT: main 5 = s0:0:12
-; DIRECT: function f0 2 = s1:0:16
+; DIRECT: main 3 = s0:6:11
+; DIRECT: main 4 = s0:0:12
+; DIRECT: main 6 = s0:0:12
 ; DIRECT: function f0 3 = s1:0:16
+; DIRECT: function f0 4 = s1:0:16
 ; MACHINE: debug_ranges:
-; MACHINE: main 2 = s0:6:11
-; MACHINE: main 3 = s0:0:12
-; MACHINE: main 5 = s0:0:12
-; MACHINE: function f0 2 = s1:0:16
+; MACHINE: main 3 = s0:6:11
+; MACHINE: main 4 = s0:0:12
+; MACHINE: main 6 = s0:0:12
 ; MACHINE: function f0 3 = s1:0:16
+; MACHINE: function f0 4 = s1:0:16

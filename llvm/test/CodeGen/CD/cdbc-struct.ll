@@ -29,11 +29,17 @@ entry:
   ret i32 0
 }
 
-; DIRECT: struct {}
-; DIRECT: struct n{{[0-9]+}}
+; DIRECT: types:
+; DIRECT: t0 = struct "__cd_anonymous_struct"
+; DIRECT: t1 = struct "Point" field0="x" field1="y"
+; DIRECT: make_struct t0
+; DIRECT: make_struct t1
 ; DIRECT: field
 ; DIRECT: assign_field
-; MACHINE: struct {}
-; MACHINE: struct n{{[0-9]+}}
+; MACHINE: types:
+; MACHINE: t0 = struct "__cd_anonymous_struct"
+; MACHINE: t1 = struct "Point" field0="x" field1="y"
+; MACHINE: make_struct t0
+; MACHINE: make_struct t1
 ; MACHINE: field
 ; MACHINE: assign_field

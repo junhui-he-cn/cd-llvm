@@ -27,11 +27,15 @@ entry:
   ret i32 0
 }
 
-; DIRECT: variant n{{[0-9]+}}.n{{[0-9]+}}
-; DIRECT: variant_tag
-; DIRECT: variant_tag
-; DIRECT: variant_field
-; MACHINE: variant n{{[0-9]+}}.n{{[0-9]+}}
-; MACHINE: variant_tag
-; MACHINE: variant_tag
-; MACHINE: variant_field
+; DIRECT: types:
+; DIRECT: t0 = enum "Option" v0="Some" payload=2 v1="None" payload=0
+; DIRECT: make_variant t0, v0
+; DIRECT: is_variant
+; DIRECT: is_variant
+; DIRECT: variant_get
+; MACHINE: types:
+; MACHINE: t0 = enum "Option" v0="Some" payload=2 v1="None" payload=0
+; MACHINE: make_variant t0, v0
+; MACHINE: is_variant
+; MACHINE: is_variant
+; MACHINE: variant_get

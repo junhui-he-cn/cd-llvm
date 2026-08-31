@@ -33,38 +33,38 @@ entry:
 attributes #0 = { noinline }
 
 ; O0-LABEL: main registers=
-; O0: print
-; O0: print
+; O0: call_native i0
+; O0: call_native i0
 ; O0-LABEL: function f0 name="mem2reg_and_fold"
-; O0: store_var
-; O0: load_var
+; O0: {{(bind_local|set_local|init_global|set_global)}}
+; O0: {{(load_local|load_global)}}
 ; O0: add
 ; O0: add
 ; O0: add
 ; O0: return
 ; O0-LABEL: function f1 name="select_after_cfg"
-; O0: jump_if_false
+; O0: br_if
 ; O0: move
-; O0: jump
+; O0: br
 ; O0: move
 ; O0: return
 
 ; O2-LABEL: main registers=
-; O2: print
-; O2: print
+; O2: call_native i0
+; O2: call_native i0
 ; O2-LABEL: function f0 name="mem2reg_and_fold"
-; O2-NOT: store_var
+; O2-NOT: {{(bind_local|set_local|init_global|set_global)}}
 ; O2-NOT: add
-; O2: load_var
+; O2: {{(load_local|load_global)}}
 ; O2: constant
 ; O2: return
 ; O2-LABEL: function f1 name="select_after_cfg"
-; O2: jump_if_false
+; O2: br_if
 ; O2: move
-; O2: jump
+; O2: br
 ; O2: move
 ; O2: return
 
-; LLC-O2: cdbc 0.1
+; LLC-O2: cdbc 0.2
 ; LLC-O2: main registers=
 ; LLC-O2: function f1 name="select_after_cfg"

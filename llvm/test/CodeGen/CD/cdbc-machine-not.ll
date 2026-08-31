@@ -7,11 +7,12 @@ entry:
   ret i1 %not
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: constants:
 ; CHECK-NEXT:   c0 = number 1
 ; CHECK-NEXT:   c1 = number 2
 ; CHECK: main registers=4:
+; CHECK-NEXT:   block b0:
 ; CHECK-NEXT:   r0 = constant c0
 ; CHECK-NEXT:   r1 = constant c1
 ; CHECK-NEXT:   r2 = less r0, r1

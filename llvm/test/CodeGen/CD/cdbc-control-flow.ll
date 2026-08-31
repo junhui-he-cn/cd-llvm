@@ -61,16 +61,16 @@ entry:
   ret i32 0
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: main registers=
 ; CHECK: call
-; CHECK: print
+; CHECK: call_native i0
 ; CHECK: function f0 name="sum_to" arity=1 registers=
-; CHECK: jump_if_false
-; CHECK: store_var
-; CHECK: jump
+; CHECK: br_if
+; CHECK: {{(bind_local|set_local|init_global|set_global)}}
+; CHECK: br
 ; CHECK: function f1 name="select_value" arity=1 registers=
-; CHECK: jump_if_false
+; CHECK: br_if
 ; CHECK: function f2 name="factorial" arity=1 registers=
 ; CHECK: call
 ; CHECK: return

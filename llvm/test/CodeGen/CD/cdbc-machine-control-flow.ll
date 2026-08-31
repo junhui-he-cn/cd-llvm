@@ -89,25 +89,25 @@ entry:
   ret i32 0
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: main registers=
-; CHECK: print
+; CHECK: call_native i0
 ; CHECK: function f0 name="choose" arity=1 registers=
-; CHECK: jump_if_false
-; CHECK: store_var
-; CHECK: jump
+; CHECK: br_if
+; CHECK: {{(bind_local|set_local|init_global|set_global)}}
+; CHECK: br
 ; CHECK: function f1 name="sum_to" arity=1 registers=
-; CHECK: jump_if_false
-; CHECK: store_var
-; CHECK: jump
+; CHECK: br_if
+; CHECK: {{(bind_local|set_local|init_global|set_global)}}
+; CHECK: br
 ; CHECK: function f2 name="critical" arity=1 registers=
-; CHECK: jump_if_false
-; CHECK: store_var
-; CHECK: jump
+; CHECK: br_if
+; CHECK: {{(bind_local|set_local|init_global|set_global)}}
+; CHECK: br
 ; CHECK: function f3 name="same_constant" arity=1 registers=
-; CHECK: jump_if_false
-; CHECK: store_var
-; CHECK: jump
+; CHECK: br_if
+; CHECK: {{(bind_local|set_local|init_global|set_global)}}
+; CHECK: br
 ; NO-OBJECT: target does not support generation of this file type
 ; DIRECT: function f3 name="same_constant" arity=1 registers=
 ; DIRECT: constant c8

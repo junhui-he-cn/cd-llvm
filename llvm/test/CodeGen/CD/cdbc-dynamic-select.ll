@@ -28,37 +28,37 @@ entry:
 
 attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
 ; DIRECT: make_function f0
 ; DIRECT: call
-; DIRECT: print
+; DIRECT: call_native i0
 ; DIRECT: make_function f0
 ; DIRECT: call
-; DIRECT: print
+; DIRECT: call_native i0
 ; DIRECT: function f0 name="choose" arity=3
 ; DIRECT: param 0 = "left"
 ; DIRECT: param 1 = "right"
 ; DIRECT: param 2 = "condition"
-; DIRECT: jump_if_false
+; DIRECT: br_if
 ; DIRECT: move
-; DIRECT: jump
+; DIRECT: br
 ; DIRECT: move
 ; DIRECT: return
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: main registers=
 ; MACHINE: make_function f0
 ; MACHINE: call
-; MACHINE: print
+; MACHINE: call_native i0
 ; MACHINE: make_function f0
 ; MACHINE: call
-; MACHINE: print
+; MACHINE: call_native i0
 ; MACHINE: function f0 name="choose" arity=3
 ; MACHINE: param 0 = "left"
 ; MACHINE: param 1 = "right"
 ; MACHINE: param 2 = "condition"
-; MACHINE: jump_if_false
+; MACHINE: br_if
 ; MACHINE: move
-; MACHINE: jump
+; MACHINE: br
 ; MACHINE: move
 ; MACHINE: return

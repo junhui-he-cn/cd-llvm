@@ -44,7 +44,7 @@ entry:
 attributes #0 = { "cd.value.params"="1" "cd.value.return" }
 attributes #1 = { "cd.value.params"="0" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
 ; DIRECT: make_function f0
 ; DIRECT: call r{{[0-9]+}} [r{{[0-9]+}}, r{{[0-9]+}}]
@@ -58,7 +58,7 @@ attributes #1 = { "cd.value.params"="0" }
 ; DIRECT: param 0 = "object"
 ; DIRECT: param 1 = "replacement"
 ; DIRECT: assign_field
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: make_function f0
 ; MACHINE: call r{{[0-9]+}} [r{{[0-9]+}}, r{{[0-9]+}}]
 ; MACHINE: make_function f1

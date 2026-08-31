@@ -1,7 +1,5 @@
-; RUN: llc -mtriple=cd-unknown-unknown %s -o %t.direct
-; RUN: FileCheck --check-prefix=DIRECT %s < %t.direct
-; RUN: llc -mtriple=cd-unknown-unknown -cd-backend=machine %s -o %t.machine
-; RUN: FileCheck --check-prefix=MACHINE %s < %t.machine
+; RUN: not --crash llc -mtriple=cd-unknown-unknown %s -o - 2>&1 | FileCheck --check-prefix=DIRECT %s
+; RUN: not --crash llc -mtriple=cd-unknown-unknown -cd-backend=machine %s -o - 2>&1 | FileCheck --check-prefix=MACHINE %s
 
 @option = private unnamed_addr constant [7 x i8] c"Option\00"
 @none = private unnamed_addr constant [5 x i8] c"None\00"
@@ -17,7 +15,5 @@ entry:
   ret i32 0
 }
 
-; DIRECT: variant
-; DIRECT: variant_field
-; MACHINE: variant
-; MACHINE: variant_field
+; DIRECT: CD bytecode 0.2 lowering failed: variant field index is outside the inferred payload layout
+; MACHINE: CD bytecode 0.2 lowering failed: variant field index is outside the inferred payload layout

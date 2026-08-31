@@ -25,9 +25,9 @@ entry:
   ret i32 0
 }
 
-; DIRECT: cdbc 0.1
-; DIRECT-COUNT-3: native_call
-; DIRECT-COUNT-3: print
-; MACHINE: cdbc 0.1
-; MACHINE-COUNT-3: native_call
-; MACHINE-COUNT-3: print
+; DIRECT: cdbc 0.2
+; DIRECT-COUNT-3: call_native i0
+; DIRECT-COUNT-3: call_native i1
+; MACHINE: cdbc 0.2
+; MACHINE-COUNT-3: call_native i0
+; MACHINE-COUNT-3: call_native i1

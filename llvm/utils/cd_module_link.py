@@ -77,6 +77,18 @@ def add_dependency_record(artifact, record):
     return artifact.replace(marker, marker + line, 1)
 
 
+def add_module_init_marker(artifact, module_index):
+    function_marker = '\nfunction f0 name="__module_init"'
+    function_start = artifact.find(function_marker)
+    if function_start == -1:
+        raise ValueError("expected module initializer function")
+    return_offset = artifact.find("  return_nil\n", function_start)
+    if return_offset == -1:
+        raise ValueError("expected module initializer return")
+    marker = f"  init_module m{module_index}\n"
+    return artifact[:return_offset] + marker + artifact[return_offset:]
+
+
 def run(command, description, input_text=None):
     result = subprocess.run(
         command,
@@ -164,6 +176,17 @@ def expect_link_failure(vm, directory, expected):
     )
 
 
+def validate_cycle_runtime_failure(vm, directory):
+    linked = directory.parent / "cycle-linked.cdbc"
+    link_modules(vm, directory, linked)
+    vm_dump(vm, linked)
+    expect_failure(
+        vm_command(vm, ["run", linked]),
+        f"cyclic module execution for {directory}",
+        "cyclic module initialization",
+    )
+
+
 def artifact_text(path):
     return path.read_text(encoding="utf-8")
 
@@ -180,7 +203,7 @@ def validate_valid_products(vm, directory):
     products = sorted(directory.glob("module-*.cdbc"))
     for product in products:
         text = artifact_text(product)
-        if not text.startswith("cdbc 0.1\n\nartifact: module\n"):
+        if not text.startswith("cdbc 0.2\n\nartifact: module\n"):
             raise RuntimeError(f"{product} is not a module artifact")
         vm_dump(vm, product, text)
         validate_unlinked_module(vm, product)
@@ -207,10 +230,11 @@ def validate_link_failures(vm, directory, entry_text, dependency_text):
     cycle.mkdir()
     cycle_dependency = add_dependency_record(
         dependency_text,
-        'target="/workspace/cd-llvm-entry.cd" kind=import at=0 requested="./entry.cd"',
+        'target="/workspace/cd-llvm-entry.cd" kind=import requested="./entry.cd"',
     )
+    cycle_dependency = add_module_init_marker(cycle_dependency, 0)
     write_products(cycle, entry_text, cycle_dependency)
-    expect_link_failure(vm, cycle, "module dependency cycle")
+    validate_cycle_runtime_failure(vm, cycle)
 
     duplicate = directory / "duplicate"
     duplicate.mkdir()
@@ -227,11 +251,11 @@ def validate_link_failures(vm, directory, entry_text, dependency_text):
     write_products(non_contiguous, entry_text, second_entry)
     expect_link_failure(vm, non_contiguous, "entry module orders must be contiguous")
 
-    invalid_offset = directory / "invalid-offset"
-    invalid_offset.mkdir()
-    invalid_entry = entry_text.replace(" at=2 ", " at=999 ", 1)
-    write_products(invalid_offset, invalid_entry, dependency_text)
-    expect_link_failure(vm, invalid_offset, "instruction offset out of range")
+    invalid_init = directory / "invalid-init"
+    invalid_init.mkdir()
+    invalid_entry = entry_text.replace("  init = f0\n", "  init = f9\n", 1)
+    write_products(invalid_init, invalid_entry, dependency_text)
+    expect_link_failure(vm, invalid_init, "module init function f9 out of range")
 
 
 def run_backend(llc, vm, entry_source, dependency_source, backend, temporary):
@@ -277,7 +301,10 @@ def run_diagnostic_backend(
         EXPECTED_RUNTIME_ERROR,
         expected_stdout="",
     )
-    if "  1 / 0;\n  ^\nCall stack:\n  at main (dependency-runtime.cd:1:1)" not in runtime.stderr:
+    if (
+        "  1 / 0;\n  ^\nCall stack:\n  at __module_init "
+        "(dependency-runtime.cd:1:1)"
+    ) not in runtime.stderr:
         raise RuntimeError("linked runtime error lost the dependency source context")
 
     debug = subprocess.run(
@@ -294,10 +321,11 @@ def run_diagnostic_backend(
             f"exit={debug.returncode} stderr={debug.stderr!r}"
         )
     expected_pause = (
-        "pause reason=error function=main instruction=4 "
+        "pause reason=error function=__module_init instruction=3 "
         "module=/workspace/cd-llvm-dependency.cd "
         "location=dependency-runtime.cd:1:1 "
-        "stack=main@dependency-runtime.cd:1:1"
+        "stack=main@<unknown>>__module_init@<unknown>>"
+        "__module_init@dependency-runtime.cd:1:1"
     )
     if expected_pause not in debug.stdout:
         raise RuntimeError(

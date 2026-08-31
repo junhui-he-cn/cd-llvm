@@ -29,11 +29,15 @@ entry:
   ret i32 0
 }
 
-; DIRECT: struct {
+; DIRECT: types:
+; DIRECT: t0 = struct "__cd_anonymous_struct_5_items" field0="items"
+; DIRECT: make_struct t0
 ; DIRECT: field
 ; DIRECT: assign_field
 ; DIRECT: len
-; MACHINE: struct {
+; MACHINE: types:
+; MACHINE: t0 = struct "__cd_anonymous_struct_5_items" field0="items"
+; MACHINE: make_struct t0
 ; MACHINE: field
 ; MACHINE: assign_field
 ; MACHINE: len

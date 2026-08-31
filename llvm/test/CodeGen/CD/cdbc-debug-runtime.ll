@@ -35,13 +35,13 @@ entry:
 !30 = !{i32 2, !"Debug Info Version", i32 3}
 
 ; DIRECT: debug_locations:
-; DIRECT: main 0 = s0:2:1
 ; DIRECT: main 1 = s0:2:1
 ; DIRECT: main 2 = s0:2:1
-; DIRECT: function f0 2 = s0:1:22
-; DIRECT: function f0 3 = s0:1:14
+; DIRECT: main 3 = s0:2:1
+; DIRECT: function f0 3 = s0:1:22
+; DIRECT: function f0 4 = s0:1:14
 ; MACHINE: debug_locations:
-; MACHINE: main 1 = s0:2:1
 ; MACHINE: main 2 = s0:2:1
-; MACHINE: function f0 2 = s0:1:22
-; MACHINE: function f0 3 = s0:1:14
+; MACHINE: main 3 = s0:2:1
+; MACHINE: function f0 3 = s0:1:22
+; MACHINE: function f0 4 = s0:1:14

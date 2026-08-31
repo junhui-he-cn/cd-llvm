@@ -16,5 +16,5 @@ entry:
   ret i32 0
 }
 
-; DIRECT: native_call
-; MACHINE: native_call
+; DIRECT: call_native i0
+; MACHINE: call_native i0

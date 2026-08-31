@@ -44,34 +44,34 @@ entry:
 
 attributes #0 = { "cd.value.params"="0" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
 ; DIRECT: make_function
-; DIRECT: native_call
-; DIRECT: print
+; DIRECT: call_native i0
+; DIRECT: call_native i1
 ; DIRECT: make_function
-; DIRECT: native_call
-; DIRECT: print
+; DIRECT: call_native i0
+; DIRECT: call_native i1
 ; DIRECT: make_function
-; DIRECT: native_call
-; DIRECT: print
+; DIRECT: call_native i0
+; DIRECT: call_native i1
 ; DIRECT: function
 ; DIRECT: param 0 = "value"
 ; DIRECT: return
 ; DIRECT: function
 ; DIRECT: param 0 = "value"
 ; DIRECT: return
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: main registers=
 ; MACHINE: make_function
-; MACHINE: native_call
-; MACHINE: print
+; MACHINE: call_native i0
+; MACHINE: call_native i1
 ; MACHINE: make_function
-; MACHINE: native_call
-; MACHINE: print
+; MACHINE: call_native i0
+; MACHINE: call_native i1
 ; MACHINE: make_function
-; MACHINE: native_call
-; MACHINE: print
+; MACHINE: call_native i0
+; MACHINE: call_native i1
 ; MACHINE: function
 ; MACHINE: param 0 = "value"
 ; MACHINE: return

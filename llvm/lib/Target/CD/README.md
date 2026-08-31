@@ -7,12 +7,12 @@ bytecode VM.  It is selected with:
 llc -mtriple=cd-unknown-unknown input.ll -o output.cdbc
 ```
 
-The target emits the text `cdbc 0.1` artifact format consumed by the Rust VM in
+The target emits the text `cdbc 0.2` artifact format consumed by the Rust VM in
 the sibling `cd-compiler` project.  The output contains deterministic constant
 and name tables, a `main` body, and function bodies.  The current capability
 reference is [docs/cd-bytecode-features.md](../../../../docs/cd-bytecode-features.md).
 LLVM function arguments
-are represented by `param` metadata and an initial `load_var`; direct calls
+are represented by `param` metadata and an initial numeric `load_local`; direct calls
 materialize a function value with `make_function` before using `call`.
 
 The initial lowering supports scalar integer and floating-point constants,
@@ -21,7 +21,7 @@ storage with scalar or proven dynamic-CD `load`/`store`, direct calls to defined
 functions, conditional and unconditional branches, PHI edge stores, returns, and declarations named
 `cd_print` or `print` with one argument.  `fneg` lowers to `negate`.  A scalar
 or dynamic CD `select` lowers to a small conditional control-flow sequence using
-`jump_if_false`, `move`, and `jump`.  The only supported `xor` form is boolean
+0.2 `br_if`, `move`, and `br` block instructions.  The only supported `xor` form is boolean
 inversion: an `i1` value XORed with the literal `true` (in either operand order)
 lowers to `not`; other XOR operations remain unsupported.  Unsupported LLVM
 instructions fail with a CD-target diagnostic rather than producing an invalid
@@ -39,7 +39,7 @@ all control-flow paths.
 The emitter builds a typed `llvm::cd::CDArtifact` before writing anything. Its
 `CDBytecodeFormat` validator checks table references, register operands, branch
 targets, instruction shapes, function parameter records, and finite constants;
-the canonical serializer is the only component that spells the `cdbc 0.1`
+the canonical serializer is the only component that spells the `cdbc 0.2`
 wire format. This boundary is also the input contract for the later TableGen-
 backed machine path.
 
@@ -55,7 +55,7 @@ parity is gated.
 ## Module artifacts
 
 Program mode is the default. Use `-cd-artifact=module` to emit the existing
-Rust VM `cdbc 0.1` module envelope through either the direct or machine path:
+Rust VM `cdbc 0.2` module envelope through either the direct or machine path:
 
 ```text
 llc -mtriple=cd-unknown-unknown -cd-artifact=module input.ll -o module.cdbc
@@ -65,7 +65,9 @@ llc -mtriple=cd-unknown-unknown -cd-backend=machine -cd-artifact=module input.ll
 Module mode requires exactly one `!cd.module` record with positional
 `identity`, `path`, `canonical_path`, `i1 entry`, and optional `i64
 entry_order` operands. An optional `!cd.dependencies` list contains ordered
-`kind`, target identity, local instruction offset, and requested path records.
+`kind`, target identity, local lowering anchor, and requested path records; the
+anchor is used to place an `init_module mN` in the initializer and is not part
+of the 0.2 wire record.
 The shared typed artifact validator enforces non-empty UTF-8 identities and
 paths, entry-order consistency, ordered in-range offsets, and the allowlisted
 dependency kinds. The serializer writes the VM's existing `artifact: module`
@@ -76,11 +78,12 @@ instead of silently dropping them.
 metadata, the target rejects a linked IR module with multiple `!cd.module`
 records. The Rust VM's module-aware `link` command remains responsible for
 resolving dependency identities and expanding products. Non-entry module
-products have a fall-through `main` body; the LLVM terminal return is omitted
-in module mode so dependency expansion can continue into the importing body.
+products keep top-level work in their initializer function; the emitted module
+`main` is an empty executable stub.
 The opt-in `llvm/utils/cd_module_link.py` harness covers valid direct/machine
 products, linked execution, unlinked-run rejection, and missing-dependency,
-cycle, duplicate-identity, entry-order, and insertion-offset failures.
+cycle runtime rejection, duplicate-identity, entry-order, and invalid
+initializer-reference failures.
 With explicit source metadata, the same harness compares linked divide-by-zero
 diagnostics and confirms the debugger error pause retains the dependency's
 module identity.
@@ -158,18 +161,18 @@ address-space-zero tokens. The direct and
 machine paths validate the same capability matrix and share the same artifact
 bridge.
 
-The first M4 array-access operations use `llvm.cd.index(ptr, double)`,
-`llvm.cd.len(ptr)`, and `llvm.cd.assert.array(ptr)`. Their collection operands
-must be explicit CD dynamic-value tokens (or the CD nil token), not arbitrary
-LLVM pointers. They lower to the existing `index`, `len`, and `assert_array`
-instructions. Index results remain dynamic-value tokens so scalar and nested
-array elements can share one ABI; `len` returns a CD number as `double`.
-`assert.array` preserves the VM's runtime type/conversion behavior. The direct
-and machine paths share validation, artifact serialization, and Rust VM output
-parity. These results remain local and cannot cross ordinary function, pointer,
-or arbitrary storage boundaries; the supported one-slot dynamic storage rule
-may carry proven results through `load_var`/`store_var`. Dynamic CD `select` and
-PHI may choose or merge proven results.
+The first M4 array-access operations use `llvm.cd.index(ptr, double)` and
+`llvm.cd.len(ptr)`. Their collection operands must be explicit CD dynamic-value
+tokens (or the CD nil token), not arbitrary LLVM pointers. They lower to the
+0.2 `index` and `len` instructions. `llvm.cd.assert.array(ptr)` has no 0.2
+opcode and is rejected during lowering. Index results remain dynamic-value
+tokens so scalar and nested array elements can share one ABI; `len` returns a
+CD number as `double`. The direct and machine paths share validation, artifact
+serialization, and Rust VM output parity. These results remain local and
+cannot cross ordinary function, pointer, or arbitrary storage boundaries; the
+supported one-slot dynamic storage rule may carry proven results through
+numeric local/global cell operations. Dynamic CD `select` and PHI may choose or
+merge proven results.
 
 `llvm.cd.assign.index` is the explicit array/map mutation boundary. Its
 collection and index must be a CD dynamic-value token and `double`; its value
@@ -204,9 +207,9 @@ The enum-variant boundary is the `llvm.cd.variant` /
 `llvm.cd.variant.tag` / `llvm.cd.variant.field` intrinsic group. `variant`
 takes private, constant, non-empty UTF-8 enum and variant name globals, an
 immediate payload count, and scalar, nil, or explicit CD-value payloads. It
-lowers to `variant nEnum.nVariant [rPayload0, ...]`; `variant_tag` compares
-the two names and returns a boolean, while `variant_field` reads an immediate
-positional payload index. These map to the existing Rust VM operations and
+lowers to `make_variant tType, vVariant [rPayload0, ...]`; `is_variant` compares
+the numeric type/variant IDs and returns a boolean, while `variant_get` reads an
+immediate positional payload index. These map to the existing Rust VM operations and
 preserve its non-variant and out-of-bounds runtime diagnostics. Names remain
 name-table metadata, ordinary pointers and aggregates remain unsupported, and
 variant values stay local to explicit CD intrinsic consumers in this slice.
@@ -215,7 +218,8 @@ The bounded native-call slice implements `llvm.cd.native(ptr name, ...)` for
 the allowlisted names `floor`, `ceil`, `sqrt`, `str`, `typeOf`, `hash`, `contains`,
 `slice`, `copy`, `concat`, `push`, `pop`, `remove`, `clear`, `merge`, `keys`, `values`, `range`, `substr`, `charAt`, and the callback helpers `map`, `filter`, `flatMap`, `reduce`,
 `any`, `all`, `count`, `find`, and `findIndex`.
-The name must be a private constant UTF-8 global; each name has an exact
+The name must be a private constant UTF-8 global; each name is interned into the
+0.2 `native_imports` table and has an exact
 scalar/CD-value argument
 and result signature recorded in `docs/cd-bytecode-llvm-abi.md`. `substr` and
 `charAt` accept explicit CD dynamic-value tokens and leave string type, Unicode
@@ -281,8 +285,8 @@ pointer return. It returns an exact address-space-zero `ptr`; the VM owns empty
 input identity, left-to-right accumulator threading, callback frames, native
 checkpoints, budget, cancellation, and the `reduce expects array as first
 argument` runtime diagnostic.
-All callback values are materialized with `make_function` before `native_call`.
-Direct and opt-in machine lowering share the `native_call` artifact bridge and
+All callback values are materialized with `make_function` before `call_native`.
+Direct and opt-in machine lowering share the `call_native iN` artifact bridge and
 parity coverage. Unsupported names, incomplete callback markers, and ordinary
 pointer arguments remain rejected.
 

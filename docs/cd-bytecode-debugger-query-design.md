@@ -3,7 +3,7 @@
 Status: design-only M5 follow-on, 2026-08-09. The existing pause-state and
 resume contract in `docs/cd-bytecode-debugger-contract.md` remains authoritative.
 This document fixes the next read-only query surface without implementing a VM
-command, changing the artifact format, or changing the `cdbc 0.1` version.
+command, changing the artifact format, or changing the `cdbc 0.2` version.
 
 ## Goals and boundary
 

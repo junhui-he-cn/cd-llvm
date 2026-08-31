@@ -21,7 +21,6 @@ runtime-error llvm/test/CodeGen/CD/cdbc-map-runtime.ll "map key not found"
 runtime-error llvm/test/CodeGen/CD/cdbc-struct-runtime.ll "undefined field `missing`"
 behavior llvm/test/CodeGen/CD/cdbc-array-assign.ll
 behavior llvm/test/CodeGen/CD/cdbc-array-assign-scalar.ll
-runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"
 runtime-error llvm/test/CodeGen/CD/cdbc-array-assign-runtime.ll "array index out of range"
 behavior llvm/test/CodeGen/CD/cdbc-machine-arithmetic.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-compare.ll
@@ -33,8 +32,6 @@ behavior llvm/test/CodeGen/CD/cdbc-dynamic-phi.ll
 behavior llvm/test/CodeGen/CD/cdbc-dynamic-storage.ll
 artifact llvm/test/CodeGen/CD/cdbc-variant.ll
 behavior llvm/test/CodeGen/CD/cdbc-variant-dynamic.ll
-runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime.ll "enum variant field index out of bounds"
-runtime-error llvm/test/CodeGen/CD/cdbc-variant-runtime-nonvariant.ll "can only access fields on enum variants"
 artifact llvm/test/CodeGen/CD/cdbc-native.ll
 artifact llvm/test/CodeGen/CD/cdbc-native-values.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-native-runtime.ll "sqrt expects non-negative number"
@@ -97,7 +94,7 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;conti
 # constant scheduling gives the main add different operand/register order.
 behavior llvm/test/CodeGen/CD/cdbc-debug-locations.ll
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "Runtime error at runtime.cd:1:22: division by zero"
-debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
+debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=3 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
 state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;continue;continue;quit" "division by zero"
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-native-runtime.ll "Runtime error at native.cd:1:1: sqrt expects non-negative number"
 runtime-error llvm/test/CodeGen/CD/cdbc-debug-index-runtime.ll "Runtime error at index.cd:1:14: array index out of range"

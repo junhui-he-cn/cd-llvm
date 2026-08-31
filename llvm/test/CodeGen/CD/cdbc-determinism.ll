@@ -25,7 +25,7 @@ entry:
   ret i32 0
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: constants:
 ; CHECK: names:
 ; CHECK: main registers=

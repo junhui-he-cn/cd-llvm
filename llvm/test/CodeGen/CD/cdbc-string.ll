@@ -30,9 +30,9 @@ entry:
 ; DIRECT: c1 = string "a\"b\\c"
 ; DIRECT: c2 = string ""
 ; DIRECT: c3 = string "你好"
-; DIRECT: print
+; DIRECT: call_native i0
 ; MACHINE: c0 = string "hello\nworld"
 ; MACHINE: c1 = string "a\"b\\c"
 ; MACHINE: c2 = string ""
 ; MACHINE: c3 = string "你好"
-; MACHINE: print
+; MACHINE: call_native i0

@@ -27,17 +27,17 @@ entry:
   ret i32 0
 }
 
-; DIRECT: cdbc 0.1
-; DIRECT: native_call
-; DIRECT: print
-; DIRECT: print
-; DIRECT: native_call
-; DIRECT: print
-; DIRECT: print
-; MACHINE: cdbc 0.1
-; MACHINE: native_call
-; MACHINE: print
-; MACHINE: print
-; MACHINE: native_call
-; MACHINE: print
-; MACHINE: print
+; DIRECT: cdbc 0.2
+; DIRECT: call_native i0
+; DIRECT: call_native i1
+; DIRECT: call_native i1
+; DIRECT: call_native i0
+; DIRECT: call_native i1
+; DIRECT: call_native i1
+; MACHINE: cdbc 0.2
+; MACHINE: call_native i0
+; MACHINE: call_native i1
+; MACHINE: call_native i1
+; MACHINE: call_native i0
+; MACHINE: call_native i1
+; MACHINE: call_native i1

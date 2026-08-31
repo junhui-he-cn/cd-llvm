@@ -29,8 +29,8 @@ entry:
 ; DIRECT: debug_sources:
 ; DIRECT: s0 module="/workspace/cd-llvm-dependency.cd" path="dependency-runtime.cd"
 ; DIRECT: debug_locations:
-; DIRECT: main 2 = s0:1:1
+; DIRECT: function f0 3 = s0:1:1
 ; MACHINE: debug_sources:
 ; MACHINE: s0 module="/workspace/cd-llvm-dependency.cd" path="dependency-runtime.cd"
 ; MACHINE: debug_locations:
-; MACHINE: main 2 = s0:1:1
+; MACHINE: function f0 3 = s0:1:1

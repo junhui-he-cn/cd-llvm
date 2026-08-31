@@ -17,7 +17,11 @@ entry:
   ret i32 0
 }
 
-; DIRECT: struct {
+; DIRECT: types:
+; DIRECT: t0 = struct "__cd_anonymous_struct_7_present" field0="present"
+; DIRECT: make_struct t0
 ; DIRECT: field
-; MACHINE: struct {
+; MACHINE: types:
+; MACHINE: t0 = struct "__cd_anonymous_struct_7_present" field0="present"
+; MACHINE: make_struct t0
 ; MACHINE: field

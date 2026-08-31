@@ -153,16 +153,19 @@ TEST(CDBytecodeFormatTest, SerializesCanonicalSectionsAndEscapes) {
   Stream.flush();
 
   EXPECT_EQ(Output,
-            "cdbc 0.1\n\n"
+            "cdbc 0.2\n\n"
             "constants:\n"
             "  c0 = number 1\n"
             "  c1 = bool true\n"
             "  c2 = string \"hello\\n\\\"\"\n\n"
             "names:\n"
             "  n0 = \"a\\n\\\"\"\n\n"
-            "main registers=1:\n"
+            "native_imports:\n"
+            "  i0 = \"print\" abi=1\n\n"
+            "main registers=2:\n"
+            "block b0:\n"
             "  r0 = constant c0\n"
-            "  print r0\n"
+            "  r1 = call_native i0 [r0]\n"
             "  return r0\n");
 }
 

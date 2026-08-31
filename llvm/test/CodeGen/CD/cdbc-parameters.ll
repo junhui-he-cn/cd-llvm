@@ -12,9 +12,9 @@ entry:
   ret i32 %value
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: function f0 name="parameter_names" arity=2 registers=
 ; CHECK: param 0 = "arg0"
 ; CHECK: param 1 = "arg0#1"
-; CHECK: r0 = load_var n0
-; CHECK: r1 = load_var n1
+; CHECK: r0 = load_local l0
+; CHECK: r1 = load_local l1

@@ -3,10 +3,11 @@
 
 The harness compiles each LLVM IR input twice, validates both artifacts with
 the Rust VM, and compares their observable output.  Artifact-mode cases also
-compare a normalized artifact projection that only canonicalizes constant,
-name, function, and virtual-register indices.  Machine-specific control-flow
-expansions can therefore be covered by behavior-mode cases without hiding an
-unexpected scalar instruction change behind a broad text normalization.
+compare a normalized artifact projection that canonicalizes cdbc 0.2 table,
+body, and control-flow indices while preserving instruction and metadata
+content.  Machine-specific control-flow expansions can therefore be covered by
+behavior-mode cases without hiding an unexpected scalar instruction change
+behind a broad text normalization.
 Runtime-error cases require both paths to fail with the same VM diagnostic.
 Observability cases additionally compare debug sections, trace, profile, and
 scripted interactive-debugger output for metadata-backed and metadata-free
@@ -30,9 +31,17 @@ import tempfile
 from pathlib import Path
 
 
-_INDEX = re.compile(r"\b([cnfr])(\d+)\b")
+_INDEX = re.compile(r"\b([bcfgilmnrtuv])(\d+)\b")
 _CONSTANT = re.compile(r"^\s{2}(c\d+) = (.+)$")
 _NAME = re.compile(r"^\s{2}(n\d+) = (.+)$")
+_GLOBAL = re.compile(r"^\s{2}(g\d+) = (n\d+)$")
+_TYPE = re.compile(r"^\s{2}(t\d+) = (.+)$")
+_NATIVE = re.compile(r"^\s{2}(i\d+) = (.+)$")
+_MODULE = re.compile(r"^\s{2}(m\d+) = (f\d+)$")
+_BLOCK = re.compile(r"^\s*block b(\d+):")
+_LOCAL = re.compile(r"\bl(\d+)\b")
+_UPVALUE = re.compile(r"\bu(\d+)\b")
+_VARIANT = re.compile(r"\bv(\d+)\b")
 _FUNCTION = re.compile(r'^function (f\d+) name=(\S+) arity=')
 _BODY = re.compile(r"^(?:main registers=|function f\d+ name=)")
 _DEBUG_SECTION_HEADERS = {"debug_sources:", "debug_locations:", "debug_ranges:"}
@@ -44,14 +53,49 @@ _SYNTHETIC_ENTRY_PAUSE = re.compile(
 _SYNTHETIC_ENTRY_LOCATION = re.compile(r"^  main 0 = \S+$")
 
 
-def _table_mapping(lines, pattern, prefix):
+def _outside_spans(line):
+    """Return half-open spans outside double-quoted strings."""
+
+    spans = []
+    start = 0
+    in_quote = False
+    escaped = False
+    for index, character in enumerate(line):
+        if in_quote:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_quote = False
+                start = index + 1
+        elif character == '"':
+            if start < index:
+                spans.append((start, index))
+            in_quote = True
+            start = index
+    if not in_quote and start < len(line):
+        spans.append((start, len(line)))
+    return spans
+
+
+def _unquoted_matches(line, pattern):
+    for start, end in _outside_spans(line):
+        yield from pattern.finditer(line, start, end)
+
+
+def _table_mapping(lines, pattern, prefix, key=None):
     values = {}
     for line in lines:
         match = pattern.match(line)
         if match:
-            values[match.group(1)[1:]] = match.group(2)
+            value = match.group(2)
+            values[match.group(1)[1:]] = key(match) if key else value
 
-    canonical = {value: f"{prefix}{index}" for index, value in enumerate(sorted(set(values.values())))}
+    canonical = {
+        value: f"{prefix}{index}"
+        for index, value in enumerate(sorted(set(values.values())))
+    }
     return {old: canonical[value] for old, value in values.items()}
 
 
@@ -68,7 +112,16 @@ def _function_mapping(lines):
     return {old: canonical[value] for old, value in values.items()}
 
 
-def _body_register_mappings(lines):
+def _ordered_mapping(lines, pattern, prefix):
+    mapping = {}
+    for line in lines:
+        for match in _unquoted_matches(line, pattern):
+            old = match.group(1)
+            mapping.setdefault(old, f"{prefix}{len(mapping)}")
+    return mapping
+
+
+def _body_index_mappings(lines, pattern, prefix, definitions_only=False):
     mappings = {}
     body_start = None
     body_map = None
@@ -85,10 +138,14 @@ def _body_register_mappings(lines):
             continue
         if body_map is None:
             continue
-        match = _REGISTER_DEFINITION.match(line)
-        if match:
-            old = match.group(1)
-            body_map.setdefault(old, f"r{len(body_map)}")
+        if definitions_only:
+            matches = [_REGISTER_DEFINITION.match(line)]
+        else:
+            matches = _unquoted_matches(line, pattern)
+        for match in matches:
+            if match:
+                old = match.group(1)
+                body_map.setdefault(old, f"{prefix}{len(body_map)}")
 
     finish(len(lines))
     return mappings
@@ -106,7 +163,18 @@ def _replace_indices(line, mappings):
         prefix, number = match.groups()
         return mappings.get(prefix, {}).get(number, match.group(0))
 
-    return _INDEX.sub(replace, line)
+    spans = _outside_spans(line)
+    if not spans:
+        return line
+
+    rebuilt = []
+    cursor = 0
+    for start, end in spans:
+        rebuilt.append(line[cursor:start])
+        rebuilt.append(_INDEX.sub(replace, line[start:end]))
+        cursor = end
+    rebuilt.append(line[cursor:])
+    return "".join(rebuilt)
 
 
 def _sort_table_definitions(lines, header, pattern):
@@ -126,27 +194,67 @@ def _sort_table_definitions(lines, header, pattern):
 
 
 def normalize_artifact_indices(text):
-    """Canonicalize only table and register indices in a cdbc artifact."""
+    """Canonicalize cdbc 0.2 table, body, and block indices."""
 
     trailing_newline = text.endswith("\n")
     lines = text.splitlines()
+    name_values = {
+        match.group(1)[1:]: match.group(2)
+        for line in lines
+        for match in [_NAME.match(line)]
+        if match
+    }
+    function_mapping = _function_mapping(lines)
+    variant_mapping = _ordered_mapping(lines, _VARIANT, "v")
+    variant_lines = [
+        _replace_indices(line, {"v": variant_mapping}) for line in lines
+    ]
     mappings = {
         "c": _table_mapping(lines, _CONSTANT, "c"),
         "n": _table_mapping(lines, _NAME, "n"),
-        "f": _function_mapping(lines),
-        "r": {},
+        "f": function_mapping,
+        "g": _table_mapping(
+            lines,
+            _GLOBAL,
+            "g",
+            key=lambda match: name_values.get(match.group(2)[1:], match.group(2)),
+        ),
+        "t": _table_mapping(variant_lines, _TYPE, "t"),
+        "i": _table_mapping(lines, _NATIVE, "i"),
+        "m": _table_mapping(
+            lines,
+            _MODULE,
+            "m",
+            key=lambda match: function_mapping.get(match.group(2)[1:], match.group(2)),
+        ),
+        "v": variant_mapping,
     }
-    body_mappings = _body_register_mappings(lines)
+    body_block_mappings = _body_index_mappings(lines, _BLOCK, "b")
+    body_register_mappings = _body_index_mappings(
+        lines, re.compile(r"\br(\d+)\b"), "r", definitions_only=True
+    )
+    body_local_mappings = _body_index_mappings(lines, _LOCAL, "l")
+    body_upvalue_mappings = _body_index_mappings(lines, _UPVALUE, "u")
 
     normalized = []
     for index, line in enumerate(lines):
-        body_mapping = _body_mapping_for(index, body_mappings)
+        body_block_mapping = _body_mapping_for(index, body_block_mappings)
+        body_register_mapping = _body_mapping_for(index, body_register_mappings)
+        body_local_mapping = _body_mapping_for(index, body_local_mappings)
+        body_upvalue_mapping = _body_mapping_for(index, body_upvalue_mappings)
         line_mappings = dict(mappings)
-        line_mappings["r"] = body_mapping
+        line_mappings["b"] = body_block_mapping
+        line_mappings["r"] = body_register_mapping
+        line_mappings["l"] = body_local_mapping
+        line_mappings["u"] = body_upvalue_mapping
         normalized.append(_replace_indices(line, line_mappings))
 
     _sort_table_definitions(normalized, "constants:", _CONSTANT)
     _sort_table_definitions(normalized, "names:", _NAME)
+    _sort_table_definitions(normalized, "globals:", _GLOBAL)
+    _sort_table_definitions(normalized, "types:", _TYPE)
+    _sort_table_definitions(normalized, "native_imports:", _NATIVE)
+    _sort_table_definitions(normalized, "modules:", _MODULE)
     result = "\n".join(normalized)
     return result + ("\n" if trailing_newline else "")
 
@@ -358,13 +466,13 @@ def _check_state(
             "location=<synthetic-entry> stack=main@<synthetic-entry> locals={}"
         ),
         "breakpoint pause": (
-            "pause reason=breakpoint function=identity instruction=2 module=none "
+            "pause reason=breakpoint function=identity instruction=3 module=none "
             "location=contract.cd:1:29 "
             "stack=main@contract.cd:2:1>identity@contract.cd:1:29 "
             "locals={input=\"2\"} range=s0:0:1"
         ),
         "error pause": (
-            "pause reason=error function=identity instruction=4 module=none "
+            "pause reason=error function=identity instruction=5 module=none "
             "location=contract.cd:1:42 "
             "stack=main@contract.cd:2:1>identity@contract.cd:1:42 "
             "locals={input=\"2\"}"
@@ -442,7 +550,7 @@ def _check_observability(
         required = {
             "debug section": (direct_sections, "debug_ranges:"),
             "debug source": (direct_sections, 's0 path="ranges.cd"'),
-            "debug section range": (direct_sections, "main 2 = s0:6:11"),
+            "debug section range": (direct_sections, "main 3 = s0:6:11"),
             "trace location": (trace_output, "location=ranges.cd:1:7"),
             "trace range": (trace_output, "range=s0:6:11"),
             "profile range": (
@@ -560,8 +668,8 @@ def _check_case(
 
         direct_dump = _run([str(vm), "dump", str(direct)], f"direct dump for {input_path}")
         machine_dump = _run([str(vm), "dump", str(machine)], f"machine dump for {input_path}")
-        if not direct_dump.startswith("cdbc 0.1") or not machine_dump.startswith("cdbc 0.1"):
-            raise RuntimeError(f"VM dump did not produce cdbc 0.1 for {input_path}")
+        if not direct_dump.startswith("cdbc 0.2") or not machine_dump.startswith("cdbc 0.2"):
+            raise RuntimeError(f"VM dump did not produce cdbc 0.2 for {input_path}")
 
         if mode == "debug-error":
             if debug_commands is None or debug_error_expected is None:

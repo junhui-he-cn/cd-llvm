@@ -192,7 +192,7 @@ enum class CDArtifactMode { Program, Module };
 /// The returned error is suitable for inclusion in a target diagnostic.
 bool validateArtifact(const CDArtifact &artifact, std::string &error);
 
-/// Serialize a validated artifact using the canonical cdbc 0.1 spelling.
+/// Serialize a validated artifact using the canonical cdbc 0.2 spelling.
 /// Invalid artifacts are rejected with a fatal CD-target diagnostic.
 void serializeArtifact(const CDArtifact &artifact, raw_ostream &OS);
 

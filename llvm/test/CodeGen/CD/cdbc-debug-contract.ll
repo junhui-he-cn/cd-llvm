@@ -44,6 +44,10 @@ entry:
 !16 = !DILocation(line: 1, column: 42, scope: !6)
 !30 = !{i32 2, !"Debug Info Version", i32 3}
 
+; DIRECT: debug_locations:
+; DIRECT: main 1 = s0:2:1
+; MACHINE: debug_locations:
+; MACHINE: main 1 = s0:2:1
 ; DIRECT: debug_ranges:
 ; DIRECT: function f0
 ; MACHINE: debug_ranges:

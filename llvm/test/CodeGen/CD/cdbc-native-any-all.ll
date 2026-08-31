@@ -46,13 +46,15 @@ entry:
 
 attributes #0 = { "cd.value.params"="0" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
-; DIRECT-COUNT-5: native_call
+; DIRECT-COUNT-2: call_native i0
+; DIRECT-COUNT-3: call_native i2
 ; DIRECT: function f0 name="yes" arity=1
 ; DIRECT: function f1 name="no" arity=1
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: main registers=
-; MACHINE-COUNT-5: native_call
+; MACHINE-COUNT-2: call_native i0
+; MACHINE-COUNT-3: call_native i2
 ; MACHINE: function f0 name="yes" arity=1
 ; MACHINE: function f1 name="no" arity=1

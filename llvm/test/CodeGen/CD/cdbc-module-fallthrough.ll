@@ -14,12 +14,20 @@ entry:
 !cd.module = !{!0}
 !0 = !{!"/workspace/dependency.cd", !"dependency.cd", !"/workspace/dependency.cd", i1 false}
 
-; DIRECT: main registers=1:
+; DIRECT: main registers=0:
+; DIRECT-NEXT: block b0:
+; DIRECT-NEXT:   return_nil
+; DIRECT: function f0 name="__module_init" arity=0 registers=2:
+; DIRECT-NEXT: block b0:
 ; DIRECT-NEXT:   r0 = constant c0
-; DIRECT-NEXT:   print r0
-; DIRECT-NOT: return
+; DIRECT-NEXT:   r1 = call_native i0 [r0]
+; DIRECT-NEXT:   return_nil
 
-; MACHINE: main registers=1:
+; MACHINE: main registers=0:
+; MACHINE-NEXT: block b0:
+; MACHINE-NEXT:   return_nil
+; MACHINE: function f0 name="__module_init" arity=0 registers=2:
+; MACHINE-NEXT: block b0:
 ; MACHINE-NEXT:   r0 = constant c0
-; MACHINE-NEXT:   print r0
-; MACHINE-NOT: return
+; MACHINE-NEXT:   r1 = call_native i0 [r0]
+; MACHINE-NEXT:   return_nil

@@ -35,12 +35,12 @@ entry:
 ; DIRECT: debug_sources:
 ; DIRECT: s0 module="/workspace/cd-llvm-entry.cd" path="entry-runtime.cd"
 ; DIRECT: debug_locations:
-; DIRECT: main 1 = s0:1:1
-; DIRECT: main 3 = s0:2:1
-; DIRECT: main 5 = s0:2:1
+; DIRECT: function f0 2 = s0:1:1
+; DIRECT: function f0 5 = s0:2:1
+; DIRECT: function f0 7 = s0:2:1
 ; MACHINE: debug_sources:
 ; MACHINE: s0 module="/workspace/cd-llvm-entry.cd" path="entry-runtime.cd"
 ; MACHINE: debug_locations:
-; MACHINE: main 1 = s0:1:1
-; MACHINE: main 3 = s0:2:1
-; MACHINE: main 5 = s0:2:1
+; MACHINE: function f0 2 = s0:1:1
+; MACHINE: function f0 5 = s0:2:1
+; MACHINE: function f0 7 = s0:2:1

@@ -31,26 +31,26 @@ entry:
 
 attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
 ; DIRECT: make_function f0
-; DIRECT: native_call
-; DIRECT: print
+; DIRECT: call_native i0
+; DIRECT: call_native i1
 ; DIRECT: make_function f0
-; DIRECT: native_call
-; DIRECT: print
+; DIRECT: call_native i0
+; DIRECT: call_native i1
 ; DIRECT: function f0 name="last" arity=2
 ; DIRECT: param 0 = "accumulator"
 ; DIRECT: param 1 = "item"
 ; DIRECT: return
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: main registers=
 ; MACHINE: make_function f0
-; MACHINE: native_call
-; MACHINE: print
+; MACHINE: call_native i0
+; MACHINE: call_native i1
 ; MACHINE: make_function f0
-; MACHINE: native_call
-; MACHINE: print
+; MACHINE: call_native i0
+; MACHINE: call_native i1
 ; MACHINE: function f0 name="last" arity=2
 ; MACHINE: param 0 = "accumulator"
 ; MACHINE: param 1 = "item"

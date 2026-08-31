@@ -25,16 +25,16 @@ done:
   ret i32 0
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: constants:
 ; CHECK: names:
 ; CHECK: main registers=
 ; CHECK: make_function f0
 ; CHECK: call
-; CHECK: print
+; CHECK: call_native i0
 ; CHECK: equal
-; CHECK: jump_if_false
-; CHECK: jump
+; CHECK: br_if
+; CHECK: br
 ; CHECK: function f0 name="add_one" arity=1 registers=
 ; CHECK: param 0 = "value"
 ; CHECK: add r{{[0-9]+}}, r{{[0-9]+}}

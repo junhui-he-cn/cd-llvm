@@ -12,9 +12,140 @@ import cd_bytecode_parity  # noqa: E402
 
 
 class CDBytecodeParityTest(unittest.TestCase):
+    def test_normalizes_cdbc_02_tables_storage_blocks_and_variants(self):
+        direct = """\
+cdbc 0.2
+
+constants:
+  c9 = number 2
+  c4 = number 1
+
+names:
+  n7 = "slot"
+  n3 = "Option"
+  n8 = "Some"
+  n1 = "None"
+
+globals:
+  g4 = n7
+
+types:
+  t8 = enum "Option" v6="Some" payload=1 v4="None" payload=0
+  t3 = struct "unused" field0="x"
+
+native_imports:
+  i9 = "print" abi=1
+  i4 = "sqrt" abi=1
+
+modules:
+  m7 = f4
+
+main registers=6:
+block b4:
+  r9 = constant c4
+  r3 = init_global g4, r9
+  r7 = make_variant t8, v6 [r9]
+  r4 = is_variant r7, t8, v6
+  r2 = variant_get r7, t8, v6, 0
+  r1 = call_native i4 [r2]
+  br_if r4, b9, b3
+block b9:
+  return_nil
+block b3:
+  return_nil
+
+function f4 name="worker" arity=1 registers=5:
+  param 0 = "value"
+block b7:
+  r6 = load_local l8
+  r5 = load_upvalue u2
+  r4 = set_local l8, r5
+  r3 = load_global g4
+  r2 = call_native i9 [r3]
+  return r2
+"""
+        machine = """\
+cdbc 0.2
+
+constants:
+  c1 = number 1
+  c8 = number 2
+
+names:
+  n0 = "None"
+  n4 = "Some"
+  n6 = "Option"
+  n2 = "slot"
+
+globals:
+  g2 = n2
+
+types:
+  t0 = struct "unused" field0="x"
+  t1 = enum "Option" v9="Some" payload=1 v2="None" payload=0
+
+native_imports:
+  i1 = "sqrt" abi=1
+  i5 = "print" abi=1
+
+modules:
+  m3 = f0
+
+main registers=6:
+block b0:
+  r5 = constant c1
+  r6 = init_global g2, r5
+  r7 = make_variant t1, v9 [r5]
+  r8 = is_variant r7, t1, v9
+  r9 = variant_get r7, t1, v9, 0
+  r10 = call_native i1 [r9]
+  br_if r3, b1, b2
+block b1:
+  return_nil
+block b2:
+  return_nil
+
+function f0 name="worker" arity=1 registers=5:
+  param 0 = "value"
+block b1:
+  r0 = load_local l0
+  r1 = load_upvalue u0
+  r2 = set_local l0, r1
+  r3 = load_global g2
+  r4 = call_native i5 [r3]
+  return r4
+"""
+
+        self.assertEqual(
+            cd_bytecode_parity.normalize_artifact_indices(direct),
+            cd_bytecode_parity.normalize_artifact_indices(machine),
+        )
+
+    def test_normalization_preserves_quoted_indices(self):
+        artifact = """\
+cdbc 0.2
+
+constants:
+
+names:
+  n4 = "r9 v7 g3 l2"
+
+main registers=0:
+block b8:
+  return_nil
+
+debug_sources:
+  s0 path="source-r9-v7.cd" text="let r9 = v7;\\n"
+"""
+
+        normalized = cd_bytecode_parity.normalize_artifact_indices(artifact)
+        self.assertIn('n0 = "r9 v7 g3 l2"', normalized)
+        self.assertIn('path="source-r9-v7.cd"', normalized)
+        self.assertIn('text="let r9 = v7;\\n"', normalized)
+
     def test_normalizes_permitted_table_and_register_indices(self):
         direct = """\
-cdbc 0.1
+cdbc 0.2
 
 constants:
   c0 = number 2
@@ -28,7 +159,7 @@ main registers=3:
   return r0
 """
         machine = """\
-cdbc 0.1
+cdbc 0.2
 
 constants:
   c0 = number 40
@@ -49,7 +180,7 @@ main registers=3:
 
     def test_normalization_does_not_hide_opcode_changes(self):
         add = """\
-cdbc 0.1
+cdbc 0.2
 
 constants:
   c0 = number 1
@@ -75,7 +206,7 @@ main registers=3:
 # mode and input path
 artifact llvm/test/CodeGen/CD/cdbc-machine.ll
 behavior llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll
-runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects array, range, or map"
+runtime-error llvm/test/CodeGen/CD/cdbc-array-assign-runtime.ll "array index out of range"
 """
 
         self.assertEqual(
@@ -85,8 +216,8 @@ runtime-error llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll "for-in expects 
                 ("behavior", "llvm/test/CodeGen/CD/cdbc-machine-control-flow.ll"),
                 (
                     "runtime-error",
-                    "llvm/test/CodeGen/CD/cdbc-array-access-runtime.ll",
-                    "for-in expects array, range, or map",
+                    "llvm/test/CodeGen/CD/cdbc-array-assign-runtime.ll",
+                    "array index out of range",
                 ),
             ],
         )
@@ -99,7 +230,7 @@ observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break ranges.cd:1;continue;delete 1;continue" line-delete
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "break-range ranges.cd:6-11;s;n;q" aliases
 observability llvm/test/CodeGen/CD/cdbc-debug-ranges.ll "help;quit" help
-debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
+debug-error llvm/test/CodeGen/CD/cdbc-debug-runtime.ll "continue;quit" "pause reason=error function=fail instruction=3 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
 state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;continue;continue;quit" "division by zero"
 """
 
@@ -146,7 +277,7 @@ state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;c
                     "debug-error",
                     "llvm/test/CodeGen/CD/cdbc-debug-runtime.ll",
                     "continue;quit",
-                    "pause reason=error function=fail instruction=2 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22",
+                    "pause reason=error function=fail instruction=3 module=none location=runtime.cd:1:22 stack=main@runtime.cd:2:1>fail@runtime.cd:1:22",
                 ),
                 (
                     "state",
@@ -179,7 +310,7 @@ state llvm/test/CodeGen/CD/cdbc-debug-contract.ll "break-range contract.cd:0-1;c
     def test_ranges_requires_dump_source_evidence(self):
         dump = """\
 debug_ranges:
-  main 2 = s0:6:11
+  main 3 = s0:6:11
 """
 
         def run_surface(command, description, input_text=None):
@@ -225,8 +356,8 @@ debug_ranges:
                     "fixture.ll",
                     pathlib.Path("direct.cdbc"),
                     pathlib.Path("machine.cdbc"),
-                    "cdbc 0.1\nrange=forbidden\n",
-                    "cdbc 0.1\nsource_range forbidden\n",
+                    "cdbc 0.2\nrange=forbidden\n",
+                    "cdbc 0.2\nsource_range forbidden\n",
                     "run\n",
                     "run\n",
                     "continue",
@@ -248,8 +379,8 @@ debug_ranges:
                     "fixture.ll",
                     pathlib.Path("direct.cdbc"),
                     pathlib.Path("machine.cdbc"),
-                    "cdbc 0.1\n",
-                    "cdbc 0.1\n",
+                    "cdbc 0.2\n",
+                    "cdbc 0.2\n",
                     "run range=forbidden\n",
                     "run source_range forbidden\n",
                     "continue",
@@ -277,8 +408,8 @@ debug_ranges:
                 "fixture.ll",
                 pathlib.Path("direct.cdbc"),
                 pathlib.Path("machine.cdbc"),
-                "cdbc 0.1\n",
-                "cdbc 0.1\n",
+                "cdbc 0.2\n",
+                "cdbc 0.2\n",
                 "run\n",
                 "run\n",
                 "break-range ranges.cd:6-11;step;next;quit",
@@ -307,8 +438,8 @@ debug_ranges:
                 "fixture.ll",
                 pathlib.Path("direct.cdbc"),
                 pathlib.Path("machine.cdbc"),
-                "cdbc 0.1\n",
-                "cdbc 0.1\n",
+                "cdbc 0.2\n",
+                "cdbc 0.2\n",
                 "run\n",
                 "run\n",
                 "break ranges.cd:1;continue;delete 1;continue",
@@ -336,8 +467,8 @@ debug_ranges:
                 "fixture.ll",
                 pathlib.Path("direct.cdbc"),
                 pathlib.Path("machine.cdbc"),
-                "cdbc 0.1\n",
-                "cdbc 0.1\n",
+                "cdbc 0.2\n",
+                "cdbc 0.2\n",
                 "run\n",
                 "run\n",
                 "break-range ranges.cd:6-11;s;n;q",
@@ -364,8 +495,8 @@ debug_ranges:
                 "fixture.ll",
                 pathlib.Path("direct.cdbc"),
                 pathlib.Path("machine.cdbc"),
-                "cdbc 0.1\n",
-                "cdbc 0.1\n",
+                "cdbc 0.2\n",
+                "cdbc 0.2\n",
                 "run\n",
                 "run\n",
                 "help;quit",
@@ -375,13 +506,13 @@ debug_ranges:
     def test_debug_error_requires_matching_source_backed_error_pause(self):
         def run_surface(command, description, input_text=None):
             if command[1] == "dump":
-                return "cdbc 0.1\n"
+                return "cdbc 0.2\n"
             if command[1] == "debug":
                 return (
                     "pause reason=entry function=main instruction=0 "
                     "location=runtime.cd:2:1\n"
                     "debug resumed command=continue\n"
-                    "pause reason=error function=fail instruction=2 module=none "
+                    "pause reason=error function=fail instruction=3 module=none "
                     "location=runtime.cd:1:22 "
                     "stack=main@runtime.cd:2:1>fail@runtime.cd:1:22\n"
                     "debug quit\n"
@@ -397,7 +528,7 @@ debug_ranges:
                 "llvm/utils/cd_bytecode_parity.py",
                 debug_commands="continue;quit",
                 debug_error_expected=(
-                    "pause reason=error function=fail instruction=2 module=none "
+                    "pause reason=error function=fail instruction=3 module=none "
                     "location=runtime.cd:1:22 "
                     "stack=main@runtime.cd:2:1>fail@runtime.cd:1:22"
                 ),
@@ -409,12 +540,12 @@ debug_ranges:
             "location=contract.cd:2:1 stack=main@contract.cd:2:1 locals={}\n"
             "debug breakpoint id=1 spec=contract.cd:0-1\n"
             "debug resumed command=continue\n"
-            "pause reason=breakpoint function=identity instruction=2 module=none "
+            "pause reason=breakpoint function=identity instruction=3 module=none "
             "location=contract.cd:1:29 "
             "stack=main@contract.cd:2:1>identity@contract.cd:1:29 "
             "locals={input=\"2\"} range=s0:0:1\n"
             "debug resumed command=continue\n"
-            "pause reason=error function=identity instruction=4 module=none "
+            "pause reason=error function=identity instruction=5 module=none "
             "location=contract.cd:1:42 "
             "stack=main@contract.cd:2:1>identity@contract.cd:1:42 "
             "locals={input=\"2\"}\n"

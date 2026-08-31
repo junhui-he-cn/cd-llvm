@@ -12,7 +12,7 @@ entry:
   ret i32 %value
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: constants:
 ; CHECK-NEXT:   c0 = number 41
 ; CHECK-NEXT:   c1 = number 1
@@ -25,7 +25,8 @@ entry:
 ; CHECK: return r{{[0-9]+}}
 ; CHECK: function f0 name="increment" arity=1 registers=3:
 ; CHECK-NEXT:   param 0 = "input"
-; CHECK-NEXT:   r0 = load_var n0
+; CHECK-NEXT:   block b0:
+; CHECK-NEXT:   r0 = load_local l0
 ; CHECK-NEXT:   r1 = constant c1
 ; CHECK-NEXT:   r2 = add r0, r1
 ; CHECK-NEXT:   return r2

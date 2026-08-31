@@ -6,7 +6,6 @@
 declare ptr @llvm.cd.array(i32, ...)
 declare ptr @llvm.cd.index(ptr, double)
 declare double @llvm.cd.len(ptr)
-declare ptr @llvm.cd.assert.array(ptr)
 declare void @cd_print(ptr)
 declare void @print(double)
 
@@ -16,9 +15,8 @@ entry:
   %outer = call ptr (i32, ...) @llvm.cd.array(i32 2, ptr %inner, i64 11)
   %nested = call ptr @llvm.cd.index(ptr %outer, double 0.0)
   %nested_length = call double @llvm.cd.len(ptr %nested)
-  %checked = call ptr @llvm.cd.assert.array(ptr %outer)
-  %scalar = call ptr @llvm.cd.index(ptr %checked, double 1.0)
-  %length = call double @llvm.cd.len(ptr %checked)
+  %scalar = call ptr @llvm.cd.index(ptr %outer, double 1.0)
+  %length = call double @llvm.cd.len(ptr %outer)
   call void @cd_print(ptr %nested)
   call void @cd_print(ptr %scalar)
   call void @print(double %nested_length)
@@ -28,11 +26,9 @@ entry:
 
 ; DIRECT: r{{[0-9]+}} = index
 ; DIRECT: r{{[0-9]+}} = len
-; DIRECT: r{{[0-9]+}} = assert_array
 ; DIRECT: r{{[0-9]+}} = index
 ; DIRECT: r{{[0-9]+}} = len
 ; MACHINE: r{{[0-9]+}} = index
 ; MACHINE: r{{[0-9]+}} = len
-; MACHINE: r{{[0-9]+}} = assert_array
 ; MACHINE: r{{[0-9]+}} = index
 ; MACHINE: r{{[0-9]+}} = len

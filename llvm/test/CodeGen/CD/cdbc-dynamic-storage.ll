@@ -48,29 +48,29 @@ entry:
 
 attributes #0 = { "cd.value.params"="0,1" "cd.value.return" }
 
-; DIRECT: cdbc 0.1
+; DIRECT: cdbc 0.2
 ; DIRECT: main registers=
-; DIRECT: store_var
-; DIRECT: load_var
-; DIRECT: print
-; DIRECT: store_var
-; DIRECT: load_var
-; DIRECT: print
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: call_native i0
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: {{(load_local|load_global)}}
+; DIRECT: call_native i0
 ; DIRECT: function f0 name="branch_store" arity=3
-; DIRECT: store_var
-; DIRECT: store_var
-; DIRECT: load_var
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: {{(bind_local|set_local|init_global|set_global)}}
+; DIRECT: {{(load_local|load_global)}}
 ; DIRECT: return
-; MACHINE: cdbc 0.1
+; MACHINE: cdbc 0.2
 ; MACHINE: main registers=
-; MACHINE: store_var
-; MACHINE: load_var
-; MACHINE: print
-; MACHINE: store_var
-; MACHINE: load_var
-; MACHINE: print
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: call_native i0
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: {{(load_local|load_global)}}
+; MACHINE: call_native i0
 ; MACHINE: function f0 name="branch_store" arity=3
-; MACHINE: store_var
-; MACHINE: store_var
-; MACHINE: load_var
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: {{(bind_local|set_local|init_global|set_global)}}
+; MACHINE: {{(load_local|load_global)}}
 ; MACHINE: return

@@ -17,11 +17,11 @@ entry:
   ret i32 0
 }
 
-; CHECK: cdbc 0.1
+; CHECK: cdbc 0.2
 ; CHECK: main registers=
 ; CHECK: function f0 name="choose_select" arity=1 registers=
-; CHECK: jump_if_false
+; CHECK: br_if
 ; CHECK: move
-; CHECK: jump
+; CHECK: br
 ; CHECK: move
 ; CHECK: return

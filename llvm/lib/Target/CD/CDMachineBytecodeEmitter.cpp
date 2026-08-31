@@ -184,13 +184,14 @@ class CDMachineModuleEmitter {
   Register materializeFunction(const Function *FunctionValue,
                                MachineRegisterInfo &MRI,
                                MachineBasicBlock &MBB,
-                               const TargetInstrInfo &TII) {
+                               const TargetInstrInfo &TII,
+                               DebugLoc Location = DebugLoc()) {
     auto FunctionIndex = FunctionIndexes.find(FunctionValue);
     if (FunctionIndex == FunctionIndexes.end())
       unsupported("a call to an undefined, declared, or @main function");
 
     Register Result = createTemporaryRegister(MRI);
-    BuildMI(MBB, MBB.end(), DebugLoc(), TII.get(CD::CD_MAKE_FUNCTION), Result)
+    BuildMI(MBB, MBB.end(), Location, TII.get(CD::CD_MAKE_FUNCTION), Result)
         .addImm(FunctionIndex->second);
     return Result;
   }
@@ -611,7 +612,7 @@ class CDMachineModuleEmitter {
 
     Register Result = createValueRegister(MRI, &Call);
     Register CalleeRegister =
-        materializeFunction(Callee, MRI, MBB, TII);
+        materializeFunction(Callee, MRI, MBB, TII, CurrentDebugLoc);
     std::vector<Register> Arguments;
     for (const Use &Argument : Call.args())
       Arguments.push_back(valueRegister(Argument.get(), MRI, MBB, TII));

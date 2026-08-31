@@ -24,5 +24,5 @@ entry:
 
 attributes #0 = { "cd.value.params"="0" "cd.value.return" }
 
-; ARTIFACT: cdbc 0.1
-; ARTIFACT: native_call
+; ARTIFACT: cdbc 0.2
+; ARTIFACT: call_native i0

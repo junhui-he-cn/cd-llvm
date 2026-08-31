@@ -28,9 +28,9 @@ entry:
 
 ; DIRECT: array
 ; DIRECT: variant
-; DIRECT: variant_field
+; DIRECT: variant_get
 ; DIRECT: len
 ; MACHINE: array
 ; MACHINE: variant
-; MACHINE: variant_field
+; MACHINE: variant_get
 ; MACHINE: len

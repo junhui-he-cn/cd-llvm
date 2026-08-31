@@ -38,14 +38,32 @@ constants:
         self.assertEqual(
             cd_module_link.add_dependency_record(
                 artifact,
-                'target="library" kind=import at=0 requested="./library.cd"',
+                'target="library" kind=import requested="./library.cd"',
             ),
             """\
   dependencies:
-    d0 target=\"library\" kind=import at=0 requested=\"./library.cd\"
+    d0 target=\"library\" kind=import requested=\"./library.cd\"
 
 constants:
 """,
+        )
+
+    def test_adds_module_init_marker_to_initializer(self):
+        artifact = """\
+cdbc 0.2
+
+main registers=0:
+block b0:
+  return_nil
+
+function f0 name="__module_init" arity=0 registers=0:
+block b0:
+  return_nil
+"""
+
+        self.assertIn(
+            'block b0:\n  init_module m0\n  return_nil\n',
+            cd_module_link.add_module_init_marker(artifact, 0),
         )
 
     def test_builds_vm_command_for_cargo_manifest(self):

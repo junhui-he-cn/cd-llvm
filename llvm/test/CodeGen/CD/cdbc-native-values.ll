@@ -33,13 +33,13 @@ entry:
   ret i32 0
 }
 
-; DIRECT: native_call
-; DIRECT: native_call
-; DIRECT: native_call
+; DIRECT: call_native i0
+; DIRECT: call_native i1
+; DIRECT: call_native i2
 ; DIRECT: index
 ; DIRECT: len
-; MACHINE: native_call
-; MACHINE: native_call
-; MACHINE: native_call
+; MACHINE: call_native i0
+; MACHINE: call_native i1
+; MACHINE: call_native i2
 ; MACHINE: index
 ; MACHINE: len

@@ -8,11 +8,11 @@
 
 CD 是 LLVM 中的一个实验性软件目标（software target）：把受控的 LLVM IR
 子集编译成 Compiler Design 字节码虚拟机（VM）的文本产物（artifact）
-`cdbc 0.1`，再由 `cd-compiler` 的 Rust VM 执行。目标侧只负责生成产物；
+`cdbc 0.2`，再由 `cd-compiler` 的 Rust VM 执行。目标侧只负责生成产物；
 运行时语义（类型检查、资源预算、回调帧、错误诊断）由 Rust VM 负责。
 
 ```text
-LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.1 --> cd-compiler Rust VM
+LLVM IR --llc -mtriple=cd-unknown-unknown--> cdbc 0.2 --> cd-compiler Rust VM
 ```
 
 ## 2. 快速开始
@@ -41,7 +41,7 @@ build-cd/bin/llc -mtriple=cd-unknown-unknown -cd-artifact=module input.ll -o mod
 build-cd/bin/llc -mtriple=cd-unknown-unknown -cd-backend=machine input.ll -o output-machine.cdbc
 ```
 
-产物是确定性文本；同一输入重复生成得到逐字节相同的 `cdbc 0.1` 文件。
+产物是确定性文本；同一输入重复生成得到逐字节相同的 `cdbc 0.2` 文件。
 
 ## 3. 值模型与 ABI 规则
 
@@ -68,8 +68,8 @@ build-cd/bin/llc -mtriple=cd-unknown-unknown -cd-backend=machine input.ll -o out
 | 比较 | `icmp` 的 `eq`/`ne`/`sgt`/`sge`/`slt`/`sle`；`fcmp` 的有序/无序六种谓词 |
 | 类型转换 | `trunc`/`zext`/`sext`/`fptrunc`/`fpext`/`uitofp`/`sitofp`/`fptoui`/`fptosi`/`bitcast` -> `move` |
 | 选择 | 标量 `select` 与动态 CD `select`（条件为 `i1`，动态双臂须均为已验证 CD 令牌） |
-| 控制流 | 条件/无条件分支、PHI（边 `store_var` + 块入口 `load_var`）、`ret`（含 `ret void` -> `nil`） |
-| 函数 | 已定义函数的直接调用；回调以 `make_function` 物化后再 `call`/`native_call` |
+| 控制流 | 条件/无条件分支、PHI（边写入数值槽位 + 块入口读取）、`ret`（含 `ret void` -> `nil`） |
+| 函数 | 已定义函数的直接调用；回调以 `make_function` 物化后再 `call`/`call_native` |
 | 存储 | 直接单槽 `alloca`：标量槽，或带完整路径存储证明的动态 CD 槽 |
 
 ### 明确拒绝（稳定诊断，不产出部分产物）
@@ -97,8 +97,10 @@ build-cd/bin/llc -mtriple=cd-unknown-unknown -cd-backend=machine input.ll -o out
 | `llvm.cd.index` | `ptr (ptr, double)` | 集合 + 索引 -> 元素；越界由 VM 报运行时错误 |
 | `llvm.cd.assign.index` | `T (ptr, double, T)` | 集合 + 索引 + 新值 -> 原地更新并返回被赋的值 |
 | `llvm.cd.len` | `double (ptr)` | 集合长度 |
-| `llvm.cd.assert_array` | `ptr (ptr)` | 运行时数组断言 |
 | `llvm.cd.native` | `T (ptr, ...)` | 私有名称全局 + 有界操作数 -> 原生调用 |
+
+旧的 `llvm.cd.assert_array` 调用形状不是 0.2 接口；目标在编译期拒绝它，
+不会生成兼容的字节码。数组访问只能使用 `llvm.cd.index` 和 `llvm.cd.len`。
 
 ## 6. 原生标准库允许名单
 
@@ -128,7 +130,7 @@ build-cd/bin/llc -mtriple=cd-unknown-unknown -cd-backend=machine input.ll -o out
 | `merge` | 两个 CD 映射 | `ptr` | 新有序映射，右侧重复键胜出 |
 | `keys` | CD 映射 | `ptr` | 插入序键数组 |
 | `values` | CD 映射 | `ptr` | 插入序值数组 |
-| `range` | 一至三个 `double` | `ptr` | range 值，可被 `len`/`index`/`assert_array`/`contains` 消费 |
+| `range` | 一至三个 `double` | `ptr` | range 值，可被 `len`/`index`/`contains` 消费 |
 
 ### 字符串
 
@@ -195,12 +197,13 @@ CD 调试只依赖显式元数据。
   默认程序模式遇到 `!cd.module` 元数据会报错而不是静默丢弃。
 - `!cd.module`：`identity`、`path`、`canonical_path`、`i1 entry`、
   可选 `entry_order`；`!cd.dependencies` 为有序 `kind`/目标身份/
-  本地指令偏移/请求路径记录。
-- 非入口模块的 `main` 体为顺延（fall-through），供 VM 链接展开；
+  本地 lowering 锚点/请求路径记录。锚点只用于在初始化函数对应位置
+  发射 `init_module mN`，不进入 0.2 工件。
+- 非入口模块的顶层代码位于初始化函数，模块 `main` 是空的可执行桩；
   `llvm-link` 拼接多个 `!cd.module` 的情况被拒绝，链接由 Rust VM 的
   模块感知 `link` 完成。
 - 测试框架：`llvm/utils/cd_module_link.py` 覆盖合法 direct/机器产物、
-  链接执行、未链接运行拒绝、缺失依赖/环/重复身份/顺序与偏移错误、
+  链接执行、未链接运行拒绝、缺失依赖/环/重复身份/顺序与初始化引用错误、
   链接后诊断。
 
 ## 10. 机器后端
@@ -210,7 +213,7 @@ CD 调试只依赖显式元数据。
 再桥接到与 direct 相同的类型化产物模型。它与 direct 共享 `CDValueABI`
 校验、`CDBytecodeFormat` 序列化和一致性（parity）验证；条件 PHI 边使用
 合成的边块（edge block），符号块目标在验证前被补丁为最终指令偏移。
-该路径同样只输出文本 `cdbc 0.1`，不支持对象/汇编。
+该路径同样只输出文本 `cdbc 0.2`，不支持对象/汇编。
 
 ## 11. 验证与质量门
 

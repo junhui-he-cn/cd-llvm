@@ -1,7 +1,7 @@
 # CD Bytecode Verification
 
 This document records the reproducible verification boundary for the
-experimental LLVM CD target. The LLVM target emits text cdbc 0.1 artifacts;
+experimental LLVM CD target. The LLVM target emits text cdbc 0.2 artifacts;
 the Rust VM remains an explicitly selected integration dependency.
 
 ## Recorded Environment
@@ -15,7 +15,7 @@ Recorded on 2026-08-10 from the current checkout:
 | Rust | rustc 1.94.1 (e408947bf 2026-03-25) |
 | Cargo | cargo 1.94.1 (29ea6fb6a 2026-03-24) |
 | VM checkout | 0295380ce3e29763949c09a815bda96cbed28ee2 |
-| Artifact contract | cdbc 0.1 |
+| Artifact contract | cdbc 0.2 |
 
 The VM checkout is not part of the LLVM source tree. The commands below use
 CD_COMPILER_ROOT explicitly; no command searches for a sibling checkout.
@@ -156,7 +156,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 llvm/utils/cd_bytecode_parity.py --llc build-c
 
 - Program mode remains the default; module mode is selected with
   -cd-artifact=module.
-- The artifact format stays cdbc 0.1; this verification slice adds no wire
+- The artifact format stays cdbc 0.2; this verification slice adds no wire
   fields and no new version.
 - Missing CD_COMPILER_ROOT never activates VM integration and never causes
   the test suite to inspect cd-compiler.
